@@ -5,7 +5,7 @@ import machine
 import circularQueue
 import time
 import canio
-import can_message
+import canmessage
 
 # speed 8M
 MCP_8MHz_125kBPS_CFG1 = (0x81)
@@ -218,14 +218,14 @@ class mcp2515(canio.canio):
 
         got_msg = False
         v = bytearray()
-        msg = can_message()
+        msg = canmessage()
 
         rx_status = self.read_rx_status()
 
         if rx_status & 0xC0:
             print('message available')
             got_msg = True
-            message = can_message()
+            message = canmessage()
             access_rxb0 = (rx_status & 0x40) != 0
             message.rtr = (rx_status & 0x08) != 0
             message.ext = (rx_status & 0x10) != 0
@@ -331,7 +331,7 @@ class mcp2515(canio.canio):
         print('internal_send_message ends')
 
     def reset(self):
-        print('reset')
+        print('mcp2515 reset')
         msg = bytearray()
         msg.append(RESET_COMMAND)
         self.chip_select(True)
@@ -356,7 +356,7 @@ class mcp2515(canio.canio):
         self.txb_is_free = [ True, True, True]
 
         # set CNF registers for bus speed
-        print(f'oscillator freq = {self._osc}')
+        #print(f'oscillator freq = {self._osc}')
 
         if self._osc == 16000000:
             self.write_register(CNF1_REGISTER, MCP_16MHz_125kBPS_CFG1)
@@ -413,6 +413,8 @@ class mcp2515(canio.canio):
 
         # install ISR
         self._int_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.isr)
+        
+        print('mcp2515 init complete')
 
     def available(self):
         print('** available')

@@ -30,12 +30,14 @@ class cbusled():
 
     def on(self):
         self.blinking = 0
+        self.pulsing = 0
         self.state = 1
         self.pin.value(self.state)
         pass
 
     def off(self):
         self.blinking = 0
+        self.pulsing = 0
         self.state = 0
         self.pin.value(self.state)
         pass

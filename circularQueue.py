@@ -17,7 +17,7 @@ class circularQueue:
 
     def enqueue(self, item):
         if self.size == self.capacity:
-            print("Error: queue is full")
+            print("error: queue is full")
             self.dropped = self.dropped + 1
             return False
         else:
@@ -29,7 +29,7 @@ class circularQueue:
 
     def dequeue(self):
         if self.size == 0:
-            print("Error: queue is empty")
+            print("error: queue is empty")
             return None
         else:
             tmp = self.queue[self.head]

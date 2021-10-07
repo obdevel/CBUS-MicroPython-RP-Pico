@@ -1,6 +1,8 @@
 
 # cbusconfig.py
 
+import machine
+
 nvs_file_name = "/nvs.dat"
 events_file_name = "/events.dat"
 
@@ -79,24 +81,53 @@ class cbusconfig():
         self.canid = canid
 
     def set_node_number(self, node_number):
-        self.nvs[2] = int(node_number / 255)
+        self.nvs[2] = int(node_number / 256)
         self.nvs[3] = node_number & 0xff
         self.write_changes()
         self.node_number = node_number
 
     def find_existing_event(self, nn, en):
-        pass
+        print('find_existing_event')
+
+        for i in range(self.num_events):
+            offset = i * (self.ev_size)
+
+            if ((self.events[offset] * 256) + self.events[offset + 1]) == nn and ((self.events[offset + 2] * 256) + self.events[offset + 3]) == en:
+                return i
+
+        return -1
 
     def find_event_space(self):
-        pass
+        print('find_event_space')
 
-    def write_event(self, index, data):
-        begin = self.ev_size * index
+        for i in range(self.num_events):
+            offset = i * (self.ev_size)
 
-        for i in range(self.ev_size):
-            self.events[begin + i] = data[i]
+            if self.events[offset] == 255 and self.events[offset + 1] == 255 and self.events[offset + 2] == 255 and self.events[offset + 3] == 255:
+                return i
+
+        return -1
+
+    def write_event(self, nn, en, evnum, evval):
+        print('write_event')
+
+        idx = self.find_existing_event(nn , en)
+
+        if idx == -1:
+            idx = self.find_event_space()
+
+            if idx == -1:
+                return False
+
+        offset = idx * self.ev_size
+        self.events[offset] = int(nn / 256)
+        self.events[offset + 1] = nn & 0xff
+        self.events[offset + 2] = int(en / 256)
+        self.events[offset + 3] = en & 0xff
+        self.events[offset + 4 + (evnum - 1)] = evval
 
         self.write_changes()
+        return True
 
     def read_event(self, index):
         data = bytearray(self.ev_size)
@@ -107,12 +138,22 @@ class cbusconfig():
 
         return data
 
-    def get_event_ev_val(self, idx, evnum):
-        offset = ((self.ev_size + 4) * index) + evnum
-        return self.events(offset)
+    def get_event_ev(self, idx, evnum):
+        offset = (idx * self.ev_size) + 4 + (evnum - 1)
+        return self.events[offset]
 
-    def num_events(self):
-        pass
+    def count_num_events(self):
+        print('num_events')
+
+        count = 0
+
+        for i in range(self.num_events):
+            offset = i * (self.ev_size)
+
+            if self.events[offset] != 255 or self.events[offset + 1] != 255 or self.events[offset + 2] != 255 or self.events[offset + 3] != 255:
+                count += 1
+
+        return count
 
     def read_nv(self, nvnum):
         return self.nvs[nvnum - 10]
@@ -124,10 +165,28 @@ class cbusconfig():
     def load_id(self):
         self.mode = self.nvs[0]
         self.canid = self.nvs[1]
-        self.node_number = (self.nvs[2] >> 8) + self.nvs[3]
+        self.node_number = (self.nvs[2] * 256) + self.nvs[3]
+
+    def reboot(self):
+        machine.soft_reset()
 
     def reset_module(self):
-        pass
-    
-    
+        self.nvs = bytearray(10 + self.num_nvs)
+        self.events = bytearray((self.num_evs + 4) * self.num_events)
+
+        f = open(nvs_file_name, "w")
+        f.write(self.nvs)
+        f.close()
+        f = open(events_file_name, "w")
+        f.write(self.events)
+        f.close()
+
+        self.reboot()
+
+    def free_memory(self):
+        import gc
+        gc.collect()
+        return gc.mem_free()
+
+
     
