@@ -45,9 +45,10 @@ class cbus:
         self.in_learn_mode = False
         self.in_setup_mode = False
         self.timeout_timer = 0
-
         self.enum_responses = [0] * 128
         self.num_enum_responses = 0
+        self.msg_node_number = 0
+        self.msg_event_number = 0
 
         self.received_messages = 0
         self.sent_messages = 0
@@ -132,13 +133,12 @@ class cbus:
         while self.can.available() and processed_msgs < max_msgs:
             msg = self.can.get_next_message()
             
-            if self.remote_canid(msg) == self.config.canid:
+            if self.remote_canid(msg) == self.config.canid and not self.enumerating:
                 self.enumeration_required = True
 
             if msg.len > 0:
-
-                node_number = (msg.data[1] * 256) + msg.data[2]
-                event_number = (msg.data[3] * 256) + msg.data[4]
+                self.msg_node_number = (msg.data[1] * 256) + msg.data[2]
+                self.msg_event_number = (msg.data[3] * 256) + msg.data[4]
 
                 try:
                     self.func_tab.get(msg.data[0])(msg)
@@ -148,6 +148,8 @@ class cbus:
             else:
                 if msg.rtr:
                     self.respond_to_enum_request()
+                elif self.enumerating:
+                    enum_responses[self.send_canid(msg)] = 1
 
             processed_msgs += 1
             received_messages += 1
@@ -241,7 +243,7 @@ class cbus:
         msg.rtr = True
         self.can.send_message(msg)
 
-        self.enum_responses = bytearray(16)
+        self.enum_responses = [0] * 128
         self.num_enum_responses = 0
         self.enumerating = True
         self.enum_start = time.ticks_ms()
@@ -259,7 +261,7 @@ class cbus:
                 new_id = i
                 break
 
-        if new_id > -1:
+        if new_id > 0:
             print(f'took can id = {new_id}')
             self.config.set_canid(new_id)
             # send NNACK

@@ -153,7 +153,7 @@ class mcp2515(canio.canio):
 
         return ret
 
-    def read_registers(self, reg, values):
+    def read_registers(self, reg, values, n):
         #print('read_registers')
         
         msg = bytearray()

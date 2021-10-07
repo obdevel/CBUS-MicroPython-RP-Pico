@@ -9,7 +9,7 @@ PULSE_DELAY = 50
 class cbusled():
 
     def __init__(self, pin):
-        print(f'** LED constructor, pin = {pin}')
+        # print(f'** LED constructor, pin = {pin}')
         self.pin = machine.Pin(pin, machine.Pin.OUT)
         self.state = 0
         self.blinking = 0
@@ -42,13 +42,14 @@ class cbusled():
         self.pin.value(self.state)
         pass
 
+    def blink(self):
+        self.blinking = 1
+        self.pulsing = 0
+        self.last_change_time = time.ticks_ms()
+
     def pulse(self):
         self.pulsing = 1
+        self.blinking = 0
         self.state = 1
         self.pin.value(self.state)
         self.last_change_time = time.ticks_ms()
-
-    def blink(self):
-        self.blinking = 1
-        self.last_change_time = time.ticks_ms()
-
