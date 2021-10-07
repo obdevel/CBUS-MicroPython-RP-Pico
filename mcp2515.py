@@ -58,7 +58,7 @@ class mcp2515(canio.canio):
 
     def __init__(self, osc=16000000, cs_pin=5, int_pin=1, spi=None):
         print('** mcp2515 constructor')
-        
+
         # call superclass constructor
         canio.canio.__init__(self)
 
@@ -141,7 +141,7 @@ class mcp2515(canio.canio):
 
     def read_register(self, reg):
         #print(f'read_register {reg}')
-        
+
         msg = bytearray()
         msg.append(READ_COMMAND)
         msg.append(reg);
@@ -155,11 +155,11 @@ class mcp2515(canio.canio):
 
     def read_registers(self, reg, values, n):
         #print('read_registers')
-        
+
         msg = bytearray()
         msg.append(READ_COMMAND)
         msg.append(reg)
-        
+
         self.chip_select(True)
         self._spi.write(msg)
         value = self._spi.read(n)
@@ -167,7 +167,7 @@ class mcp2515(canio.canio):
 
     def write_register(self, reg, value):
         #print(f'write_register {reg}')
-        
+
         msg = bytearray()
         msg.append(WRITE_COMMAND)
         msg.append(reg)
@@ -179,18 +179,18 @@ class mcp2515(canio.canio):
 
     def write_registers(self, reg, values):
         #print('write_registers')
-        
+
         msg = bytearray()
         msg.append(WRITE_COMMAND)
         msg.append(reg)
-    
+
         for b in values:
             msg.append(b)
 
         self.chip_select(True)
         self._spi.write(msg)
         self.chip_select(False)
-    
+
     def modify_register(self, reg, mask, data):
         #print('modify_register')
 
@@ -223,7 +223,7 @@ class mcp2515(canio.canio):
         rx_status = self.read_rx_status()
 
         if rx_status & 0xC0:
-            print('message available')
+            print('new message available')
             got_msg = True
             message = canmessage()
             access_rxb0 = (rx_status & 0x40) != 0
@@ -273,7 +273,7 @@ class mcp2515(canio.canio):
         print('handle_txb_interrupt')
 
         self.modify_register(CANINTF_REGISTER, (0x04 << txb), 0)
-        
+
         if self.tx_queue.available():
             print('sending queued msg')
             msg = self.tx_queue.dequeue()
@@ -281,7 +281,7 @@ class mcp2515(canio.canio):
         else:
             print('no queued msg to tx')
             self.txb_is_free[txb] = True
-            
+
     def internal_send_message(self, msg, txb):
         print(f'internal_send_message using txb = {txb}, id = {msg.id:#x}, len = {msg.len}')
 
@@ -413,11 +413,11 @@ class mcp2515(canio.canio):
 
         # install ISR
         self._int_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.isr)
-        
+
         print('mcp2515 init complete')
 
     def available(self):
-        print('** available')
+        # print('** available')
         return self.rx_queue.available()
 
     def send_message(self, msg):
@@ -452,4 +452,3 @@ class mcp2515(canio.canio):
             return msg
         else:
             return None
-

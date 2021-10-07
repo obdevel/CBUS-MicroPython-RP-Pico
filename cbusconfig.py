@@ -18,11 +18,11 @@ class cbusconfig():
         self.num_events = num_events
         self.num_evs = num_evs
         self.ev_size = self.num_evs + 4
-        
+
         self.nvs = bytearray(10 + self.num_nvs)
         self.events = bytearray((self.num_evs + 4) * self.num_events)
         self.params = bytearray(20)
-        
+
         for i in range(len(self.events)):
             self.events[i] = 255;
 
@@ -58,9 +58,9 @@ class cbusconfig():
         data = f.read()
         f.close()
         self.events = bytearray(data.encode("ascii"))
-        
+
         self.load_id()
-        
+
     def write_changes(self):
         f = open(nvs_file_name, "w")
         f.write(self.nvs)
@@ -129,6 +129,24 @@ class cbusconfig():
         self.write_changes()
         return True
 
+    def write_ev(self, idx, evnum, evval):
+        pass
+
+    def clear_event(self, nn, en):
+        print('clear_event')
+
+        idx = self.config.find_existing_event(nn , en)
+
+        if idx == -1:
+            return False
+
+        offset = idx * self.ev_size
+
+        for i in range(self.ev_size):
+            self.events[i] = 255
+
+        return True
+
     def read_event(self, index):
         data = bytearray(self.ev_size)
         begin = self.ev_size * index
@@ -154,6 +172,10 @@ class cbusconfig():
                 count += 1
 
         return count
+
+    def clear_all_events(self):
+        self.events = bytearray((self.num_evs + 4) * self.num_events)
+        self.write_changes()
 
     def read_nv(self, nvnum):
         return self.nvs[nvnum - 10]
@@ -187,6 +209,3 @@ class cbusconfig():
         import gc
         gc.collect()
         return gc.mem_free()
-
-
-    
