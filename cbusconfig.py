@@ -14,6 +14,7 @@ class cbusconfig():
     
     def __init__(self, num_nvs=20, num_events=64, num_evs=4):
         print('** cbusconfig constructor')
+
         self.num_nvs = num_nvs
         self.num_events = num_events
         self.num_evs = num_evs
@@ -59,7 +60,7 @@ class cbusconfig():
         f.close()
         self.events = bytearray(data.encode("ascii"))
 
-        self.load_id()
+        self.load_module_id()
 
     def write_changes(self):
         f = open(nvs_file_name, "w")
@@ -108,8 +109,18 @@ class cbusconfig():
 
         return -1
 
+    def read_event(self, index):
+        #print('read_event')
+        data = bytearray(self.ev_size)
+        offset = self.ev_size * index
+
+        for i in range(self.ev_size):
+            data[i] = self.events[offset + i]
+
+        return data
+
     def write_event(self, nn, en, evnum, evval):
-        print('write_event')
+        #print('write_event')
 
         idx = self.find_existing_event(nn , en)
 
@@ -129,7 +140,12 @@ class cbusconfig():
         self.write_changes()
         return True
 
-    def write_ev(self, idx, evnum, evval):
+    def read_event_ev(self, idx, evnum):
+        print('read_event_ev')
+        offset = (idx * self.ev_size) + 4 + (evnum - 1)
+        return self.events[offset]
+
+    def write_event_ev(self, idx, evnum, evval):
         pass
 
     def clear_event(self, nn, en):
@@ -147,28 +163,13 @@ class cbusconfig():
 
         return True
 
-    def read_event(self, index):
-        data = bytearray(self.ev_size)
-        begin = self.ev_size * index
-
-        for i in range(self.ev_size):
-            data[i] = self.events[begin + i]
-
-        return data
-
-    def get_event_ev(self, idx, evnum):
-        offset = (idx * self.ev_size) + 4 + (evnum - 1)
-        return self.events[offset]
-
-    def count_num_events(self):
-        print('num_events')
+    def count_events(self):
+        print('count_events')
 
         count = 0
 
         for i in range(self.num_events):
-            offset = i * (self.ev_size)
-
-            if self.events[offset] != 255 or self.events[offset + 1] != 255 or self.events[offset + 2] != 255 or self.events[offset + 3] != 255:
+            if sum(self.read_event(i)[0:4]) < 1020:
                 count += 1
 
         return count
@@ -184,7 +185,7 @@ class cbusconfig():
         self.nvs[nvnum - 10] = value
         self.write_changes()
 
-    def load_id(self):
+    def load_module_id(self):
         self.mode = self.nvs[0]
         self.canid = self.nvs[1]
         self.node_number = (self.nvs[2] * 256) + self.nvs[3]

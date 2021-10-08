@@ -15,5 +15,10 @@ class canmessage:
     def make_header(self, priority=0x0b):
         self.id |= (priority << 7)
 
-    def print(self):
-        print(f'[{self.id:x}] [{self.len}] ' + '[ ' + ' '.join('{:02x}'.format(x) for x in self.data) + ' ]')
+    def print(self, hex=True):
+        if hex:
+            print(f'[{self.id:x}] [{self.len}] ' + '[ ' + ' '.join('{:02x}'.format(x) for x in self.data) + ' ]', end = '')
+        else:
+            print(f'[{self.id}] [{self.len}] ' + '[ ' + ' '.join('{:02}'.format(x) for x in self.data) + ' ]', end = '')
+
+        print()

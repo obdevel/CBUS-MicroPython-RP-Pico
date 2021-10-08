@@ -12,7 +12,7 @@ class receive_context:
         self.last_fragment_received = 0
 
 class transmit_context:
-    
+
     def __init__(self):
         self.state = False
         self.buffer = None
@@ -20,16 +20,16 @@ class transmit_context:
 
 class cbuslongmessage:
 
-    def __init__(self, bus):
-        
+    def __init__(self, cbus):
+
         print('** long message constructor')
-        self.bus = bus
+        self.cbus = cbus
 
         if not isinstance(bus, cbus.cbus):
             raise TypeError('bus is not an instance of class cbus')
 
         self.ids = None
-        self.bus.set_long_message_handler(self)
+        self.cbus.set_long_message_handler(self)
         self.user_handler = None
         self.receive_contexts = [receive_context()] * 4
         self.transmit_contexts = [transmit_context()] * 4

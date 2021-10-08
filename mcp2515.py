@@ -56,7 +56,7 @@ class mcp2515(canio.canio):
 
     """ a canio derived class to use with a MCP2515 CAN controller device """
 
-    def __init__(self, osc=16000000, cs_pin=5, int_pin=1, spi=None):
+    def __init__(self, osc=16000000, cs_pin=5, int_pin=1, spi=None, qsize=64):
         print('** mcp2515 constructor')
 
         # call superclass constructor
@@ -66,8 +66,8 @@ class mcp2515(canio.canio):
         self._osc = osc
 
         # create message buffers
-        self.rx_queue = circularQueue.circularQueue(64)
-        self.tx_queue = circularQueue.circularQueue(64)
+        self.rx_queue = circularQueue.circularQueue(qsize)
+        self.tx_queue = circularQueue.circularQueue(qsize)
 
         # init chip select and interrupt pins
         self._cs_pin = machine.Pin(cs_pin, machine.Pin.OUT)
@@ -76,16 +76,19 @@ class mcp2515(canio.canio):
         self._int_pin = machine.Pin(int_pin, machine.Pin.IN, machine.Pin.PULL_UP)
 
         # init SPI bus
-        self._spi = machine.SPI(0,
-            baudrate=10_000_000,
-            polarity=0,
-            phase=0,
-            bits=8,
-            firstbit=machine.SPI.MSB,
-            sck=machine.Pin(2),
-            mosi=machine.Pin(3),
-            miso=machine.Pin(4)
-        )
+        if spi is None:
+            self._spi = machine.SPI(0,
+                baudrate=10_000_000,
+                polarity=0,
+                phase=0,
+                bits=8,
+                firstbit=machine.SPI.MSB,
+                sck=machine.Pin(2),
+                mosi=machine.Pin(3),
+                miso=machine.Pin(4)
+            )
+        else:
+            self._spi = spi
 
     def isr(self, source=None):
         # CAN interrupt handler

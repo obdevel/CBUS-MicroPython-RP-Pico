@@ -5,11 +5,11 @@ import time
 import mcp2515, cbus, cbusdefs, cbusconfig, canmessage, cbuslongmessage
 
 def event_handler(msg, idx):
-    print(f'event handler, index = {idx}')
+    print(f'user event handler, index = {idx}')
     msg.print()
 
 def frame_handler(msg):
-    print('frame handler')
+    print('user frame handler')
     msg.print()
 
 def run():
@@ -25,6 +25,8 @@ def flim():
 
 MODULE_ID = 103
 
+cbus = cbus.cbus(mcp2515.mcp2515(), cbusconfig.cbusconfig())
+
 module_name = 'PYCO   '
 module_params = [20,
                  cbusdefs.MANU_MERG,
@@ -38,8 +40,6 @@ module_params = [20,
                  0,
                  cbusdefs.PB_CAN,
                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-
-cbus = cbus.cbus(mcp2515.mcp2515(), cbusconfig.cbusconfig())
 
 cbus.set_switch(22)
 cbus.set_leds(21, 20)
