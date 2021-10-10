@@ -322,7 +322,7 @@ class mcp2515(canio.canio):
         self._spi.write(bytearray(v))
 
         if not msg.rtr:
-            self._spi.write(msg.data);
+            self._spi.write(bytearray(msg.data))
 
         self.chip_select(False)
 

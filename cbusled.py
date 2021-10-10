@@ -26,7 +26,7 @@ class cbusled():
         if self.pulsing and time.ticks_ms() - self.last_change_time >= PULSE_DELAY:
             self.state = 0
             self.pin.value(self.state)
-            self.pulse = 0
+            self.pulsing = 0
 
     def on(self):
         self.blinking = 0
@@ -45,7 +45,8 @@ class cbusled():
     def blink(self):
         self.blinking = 1
         self.pulsing = 0
-        self.last_change_time = time.ticks_ms()
+        self.last_change_time = 0
+        self.state = 0
 
     def pulse(self):
         self.pulsing = 1

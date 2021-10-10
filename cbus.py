@@ -235,6 +235,7 @@ class cbus:
             print('end of process')
 
     def handle_accessory_event(self, msg):
+        msg.print()
         node_number = self.get_node_number_from_message(msg)
         event_number = self.get_event_number_from_message(msg)
 
@@ -244,7 +245,7 @@ class cbus:
             i = self.config.find_existing_event(self.get_node_number_from_message(msg), self.get_event_number_from_message(msg))
 
             if i > -1:
-                print(f'found event at index = {i}, calling user handler')
+                print(f'calling user handler')
                 self.event_handler(msg, i)
 
     def handle_rqnp(self, msg):

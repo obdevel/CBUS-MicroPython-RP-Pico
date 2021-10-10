@@ -5,10 +5,10 @@ class canmessage:
     
     """ a class to represent a CAN frame """
 
-    def __init__(self, id=0, len=0, data=bytearray(8), ext=False, rtr=False,):
+    def __init__(self, id=0, len=0, data=bytearray(8), rtr=False, ext=False):
         self.id = id
         self.len = len
-        self.data = data
+        self.data = bytearray(data)
         self.ext = ext
         self.rtr = rtr
 
