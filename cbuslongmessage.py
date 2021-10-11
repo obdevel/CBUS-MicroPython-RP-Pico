@@ -9,12 +9,12 @@ TRANSMIT_DELAY = 50
 
 class receive_context:
 
-    def __init__(self, size=64):
+    def __init__(self, buffer_size=64):
         self.in_use = False
         self.streamid = 0
         self.canid = 0
-        self.size = size
-        self.buffer = bytearray(size)
+        self.buffer_size = buffer_size
+        self.buffer = bytearray(buffer_size)
         self.index = 0
         self.last_fragment_received = 0
         self.message_size = 0
@@ -24,12 +24,12 @@ class receive_context:
 
 class transmit_context:
 
-    def __init__(self, size=64):
+    def __init__(self, buffer_size=64):
         self.in_use = False
         self.streamid = 0
-        self.size = size
+        self.buffer_size = buffer_size
         self.priority = 0
-        self.buffer = bytearray(size)
+        self.buffer = bytearray(buffer_size)
         self.index = 0
         self.sequence_num = 0
         self.crc = 0
@@ -38,11 +38,11 @@ class transmit_context:
 
 class cbuslongmessage:
 
-    def __init__(self, bus, size=64, num_contexts=4):
+    def __init__(self, bus, buffer_size=64, num_contexts=4):
 
         print('** long message constructor')
         self.cbus = bus
-        self.size = size
+        self.buffer_size = buffer_size
         self.num_contexts = num_contexts
         self.using_crc = False
 
@@ -52,25 +52,29 @@ class cbuslongmessage:
         self.subscribed_ids = None
         self.cbus.set_long_message_handler(self)
         self.user_handler = None
-        self.size = size
+        self.buffer_size = buffer_size
         self.num_contexts = num_contexts
         self.current_context = 0
-        self.receive_contexts = [receive_context(size)] * num_contexts
-        self.transmit_contexts = [transmit_context(size)] * num_contexts
+        self.receive_contexts = [receive_context(buffer_size)] * num_contexts
+        self.transmit_contexts = [transmit_context(buffer_size)] * num_contexts
+
+        for i in range(num_contexts):
+            self.receive_contexts[i].in_use = False
+            self.transmit_contexts[i].in_use = False
 
     def subscribe(self, ids, handler):
         print('subscribe')
         self.subscribed_ids = ids
         self.user_handler = handler
         print(ids)
-        print(handler)
+        # print(handler)
 
     def send_long_message(self, message, streamid, priority=0x0b):
         print(f'sending long message = {message}')
 
         for j in range(self.num_contexts):
             if self.transmit_contexts[j].in_use and self.transmit_contexts[j].streamid == streamid:
-                print(f'already sending streamid = {streamid}')
+                print(f'already sending streamid = {streamid} in context {i}')
                 return False
 
         matched = False
@@ -86,13 +90,13 @@ class cbuslongmessage:
 
         print(f'using transmit context = {j}')
         self.transmit_contexts[j].in_use = True
+        self.transmit_contexts[j].streamid = streamid
         self.transmit_contexts[j].buffer = bytearray(message)
         self.transmit_contexts[j].message_size = len(message)
-        self.transmit_contexts[j].streamid = streamid
         self.transmit_contexts[j].priority = priority
         self.transmit_contexts[j].index = 0
         self.transmit_contexts[j].flags = 0
-        
+
         if self.using_crc:
             self.transmit_contexts[j].crc = crc_16(self.transmit_contexts[j].message)
         else:
@@ -181,8 +185,8 @@ class cbuslongmessage:
             if not matched:
                 print('unable to find matching receive context')
                 return
-            else:
-                print(f'using context = {i}')
+
+            print(f'using context = {i}')
 
             if msg.data[2] != self.receive_contexts[i].expected_next_receive_sequence_num:
                 print(f'wrong sequence number, expected {self.receive_contexts[i].expected_next_receive_sequence_num}, got {msg.data[2]}')

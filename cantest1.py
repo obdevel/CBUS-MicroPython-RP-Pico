@@ -16,6 +16,9 @@ def frame_handler(msg):
     print('user frame handler')
     msg.print()
 
+def long_message_handler(message, streamid, status):
+    print(f'user long message handler, status = {status}')
+
 def run_cbus_thread():
     global thread_is_running
     thread_is_running = True
@@ -68,10 +71,9 @@ cbus.set_frame_handler(frame_handler)
 
 cbus.begin()
 
-msg2 = canmessage.canmessage(1234, 5, [0xe9, 1, 0, 0, 24, 0, 0, 0])
-lm = cbuslongmessage.cbuslongmessage(cbus)
-ids = [1, 2, 3, 4, 5]
-lm.subscribe(ids, frame_handler)
+# msg2 = canmessage.canmessage(1234, 5, [0xe9, 1, 0, 0, 24, 0, 0, 0])
+# lm = cbuslongmessage.cbuslongmessage(cbus)
+# lm.subscribe([1, 2, 3, 4, 5], long_message_handler)
 
 print(f'module: mode = {cbus.config.mode}, can id = {cbus.config.canid}, node number = {cbus.config.node_number}')
 print(f'free memory = {cbus.config.free_memory()}')
