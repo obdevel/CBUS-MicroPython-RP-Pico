@@ -221,14 +221,13 @@ class mcp2515(canio.canio):
 
         got_msg = False
         v = bytearray()
-        msg = canmessage()
 
         rx_status = self.read_rx_status()
 
         if rx_status & 0xC0:
             print('new message available')
             got_msg = True
-            message = canmessage()
+            message = canmessage.canmessage()
             access_rxb0 = (rx_status & 0x40) != 0
             message.rtr = (rx_status & 0x08) != 0
             message.ext = (rx_status & 0x10) != 0
@@ -244,30 +243,30 @@ class mcp2515(canio.canio):
 
             v.append(reg)
             self._spi.write(v)
-            msg.id = self._spi.read(1)[0]
+            message.id = self._spi.read(1)[0]
             sidl = self._spi.read(1)
             message.id <<= 3
             message.id |= sidl >> 5
             eid8 = self._spi.read(1)
 
-            if msg.ext:
-                msg.id <<= 2
-                msg.id |= (sidl & 0x03)
-                msg.id <<= 8
-                msg.id |= eid8
+            if message.ext:
+                message.id <<= 2
+                message.id |= (sidl & 0x03)
+                message.id <<= 8
+                message.id |= eid8
 
             eid0 = self._spi.read(1)[0]
 
-            if msg.ext:
-                msg.id <<= 8
-                msg.id |= eid0
+            if message.ext:
+                message.id <<= 8
+                message.id |= eid0
 
             dlc = self._spi.read(1)[0]
-            msg.len = dlc & 0x0F
-            msg.data = self._spi.read(msg.len)
+            message.len = dlc & 0x0F
+            message.data = self._spi.read(msg.len)
 
             self.chip_select(False)
-            self.rx_queue.enqueue(msg)
+            self.rx_queue.enqueue(message)
 
         else:
             print('no message available')

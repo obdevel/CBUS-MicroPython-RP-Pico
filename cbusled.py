@@ -45,7 +45,7 @@ class cbusled():
     def blink(self):
         self.blinking = 1
         self.pulsing = 0
-        self.last_change_time = 0
+        self.last_change_time = time.ticks_ms()
         self.state = 0
 
     def pulse(self):

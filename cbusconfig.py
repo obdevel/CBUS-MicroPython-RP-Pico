@@ -88,7 +88,7 @@ class cbusconfig():
         self.node_number = node_number
 
     def find_existing_event(self, nn, en):
-        print(f'find_existing_event, {nn}, {en}')
+        print(f'find_existing_event: {nn}, {en}')
 
         for i in range(self.num_events):
             offset = i * (self.ev_size)

@@ -63,11 +63,9 @@ class cbuslongmessage:
             self.transmit_contexts[i].in_use = False
 
     def subscribe(self, ids, handler):
-        print('subscribe')
+        print(f'subscribe: {ids}')
         self.subscribed_ids = ids
         self.user_handler = handler
-        print(ids)
-        # print(handler)
 
     def send_long_message(self, message, streamid, priority=0x0b):
         print(f'sending long message = {message}')
@@ -163,7 +161,7 @@ class cbuslongmessage:
                     self.receive_contexts[j].buffer = bytearray(self.receive_contexts[j].message_size)
                     self.receive_contexts[j].index = 0
                     self.receive_contexts[j].expected_next_receive_sequence_num = 1
-                    self.receive_contexts[j].canid = self.cbus.sender_canid(msg)
+                    self.receive_contexts[j].canid = self.cbus.message_canid(msg)
                     self.receive_contexts[j].received = 0
                     self.receive_contexts[j].last_fragment_received = time.ticks_ms()
                     matched = True
@@ -178,7 +176,7 @@ class cbuslongmessage:
             matched = False;
 
             for i in range(self.num_contexts):
-                if self.receive_contexts[i].in_use and self.receive_contexts[i].streamid == msg.data[1] and self.receive_contexts[i].canid == self.cbus.sender_canid(msg):
+                if self.receive_contexts[i].in_use and self.receive_contexts[i].streamid == msg.data[1] and self.receive_contexts[i].canid == self.cbus.message_canid(msg):
                     matched = True
                     break
 

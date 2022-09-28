@@ -31,7 +31,7 @@ class cbus:
         self.led_grn = led_grn
         self.led_ylw = led_ylw
 
-        if not self.switch and not self.led_grn and not self.led_ylw:
+        if not self.switch or not self.led_grn or not self.led_ylw:
             self.has_ui = False
         else:
             self.has_ui = True
@@ -51,7 +51,7 @@ class cbus:
         self.long_message_handler = None
         self.opcodes = []
 
-        self.mode_changing = False
+        self.in_transition = False
         self.in_learn_mode = False
         self.enumerating = False
         self.enum_start_time = 0
@@ -133,6 +133,7 @@ class cbus:
         self.opcodes = opcodes
 
     def send_cbus_message(self, msg):
+        msg.make_header()
         self.can.send_message(msg)
         self.led_grn.pulse()
         self.sent_messages += 1
@@ -140,9 +141,9 @@ class cbus:
     def process(self, max_msgs=3):
         #print('** cbus process')
 
-        if self.mode_changing and time.ticks_ms() - self.timeout_timer >= 30000:
+        if self.in_transition and time.ticks_ms() - self.timeout_timer >= 30000:
             print('mode change timeout')
-            self.mode_changing = False;
+            self.in_transition = False;
             self.indicate_mode(self.config.mode)
             self.timeout_timer = 0
 
@@ -165,13 +166,13 @@ class cbus:
 
             if self.switch.is_pressed() and self.switch.current_state_duration() >= 6000:
                 # print('cbus switch held for 6 seconds - blink')
-                self.indicate_mode(cbusconfig.MODE_CHANGING)
+                self.indicate_mode(cbusconfig.in_transition)
 
             if self.switch.state_changed and not self.switch.is_pressed():
 
                 if self.switch.previous_state_duration >= 6000:
                     print('cbus switch released after 6 seconds, mode change')
-                    self.mode_changing = True
+                    self.in_transition = True
 
                     if self.config.mode == cbusconfig.MODE_SLIM:
                         self.init_flim()
@@ -201,7 +202,7 @@ class cbus:
                 # pulse green led
                 self.led_grn.pulse()
 
-            if self.sender_canid(msg) == self.config.canid and not self.enumerating:
+            if msg.get_canid() == self.config.canid and not self.enumerating:
                 # canid clash
                 self.enumeration_required = True
 
@@ -225,10 +226,10 @@ class cbus:
                     print('unhandled opcode = 0x{msg.data[0]:#x}')
 
             else:
-                if msg.rtr and not self.seumerating:
+                if msg.rtr and not self.enumerating:
                     self.respond_to_enum_request()
                 elif self.enumerating:
-                    enum_responses[self.sender_canid(msg)] = 1
+                    enum_responses[msg.get_canid()] = 1
 
             processed_msgs += 1
 
@@ -239,10 +240,10 @@ class cbus:
         node_number = self.get_node_number_from_message(msg)
         event_number = self.get_event_number_from_message(msg)
 
-        print(f'handle accessory event, {node_number}, {event_number}')
+        print(f'handle accessory event: {node_number}, {event_number}')
 
         if self.event_handler is not None:
-            i = self.config.find_existing_event(self.get_node_number_from_message(msg), self.get_event_number_from_message(msg))
+            i = self.config.find_existing_event(node_number, event_number)
 
             if i > -1:
                 print(f'calling user handler')
@@ -251,7 +252,7 @@ class cbus:
     def handle_rqnp(self, msg):
         print('RQNP')
 
-        if self.mode_changing:
+        if self.in_transition:
             omsg = canmessage.canmessage(self.config.canid, 8)
             omsg.data[0] = cbusdefs.OPC_PARAMS
             omsg.data[1] = self.params[1]
@@ -283,7 +284,7 @@ class cbus:
     def handle_snn(self, msg):
         print('SNN')
 
-        if self.mode_changing:
+        if self.in_transition:
             self.config.set_node_number(self.get_node_number_from_message(msg))
             omsg = canmessage.canmessage(self.config.canid, 3)
             omsg.data[0] = cbusdefs.OPC_NNACK
@@ -291,7 +292,7 @@ class cbus:
             omsg.data[2] = self.config.node_number & 0xff
             self.send_cbus_message(omsg)
 
-            self.mode_changing = False
+            self.in_transition = False
             self.config.set_mode(cbusconfig.MODE_FLIM)
             self.indicateMode(cbusconfig.MODE_FLIM);
             self.begin_enumeration()
@@ -308,7 +309,7 @@ class cbus:
     def handle_enum(self, msg):
         print('ENUM')
 
-        if self.get_node_number_from_message(msg) == self.config.node_number and self.sender_canid(msg) != self.config.canid and not self.enumerating:
+        if self.get_node_number_from_message(msg) == self.config.node_number and msg.get_canid() != self.config.canid and not self.enumerating:
             self.begin_enumeration()
 
     def handle_nvrd(self, msg):
@@ -430,7 +431,7 @@ class cbus:
     def handle_rqmn(self, msg):
         print('RQMN')
 
-        if self.mode_changing:
+        if self.in_transition:
             omsg = canmessage.canmessage(self.config.canid, 8)
             omsg.data[0] = cbusdefs.OPC_NAME
 
@@ -519,8 +520,8 @@ class cbus:
 
     def init_flim(self):
         print('init_flim')
-        self.indicate_mode(cbusconfig.MODE_CHANGING)
-        self.mode_changing = True
+        self.indicate_mode(cbusconfig.in_transition)
+        self.in_transition = True
         self.timeout_timer = time.ticks_ms()
 
         omsg = canmessage.canmessage(self.config.canid, 3)
@@ -537,7 +538,7 @@ class cbus:
         omsg.data[2] = self.config.node_number & 0xff
         self.send_cbus_message(omsg)
 
-        self.mode_changing = False;
+        self.in_transition = False;
         self.config.set_mode(cbusconfig.MODE_SLIM)
         self.config.set_canid(0)
         self.config.set_node_number(0)
@@ -545,9 +546,6 @@ class cbus:
 
     def respond_to_enum_request(self):
         pass
-
-    def sender_canid(self, msg):
-        return (msg.id & 0x7f)
 
     def indicate_mode(self, mode):
 
@@ -558,7 +556,7 @@ class cbus:
             elif mode == cbusconfig.MODE_FLIM:
                 self.led_grn.off()
                 self.led_ylw.on()
-            elif mode == cbusconfig.MODE_CHANGING:
+            elif mode == cbusconfig.in_transition:
                 self.led_grn.off()
                 self.led_ylw.blink()
             else:

@@ -15,6 +15,9 @@ class canmessage:
     def make_header(self, priority=0x0b):
         self.id |= (priority << 7)
 
+    def get_canid(self):
+        return self.id & 0x7f
+
     def print(self, hex=True):
         if hex:
             print(f'[{self.id:x}] [{self.len}] ' + '[ ' + ' '.join('{:02x}'.format(x) for x in self.data) + ' ]', end = '')
