@@ -12,6 +12,21 @@ class canmessage:
         self.ext = ext
         self.rtr = rtr
 
+    def __str__(self):
+
+        if (self.rtr):
+            rtr = 'r'
+        else:
+            rtr = ''
+
+        if (self.ext):
+            ext = 'x'
+        else:
+            ext = ''
+
+        ch = f'[{self.id:x}] ' + f'[{self.len:x}] [ ' + ' '.join('{:02x}'.format(x) for x in self.data) + ' ] ' + rtr + ext
+        return ch
+
     def make_header(self, priority=0x0b):
         self.id |= (priority << 7)
 
@@ -19,9 +34,20 @@ class canmessage:
         return self.id & 0x7f
 
     def print(self, hex=True):
-        if hex:
-            print(f'[{self.id:x}] [{self.len}] ' + '[ ' + ' '.join('{:02x}'.format(x) for x in self.data) + ' ]', end = '')
+
+        if (self.rtr):
+            rtr = 'r'
         else:
-            print(f'[{self.id}] [{self.len}] ' + '[ ' + ' '.join('{:02}'.format(x) for x in self.data) + ' ]', end = '')
+            rtr = ''
+
+        if (self.ext):
+            ext = 'x'
+        else:
+            ext = ''
+
+        if hex:
+            print(f'[{self.id:x}] [{self.len:x}] ' + '[ ' + ' '.join('{:02x}'.format(x) for x in self.data) + ' ] ' + rtr + ext, end = '')
+        else:
+            print(f'[{self.id}] [{self.len}] ' + '[ ' + ' '.join('{:02}'.format(x) for x in self.data) + ' ] ' + rtr + ext, end = '')
 
         print()

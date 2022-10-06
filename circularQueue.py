@@ -33,6 +33,7 @@ class circularQueue:
             return None
         else:
             tmp = self.queue[self.head]
+            self.queue[self.head] = None
             self.head = (self.head + 1) % self.capacity
             self.size = self.size - 1
             return tmp

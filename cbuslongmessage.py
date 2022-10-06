@@ -41,14 +41,14 @@ class cbuslongmessage:
     def __init__(self, bus, buffer_size=64, num_contexts=4):
 
         print('** long message constructor')
-        self.cbus = bus
-        self.buffer_size = buffer_size
-        self.num_contexts = num_contexts
-        self.using_crc = False
 
         if not isinstance(bus, cbus.cbus):
             raise TypeError('cbus is not an instance of class cbus')
 
+        self.cbus = bus
+        self.buffer_size = buffer_size
+        self.num_contexts = num_contexts
+        self.using_crc = False
         self.subscribed_ids = None
         self.cbus.set_long_message_handler(self)
         self.user_handler = None
@@ -63,7 +63,7 @@ class cbuslongmessage:
             self.transmit_contexts[i].in_use = False
 
     def subscribe(self, ids, handler):
-        print(f'subscribe: {ids}')
+        print(f'** subscribe: {ids}')
         self.subscribed_ids = ids
         self.user_handler = handler
 
@@ -161,7 +161,7 @@ class cbuslongmessage:
                     self.receive_contexts[j].buffer = bytearray(self.receive_contexts[j].message_size)
                     self.receive_contexts[j].index = 0
                     self.receive_contexts[j].expected_next_receive_sequence_num = 1
-                    self.receive_contexts[j].canid = self.cbus.message_canid(msg)
+                    self.receive_contexts[j].canid = msg.get_canid()
                     self.receive_contexts[j].received = 0
                     self.receive_contexts[j].last_fragment_received = time.ticks_ms()
                     matched = True

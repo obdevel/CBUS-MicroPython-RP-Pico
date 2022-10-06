@@ -54,7 +54,7 @@ RXFSIDH_REGISTER = [0x00, 0x04, 0x08, 0x10, 0x14, 0x18]
 
 class mcp2515(canio.canio):
 
-    """ a canio derived class to use with a MCP2515 CAN controller device """
+    """ a canio derived class for use with an MCP2515 CAN controller device """
 
     def __init__(self, osc=16000000, cs_pin=5, int_pin=1, spi=None, qsize=64):
         print('** mcp2515 constructor')
@@ -94,7 +94,7 @@ class mcp2515(canio.canio):
         # CAN interrupt handler
 
         print('** mcp2515 isr triggered')
-        #print(f'source = {source}')
+        print(f'source = {source}')
 
         handled = False
 
@@ -220,7 +220,6 @@ class mcp2515(canio.canio):
         print('handle_rxb_interrupt')
 
         got_msg = False
-        v = bytearray()
 
         rx_status = self.read_rx_status()
 
@@ -241,6 +240,7 @@ class mcp2515(canio.canio):
 
             self.chip_select(True)
 
+            v = bytearray()
             v.append(reg)
             self._spi.write(v)
             message.id = self._spi.read(1)[0]
@@ -333,7 +333,7 @@ class mcp2515(canio.canio):
         print('internal_send_message ends')
 
     def reset(self):
-        print('mcp2515 reset')
+        print('** mcp2515 reset')
         msg = bytearray()
         msg.append(RESET_COMMAND)
         self.chip_select(True)
@@ -350,7 +350,7 @@ class mcp2515(canio.canio):
         x = self.read_register(CNF1_REGISTER)
         
         if x[0] == 0x55:
-            print('mcp2515 device is accessible')
+            print('** mcp2515 device is accessible')
         else:
             print('no response from mcp2515 device')
 
@@ -383,14 +383,14 @@ class mcp2515(canio.canio):
         self.write_register(RXB1CTRL_REGISTER, 0)
 
         # configure mask registers - no filters or masks set
-        values = bytearray(4)
+        values = bytearray()
         values.append(0)
         values.append(0)
         values.append(0)
         values.append(0)
         self.write_registers(RXM0SIDH_REGISTER, values)
 
-        values = bytearray(4)
+        values = bytearray()
         values.append(0)
         values.append(0)
         values.append(0)
@@ -416,7 +416,7 @@ class mcp2515(canio.canio):
         # install ISR
         self._int_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.isr)
 
-        print('mcp2515 init complete')
+        print('** mcp2515 init complete')
 
     def available(self):
         # print('** available')

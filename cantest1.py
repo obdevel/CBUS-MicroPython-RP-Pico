@@ -1,11 +1,14 @@
 
 ## cantest1.py
 
-import time, _thread
-import mcp2515, cbus, cbusdefs, cbusconfig, canmessage, cbuslongmessage, i2ceeprom
+import micropython, time, _thread
+from machine import Timer
+import mcp2515, cbus, cbusdefs, cbusconfig, canmessage, cbuslongmessage
 
 thread_can_run = False
 thread_is_running = False
+timer_is_active = False
+timer = Timer(-1)
 
 def run_cbus_thread():
     global thread_can_run
@@ -16,12 +19,12 @@ def run_cbus_thread():
     
     while thread_can_run:
         cbus.process()
-        time.sleep_ms(5)
+        time.sleep_ms(20)
 
     thread_is_running = False
     _thread.exit()
 
-def start_cbus():
+def start_cbus_thread():
     global thread_can_run
     global thread_is_running
     
@@ -35,7 +38,7 @@ def start_cbus():
     print('cbus thread started')
     return True
 
-def stop_cbus():
+def stop_cbus_thread():
     global thread_can_run
     global thread_is_running
     
@@ -47,24 +50,59 @@ def stop_cbus():
     thread_can_run = False
     return True
 
+def call_process(x):
+    cbus.process(3)
+
+def timer_callback(t):
+    # micropython.schedule(cbus.process, 3)
+    micropython.schedule(call_process, 0)
+    pass
+
+def start_cbus_timer():
+    global timer, timer_is_active
+    
+    if (timer_is_active):
+        print('cbus timer is already active')
+        return False
+
+    print('starting cbus timer')
+    micropython.alloc_emergency_exception_buf(500)
+    # timer = Timer(period=100, mode=Timer.PERIODIC, callback=lambda timer: timer_callback(timer))
+    timer = Timer(period=50, mode=Timer.PERIODIC, callback=lambda x: cbus.process())
+    timer_is_active = True
+    return True
+
+def stop_cbus_timer():
+    global timer, timer_is_active
+    
+    print('stopping cbus timer')
+    timer.deinit()
+    timer_is_active = False
+
+def run_cbus_loop():
+    while True:
+        c = cbus.process()
+        time.sleep_ms(20)
+
 def event_handler(msg, idx):
     print(f'user event handler: index = {idx}')
-    msg.print()
+    print(msg)
     print(f'ev1 = {cbus.config.read_event_ev(idx, 1)}')
+    print()
 
 def frame_handler(msg):
     print('user frame handler:')
-    msg.print()
+    print(msg)
 
 def long_message_handler(message, streamid, status):
     print(f'user long message handler: status = {status}')
+    print()
 
 def flim():
     cbus.config.set_mode(1)
     cbus.config.set_canid(5)
     cbus.config.set_node_number(333)
     cbus.config.reboot()
-
 
 #
 # execution starts here
@@ -73,7 +111,7 @@ def flim():
 start_time = time.ticks_ms()
 print('** module starting')
 
-cbus = cbus.cbus(mcp2515.mcp2515(), cbusconfig.cbusconfig())
+cbus = cbus.cbus(mcp2515.mcp2515(), cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES))
 
 MODULE_ID = 103
 module_name = 'PYCO   '
@@ -99,17 +137,17 @@ cbus.set_frame_handler(frame_handler)
 
 cbus.begin()
 
-msg2 = canmessage.canmessage(1234, 5, [0xe9, 1, 0, 0, 24, 0, 0, 0])
-msg3 = canmessage.canmessage(1234, 5, [0x91, 0, 22, 0, 22, 0, 0, 0])
+msg2 = canmessage.canmessage(cbus.config.canid, 5, [0xe9, 1, 0, 0, 24, 0, 0, 0])
+msg3 = canmessage.canmessage(4, 5, [0x91, 0, 22, 0, 22, 0, 0, 0])
+msg4 = canmessage.canmessage(555, 0, [], True, False)
 
-lm = cbuslongmessage.cbuslongmessage(cbus)
+lm = cbuslongmessage.cbuslongmessage(cbus, 512, 4)
 lm.subscribe([1, 2, 3, 4, 5], long_message_handler)
 
-start_cbus()
+# start_cbus_thread()
 
 print()
-print('** startup complete');
-print(f'module: name = {module_name}, mode = {cbus.config.mode}, can id = {cbus.config.canid}, node number = {cbus.config.node_number}')
+print(f'** startup time = {time.ticks_ms() - start_time} ms')
+print(f'module: name = |{module_name}|, mode = {cbus.config.mode}, can id = {cbus.config.canid}, node number = {cbus.config.node_number}')
 print(f'free memory = {cbus.config.free_memory()} bytes')
-print(f'startup time = {time.ticks_ms() - start_time} ms')
 
