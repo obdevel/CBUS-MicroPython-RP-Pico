@@ -3,8 +3,8 @@
 
 import machine, time
 
-BLINK_DELAY = 500
-PULSE_DELAY = 50
+BLINK_DURATION = 500
+PULSE_DURATION = 10
 
 class cbusled():
 
@@ -18,12 +18,12 @@ class cbusled():
         self.pin.value(self.state)
 
     def run(self):
-        if self.blinking and time.ticks_ms() - self.last_change_time >= BLINK_DELAY:
+        if self.blinking and time.ticks_ms() - self.last_change_time >= BLINK_DURATION:
             self.state = not self.state
             self.pin.value(self.state)
             self.last_change_time = time.ticks_ms()
 
-        if self.pulsing and time.ticks_ms() - self.last_change_time >= PULSE_DELAY:
+        if self.pulsing and time.ticks_ms() - self.last_change_time >= PULSE_DURATION:
             self.state = 0
             self.pin.value(self.state)
             self.pulsing = 0
@@ -43,14 +43,16 @@ class cbusled():
         pass
 
     def blink(self):
-        self.blinking = 1
-        self.pulsing = 0
-        self.last_change_time = time.ticks_ms()
-        self.state = 0
+        if not self.blinking:
+            self.blinking = 1
+            self.pulsing = 0
+            self.last_change_time = time.ticks_ms()
+            self.state = 0
 
     def pulse(self):
-        self.pulsing = 1
-        self.blinking = 0
-        self.state = 1
-        self.pin.value(self.state)
-        self.last_change_time = time.ticks_ms()
+        if not self.pulsing:
+            self.pulsing = 1
+            self.blinking = 0
+            self.state = 1
+            self.pin.value(self.state)
+            self.last_change_time = time.ticks_ms()

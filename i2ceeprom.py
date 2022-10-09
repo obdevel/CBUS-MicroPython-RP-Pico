@@ -36,16 +36,11 @@ class i2ceeprom():
         return data
 
     def write(self, addr, data):
-        self._addrbuf[0] = (addr >> 8) & 0xFF
-        self._addrbuf[1] = addr & 0xFF
-        self._databuf[0] = data & 0xFF
-
         t = bytearray(3)
-        t[0] = self._addrbuf[0]
-        t[1] = self._addrbuf[1]
-        t[2] = self._databuf[0]
+        t[0] = (addr >> 8) & 0xFF
+        t[1] = addr & 0xFF
+        t[2] = data & 0xFF
 
-        # self.bus.writeto(self.i2caddr, bytes(self._addrbuf[0], self._addrbuf[1], self._databuf[0]))
         self.bus.writeto(self.i2caddr, t)
         time.sleep_ms(5)
 

@@ -142,9 +142,7 @@ class cbus:
         self.has_ui and self.led_grn.pulse()
         self.sent_messages += 1
 
-    def process(self, max_msgs=3):
-        #print('** cbus process')
-        
+    def process(self, max_msgs=3):        
         start_time = time.ticks_ms()
 
         if self.in_transition and time.ticks_ms() - self.timeout_timer >= 30000:
@@ -250,17 +248,15 @@ class cbus:
 
     def handle_accessory_event(self, msg):
 
-        node_number = self.get_node_number_from_message(msg)
-        event_number = self.get_event_number_from_message(msg)
-
+        node_number, event_number = self.get_node_and_event_numbers_from_message(msg)
         print(f'handle_accessory_event: {node_number}, {event_number}')
 
         if self.event_handler is not None:
-            i = self.config.find_existing_event(node_number, event_number)
+            idx = self.config.find_existing_event(node_number, event_number)
 
-            if i > -1:
+            if idx > -1:
                 print(f'calling user handler')
-                self.event_handler(msg, i)
+                self.event_handler(msg, idx)
 
     def handle_rqnp(self, msg):
         print('RQNP')
@@ -588,3 +584,7 @@ class cbus:
 
     def get_event_number_from_message(self, msg):
         return (msg.data[3] * 256) + msg.data[4]
+
+    def get_node_and_event_numbers_from_message(self, msg):
+        return (((msg.data[1] * 256) + msg.data[2]), ((msg.data[3] * 256) + msg.data[4]))
+

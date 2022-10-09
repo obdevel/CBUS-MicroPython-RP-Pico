@@ -1,6 +1,7 @@
 
 # cbusconfig.py
 
+import gc
 import machine
 import i2ceeprom
 
@@ -47,9 +48,7 @@ class storage_backend:
 class files_backend(storage_backend):
 
     def __init__(self, ev_offset):
-        storage_backend.__init__(self)
         print('** files_backend init')
-
         super().__init__(self, ev_offset)
 
     def init_events(self, events):
@@ -109,9 +108,7 @@ class files_backend(storage_backend):
 class eeprom_backend(storage_backend):
 
     def __init__(self, ev_offset):
-        storage_backend.__init__(self)
-        print(f'** eeprom_backend init, offset = {ev_offset}')                
-
+        print(f'** eeprom_backend init, offset = {ev_offset}')
         super().__init__(self, ev_offset)
         self.eeprom = i2ceeprom.i2ceeprom()
 
@@ -260,7 +257,7 @@ class cbusconfig:
         return True
 
     def read_event_ev(self, idx, evnum):
-        print('read_event_ev')
+        # print('read_event_ev')
         offset = (idx * self.event_size) + 4 + (evnum - 1)
         return self.events[offset]
 
@@ -313,12 +310,13 @@ class cbusconfig:
         self.canid = self.nvs[1]
         self.node_number = (self.nvs[2] * 256) + self.nvs[3]
 
-    def print_events(self):
+    def print_events(self, print_all=True):
         for i in range(self.num_events):
-            print(f'{i:2} - ', end = '')
-            for j in range (0, self.event_size):
-                print(self.events[(i*self.event_size)+j], end = ' ')
-            print()
+            if print_all or (self.events[i*self.event_size] < 0xff):
+                print(f'{i:3} = ', end = '')
+                for j in range (0, self.event_size):
+                    print(f'{self.events[(i*self.event_size)+j]:3}', end = ' ')
+                print()
 
     def print_nvs(self):
         for i in range(self.num_nvs + 10):
@@ -338,6 +336,5 @@ class cbusconfig:
         self.reboot()
 
     def free_memory(self):
-        import gc
         gc.collect()
         return gc.mem_free()

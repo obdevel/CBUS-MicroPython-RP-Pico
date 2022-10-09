@@ -345,12 +345,12 @@ class mcp2515(canio.canio):
         print('** mcp2515 begin')
         self.reset()        
 
-        # check device is accessible
+        # check device is present
         self.write_register(CNF1_REGISTER, 0x55)
         x = self.read_register(CNF1_REGISTER)
-        
+
         if x[0] == 0x55:
-            print('** mcp2515 device is accessible')
+            print('** mcp2515 device is preesent')
         else:
             print('no response from mcp2515 device')
 
