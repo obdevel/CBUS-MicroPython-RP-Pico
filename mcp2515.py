@@ -60,24 +60,24 @@ class mcp2515(canio.canio):
         print('** mcp2515 constructor')
 
         # call superclass constructor
-        canio.canio.__init__(self)
+        super().__init__()
 
         # crystal frequency
-        self._osc = osc
+        self.osc = osc
 
         # create message buffers
         self.rx_queue = circularQueue.circularQueue(qsize)
         self.tx_queue = circularQueue.circularQueue(qsize)
 
         # init chip select and interrupt pins
-        self._cs_pin = machine.Pin(cs_pin, machine.Pin.OUT)
-        self._cs_pin.on()
+        self.cs_pin = machine.Pin(cs_pin, machine.Pin.OUT)
+        self.cs_pin.on()
 
-        self._int_pin = machine.Pin(int_pin, machine.Pin.IN, machine.Pin.PULL_UP)
+        self.int_pin = machine.Pin(int_pin, machine.Pin.IN, machine.Pin.PULL_UP)
 
         # init SPI bus
         if spi is None:
-            self._spi = machine.SPI(0,
+            self.bus = machine.SPI(0,
                 baudrate=10_000_000,
                 polarity=0,
                 phase=0,
@@ -88,13 +88,11 @@ class mcp2515(canio.canio):
                 miso=machine.Pin(4)
             )
         else:
-            self._spi = spi
+            self.bus = spi
 
     def isr(self, source=None):
         # CAN interrupt handler
-
-        print('** mcp2515 isr triggered')
-        print(f'source = {source}')
+        print(f'** mcp2515 isr triggered, source = {source}')
 
         handled = False
 
@@ -134,12 +132,12 @@ class mcp2515(canio.canio):
         if state:
             # machine.disable_irq()
             #print("CS low")
-            #self._cs_pin.off()
-            self._cs_pin.value(0)
+            #self.cs_pin.off()
+            self.cs_pin.value(0)
         else:
             #print("CS high")
-            #self._cs_pin.on()
-            self._cs_pin.value(1)
+            #self.cs_pin.on()
+            self.cs_pin.value(1)
             # machine.enable_irq()
 
     def read_register(self, reg):
@@ -150,8 +148,8 @@ class mcp2515(canio.canio):
         msg.append(reg);
 
         self.chip_select(True)
-        self._spi.write(msg)
-        ret = self._spi.read(1)
+        self.bus.write(msg)
+        ret = self.bus.read(1)
         self.chip_select(False)
 
         return ret
@@ -164,8 +162,8 @@ class mcp2515(canio.canio):
         msg.append(reg)
 
         self.chip_select(True)
-        self._spi.write(msg)
-        value = self._spi.read(n)
+        self.bus.write(msg)
+        value = self.bus.read(n)
         self.chip_select(False)
 
     def write_register(self, reg, value):
@@ -177,7 +175,7 @@ class mcp2515(canio.canio):
         msg.append(value)
 
         self.chip_select(True)
-        self._spi.write(msg)
+        self.bus.write(msg)
         self.chip_select(False)
 
     def write_registers(self, reg, values):
@@ -191,7 +189,7 @@ class mcp2515(canio.canio):
             msg.append(b)
 
         self.chip_select(True)
-        self._spi.write(msg)
+        self.bus.write(msg)
         self.chip_select(False)
 
     def modify_register(self, reg, mask, data):
@@ -204,15 +202,15 @@ class mcp2515(canio.canio):
         msg.append(data)
 
         self.chip_select(True)
-        self._spi.write(msg)
+        self.bus.write(msg)
         self.chip_select(False)
 
     def read_rx_status(self):
         #print('read_rx_status')
         reg = bytearray(RX_STATUS_COMMAND)
         self.chip_select(True)
-        self._spi.write(reg)
-        read = self._spi.read(1, 0)
+        self.bus.write(reg)
+        read = self.bus.read(1, 0)
         self.chip_select(False)
         return read[0]
 
@@ -242,12 +240,12 @@ class mcp2515(canio.canio):
 
             v = bytearray()
             v.append(reg)
-            self._spi.write(v)
-            message.id = self._spi.read(1)[0]
-            sidl = self._spi.read(1)
+            self.bus.write(v)
+            message.id = self.bus.read(1)[0]
+            sidl = self.bus.read(1)
             message.id <<= 3
             message.id |= sidl >> 5
-            eid8 = self._spi.read(1)
+            eid8 = self.bus.read(1)
 
             if message.ext:
                 message.id <<= 2
@@ -255,15 +253,15 @@ class mcp2515(canio.canio):
                 message.id <<= 8
                 message.id |= eid8
 
-            eid0 = self._spi.read(1)[0]
+            eid0 = self.bus.read(1)[0]
 
             if message.ext:
                 message.id <<= 8
                 message.id |= eid0
 
-            dlc = self._spi.read(1)[0]
+            dlc = self.bus.read(1)[0]
             message.len = dlc & 0x0F
-            message.data = self._spi.read(msg.len)
+            message.data = self.bus.read(msg.len)
 
             self.chip_select(False)
             self.rx_queue.enqueue(message)
@@ -290,27 +288,27 @@ class mcp2515(canio.canio):
         self.chip_select(True)
 
         load_tx_buffer_command = bytearray(LOAD_TX_BUFFER_COMMAND | (txb << 1))
-        self._spi.write(load_tx_buffer_command)
+        self.bus.write(load_tx_buffer_command)
 
         if msg.ext:
             print('extended message')
             v = msg.id >> 21
-            self._spi.write(bytearray(v))
+            self.bus.write(bytearray(v))
             v  = (msg.id >> 13) & 0xE0
             v |= (msg.id >> 16) & 0x03
             v |= 0x08
-            self._spi.write(bytearray(v))
+            self.bus.write(bytearray(v))
             v  = (msg.id >> 8) & 0xFF
-            self._spi.write(bytearray(v))
+            self.bus.write(bytearray(v))
             v  = msg.id & 0xFF
         else:
             print('standard message')
             v = msg.id >> 3
-            self._spi.write(bytearray(v))
+            self.bus.write(bytearray(v))
             v  = (msg.id << 5) & 0xE0
-            self._spi.write(bytearray(v))
-            self._spi.write(bytearray(0))
-            self._spi.write(bytearray(0))
+            self.bus.write(bytearray(v))
+            self.bus.write(bytearray(0))
+            self.bus.write(bytearray(0))
 
         v = msg.len
 
@@ -318,16 +316,16 @@ class mcp2515(canio.canio):
             print('rtr message')
             v |= 0x40
 
-        self._spi.write(bytearray(v))
+        self.bus.write(bytearray(v))
 
         if not msg.rtr:
-            self._spi.write(bytearray(msg.data))
+            self.bus.write(bytearray(msg.data))
 
         self.chip_select(False)
 
         self.chip_select(True)
         send_command = REQUEST_TO_SEND_COMMAND | (1 << txb)
-        self._spi.write(bytearray(send_command))
+        self.bus.write(bytearray(send_command))
         self.chip_select(False)
 
         print('internal_send_message ends')
@@ -337,7 +335,7 @@ class mcp2515(canio.canio):
         msg = bytearray()
         msg.append(RESET_COMMAND)
         self.chip_select(True)
-        self._spi.write(msg)
+        self.bus.write(msg)
         self.chip_select(False)
         time.sleep_ms(5)
 
@@ -358,13 +356,13 @@ class mcp2515(canio.canio):
         self.txb_is_free = [ True, True, True]
 
         # set CNF registers for bus speed
-        #print(f'oscillator freq = {self._osc}')
+        #print(f'oscillator freq = {self.osc}')
 
-        if self._osc == 16000000:
+        if self.osc == 16000000:
             self.write_register(CNF1_REGISTER, MCP_16MHz_125kBPS_CFG1)
             self.write_register(CNF2_REGISTER, MCP_16MHz_125kBPS_CFG2)
             self.write_register(CNF3_REGISTER, MCP_16MHz_125kBPS_CFG3)
-        elif self._osc == 8000000:
+        elif self.osc == 8000000:
             self.write_register(CNF1_REGISTER, MCP_8MHz_125kBPS_CFG1)
             self.write_register(CNF2_REGISTER, MCP_8MHz_125kBPS_CFG2)
             self.write_register(CNF3_REGISTER, MCP_8MHz_125kBPS_CFG3)
@@ -414,7 +412,7 @@ class mcp2515(canio.canio):
             print('error waiting for mode change')
 
         # install ISR
-        self._int_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.isr)
+        self.int_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.isr)
 
         print('** mcp2515 init complete')
 
@@ -447,7 +445,7 @@ class mcp2515(canio.canio):
         return ret
 
     def get_next_message(self):
-        print('** get_next_message')
+        # print('** get_next_message')
 
         if self.available():
             msg = self.rx_queue.dequeue()

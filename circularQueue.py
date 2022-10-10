@@ -11,6 +11,8 @@ class circularQueue:
         self.size = 0
         self.hwm = 0
         self.dropped = 0
+        self.puts = 0
+        self.gets = 0
 
     def available(self):
         return (self.size > 0)
@@ -25,6 +27,7 @@ class circularQueue:
             self.queue[self.tail] = item
             self.size = self.size + 1
             self.hwm = self.hwm + 1 if self.size > self.hwm else self.hwm
+            self.puts += 1
             return True
 
     def dequeue(self):
@@ -36,6 +39,7 @@ class circularQueue:
             self.queue[self.head] = None
             self.head = (self.head + 1) % self.capacity
             self.size = self.size - 1
+            self.gets += 1
             return tmp
 
     def peek(self):
@@ -56,6 +60,12 @@ class circularQueue:
 
     def is_empty(self):
         return self.size == 0
+
+    def num_puts(self):
+        return self.puts
+
+    def num_gets(self):
+        return self.gets
 
     def display(self):
         index = self.head

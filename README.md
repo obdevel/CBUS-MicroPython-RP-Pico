@@ -10,6 +10,6 @@ to e.g. the SPI bus, LEDs, switch, etc.
 A CBUS module is implemented in module.py, which imports the supporting Python modules and contains
 the boilerplate code.
 
-boot.py is run at startup to autorun the code, if required.
+main.py is run at startup to autorun the code, if desired.
 
 Simply upload all the files to the root directory (/) of the Pico.

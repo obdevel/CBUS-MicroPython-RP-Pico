@@ -202,13 +202,13 @@ class cbusconfig:
         self.node_number = node_number
 
     def find_existing_event(self, nn, en):
-        print(f'find_existing_event: {nn}, {en}')
+        # print(f'find_existing_event: {nn}, {en}')
 
         for i in range(self.num_events):
             offset = i * (self.event_size)
 
             if ((self.events[offset] * 256) + self.events[offset + 1]) == nn and ((self.events[offset + 2] * 256) + self.events[offset + 3]) == en:
-                print(f'found event at index = {i}')
+                # print(f'found event at index = {i}')
                 return i
 
         print('event not found')

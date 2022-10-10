@@ -196,7 +196,7 @@ class cbus:
         processed_msgs = 0
 
         while self.can.available() and processed_msgs < max_msgs:
-            print(f'process: processing received messages, max = {max_msgs}, curr = {processed_msgs}')
+            # print(f'process: processing received messages, max = {max_msgs}, curr = {processed_msgs}')
 
             msg = self.can.get_next_message()
 
@@ -226,9 +226,10 @@ class cbus:
 
             if msg.len > 0:
                 try:
+                    # print(f'looking up opcode = {msg.data[0]:#x}')
                     self.func_tab.get(msg.data[0])(msg)
                 except TypeError:
-                    print('unhandled opcode = 0x{msg.data[0]:#x}')
+                    print(f'unhandled opcode = 0x{msg.data[0]:#x}')
 
             else:
                 if msg.rtr and not self.enumerating:
@@ -242,20 +243,24 @@ class cbus:
             processed_msgs += 1
 
         run_time = time.ticks_ms() - start_time
-        # print(f'end of process, run time = {run_time}')
-        # print()
+
+        if processed_msgs > 0:
+            pass
+            # print(f'end of process, msgs = {processed_msgs}, run time = {run_time}')
+            # print()
+
         return processed_msgs
 
     def handle_accessory_event(self, msg):
 
         node_number, event_number = self.get_node_and_event_numbers_from_message(msg)
-        print(f'handle_accessory_event: {node_number}, {event_number}')
+        # print(f'handle_accessory_event: {node_number}, {event_number}')
 
         if self.event_handler is not None:
             idx = self.config.find_existing_event(node_number, event_number)
 
             if idx > -1:
-                print(f'calling user handler')
+                # print(f'calling user handler')
                 self.event_handler(msg, idx)
 
     def handle_rqnp(self, msg):
