@@ -13,37 +13,21 @@ class canmessage:
         self.rtr = rtr
 
     def __str__(self):
-
-        if (self.rtr):
-            rtr = 'r'
-        else:
-            rtr = ''
-
-        if (self.ext):
-            ext = 'x'
-        else:
-            ext = ''
-
+        rtr = 'r' if self.rtr else ''
+        ext = 'x' if self.ext else ''
         ch = f'[{self.id:x}] ' + f'[{self.len:x}] [ ' + ' '.join('{:02x}'.format(x) for x in self.data) + ' ] ' + rtr + ext
         return ch
 
     def make_header(self, priority=0x0b):
-        self.id |= (priority << 7)
+        if (self.id - self.get_canid() == 0):
+            self.id |= (priority << 7)
 
     def get_canid(self):
         return self.id & 0x7f
 
     def print(self, hex=True):
-
-        if (self.rtr):
-            rtr = 'r'
-        else:
-            rtr = ''
-
-        if (self.ext):
-            ext = 'x'
-        else:
-            ext = ''
+        rtr = 'r' if self.rtr else ''
+        ext = 'x' if self.ext else ''
 
         if hex:
             print(f'[{self.id:x}] [{self.len:x}] ' + '[ ' + ' '.join('{:02x}'.format(x) for x in self.data) + ' ] ' + rtr + ext, end = '')

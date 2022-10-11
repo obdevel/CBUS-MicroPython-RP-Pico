@@ -74,6 +74,7 @@ class mymodule(module_base.module_base):
         self.msg2 = canmessage.canmessage(self.cbus.config.canid, 5, [0xe9, 1, 0, 0, 24, 0, 0, 0])
         self.msg3 = canmessage.canmessage(4, 5, [0x91, 0, 22, 0, 23, 0, 0, 0])
         self.msg4 = canmessage.canmessage(555, 0, [], True, False)
+        self.msgx = canmessage.canmessage(444, 33, [], False, True)
 
         self.ftab = {
             1: (self.f1, 1, 2, 3),
