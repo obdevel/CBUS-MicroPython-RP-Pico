@@ -9,7 +9,6 @@ PULSE_DURATION = 10
 class cbusled():
 
     def __init__(self, pin):
-        # print(f'** LED constructor, pin = {pin}')
         self.pin = machine.Pin(pin, machine.Pin.OUT)
         self.state = 0
         self.blinking = 0

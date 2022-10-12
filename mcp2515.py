@@ -56,7 +56,7 @@ class mcp2515(canio.canio):
 
     """ a canio derived class for use with an MCP2515 CAN controller device """
 
-    def __init__(self, osc=16000000, cs_pin=5, int_pin=1, spi=None, qsize=64):
+    def __init__(self, osc=16000000, cs_pin=5, int_pin=1, bus=None, qsize=64):
         print('** mcp2515 constructor')
 
         # call superclass constructor
@@ -76,7 +76,7 @@ class mcp2515(canio.canio):
         self.int_pin = machine.Pin(int_pin, machine.Pin.IN, machine.Pin.PULL_UP)
 
         # init SPI bus
-        if spi is None:
+        if bus is None:
             self.bus = machine.SPI(0,
                 baudrate=10_000_000,
                 polarity=0,
@@ -88,7 +88,7 @@ class mcp2515(canio.canio):
                 miso=machine.Pin(4)
             )
         else:
-            self.bus = spi
+            self.bus = bus
 
     def isr(self, source=None):
         # CAN interrupt handler
@@ -99,29 +99,29 @@ class mcp2515(canio.canio):
         self.chip_select(True)
         ret = self.read_register(CANSTAT_REGISTER)
         print(f'ret = {ret}')
-        int_type = int(ret[0]) & 0x0E
+        intr_type = int(ret[0]) & 0x0E
 
-        print(f'state = {int_type}')
+        print(f'state = {intr_type}')
 
-        while (int_type != 0):
+        while (intr_type != 0):
             handled = True
 
-            if int_type == (1 << 1):                               # error interrupt
+            if intr_type == (1 << 1):                               # error interrupt
                 self.modify_register(CANINTF_REGISTER, 0x20, 0)
-            elif int_type == (2 << 1):                             # wakeup interrupt
+            elif intr_type == (2 << 1):                             # wakeup interrupt
                 self.modify_register(CANINTF_REGISTER, 0x40, 0)
-            elif int_type == (3 << 1):                             # TXB0 interrupt
+            elif intr_type == (3 << 1):                             # TXB0 interrupt
                 self.handle_txb_interrupt(0)
-            elif int_type == (4 << 1):                             # TXB1 interrupt
+            elif intr_type == (4 << 1):                             # TXB1 interrupt
                 self.handle_txb_interrupt(1)
-            elif int_type == (5 << 1):                             # TXB2 interrupt
+            elif intr_type == (5 << 1):                             # TXB2 interrupt
                 self.handle_txb_interrupt(2)
-            elif int_type == (6 << 1) or int_type == (7 << 1):     # RXB interrupts
+            elif intr_type == (6 << 1) or intr_type == (7 << 1):    # RXB interrupts
                 self.handle_rxb_interrupt()
 
             ret = self.read_register(CANSTAT_REGISTER)
-            int_type = int(ret[0]) & 0x0E
-            print(f'interrupt = {int_type}')
+            intr_type = int(ret[0]) & 0x0E
+            print(f'interrupt = {intr_type}')
 
         self.chip_select(False)
         print('** end of isr')

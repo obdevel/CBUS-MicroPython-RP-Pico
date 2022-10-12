@@ -5,14 +5,15 @@
 
 import micropython, machine, time
 import uasyncio as asyncio
-import module_base, mcp2515, cbus, cbusdefs, cbusconfig, canmessage, cbuslongmessage
+import cbusmodule, cbus, mcp2515, cbusdefs, cbusconfig, canmessage, cbuslongmessage
 
-class mymodule(module_base.module_base):
+class mymodule(cbusmodule.cbusmodule):
 
     def __init__(self):
+        print('** module constructor')
         super().__init__()
 
-        self.msg_count = 0
+        self.received_message_counter = 0
         self.led = machine.Pin(25, machine.Pin.OUT)
 
     def f1(self, a, b, c):
@@ -25,12 +26,12 @@ class mymodule(module_base.module_base):
         print(f'f3: {a}, {b}, {c}')
 
     def event_handler(self, msg, idx):
-        self.msg_count += 1
-        print(f'-- user event handler: index = {idx}, count = {self.msg_count}')
+        self.received_message_counter += 1
+        print(f'-- user event handler: index = {idx}, count = {self.received_message_counter}')
         print(msg)
         ev1 = self.cbus.config.read_event_ev(idx, 1)
         print(f'ev1 = {ev1}')
-        fn = self.ftab.get(ev1)
+        fn = self.function_tab.get(ev1)
         # print(f'f = {fn}')
         fn[0](fn[1], fn[2], fn[3])
         print()
@@ -43,12 +44,12 @@ class mymodule(module_base.module_base):
 
         self.cbus = cbus.cbus(mcp2515.mcp2515(), cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES))
 
-        self.MODULE_ID = 103
+        self.module_id = 103
         self.module_name = 'PYCO   '
         self.module_params = [20,
                          cbusdefs.MANU_MERG,
                          0,
-                         self.MODULE_ID,
+                         self.module_id,
                          self.cbus.config.num_events,
                          self.cbus.config.num_evs,
                          self.cbus.config.num_nvs,
@@ -66,17 +67,18 @@ class mymodule(module_base.module_base):
         self.cbus.set_frame_handler(self.frame_handler)
 
         self.lm = cbuslongmessage.cbuslongmessage(self.cbus, 512, 4)
-        self.lm.subscribe([1, 2, 3, 4, 5], self.long_message_handler)
+        self.lm_ids = [1, 2, 3, 4, 5]
+        self.lm.subscribe(self.lm_ids, self.long_message_handler)
 
         self.cbus.begin()
 
         self.msg1 = canmessage.canmessage(99, 5, [0x90, 0, 22, 0, 25])
-        self.msg2 = canmessage.canmessage(self.cbus.config.canid, 5, [0xe9, 1, 0, 0, 24, 0, 0, 0])
+        self.msg2 = canmessage.canmessage(99, 5, [0xe9, 1, 0, 0, 24, 0, 0, 0])
         self.msg3 = canmessage.canmessage(4, 5, [0x91, 0, 22, 0, 23, 0, 0, 0])
         self.msg4 = canmessage.canmessage(555, 0, [], True, False)
         self.msgx = canmessage.canmessage(444, 33, [], False, True)
 
-        self.ftab = {
+        self.function_tab = {
             1: (self.f1, 1, 2, 3),
             2: (self.f2, 2, 4, 6),
             5: (self.f3, 5, 10, 15)
@@ -85,16 +87,27 @@ class mymodule(module_base.module_base):
         print()
         print(f'** initialise complete, time = {time.ticks_ms() - start_time} ms')
         print()
-        print(f'module: name = {self.module_name}|, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
+        print(f'module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
         print(f'free memory = {self.cbus.config.free_memory()} bytes')
         print()
 
-    async def run_cbus_loop(self):
+    async def cbus_coro(self):
+        print('** cbus_coro start')
+
         while True:
             c = self.cbus.process()
             await asyncio.sleep(0)
 
-    async def blink_led(self):
+    async def long_message_coro(self):
+        print('** long_message_coro start')
+
+        while True:
+            self.lm.process()
+            await asyncio.sleep_ms(0)
+
+    async def blink_led_coro(self):
+        print('** blink_led_coro start')
+
         while True:
             self.led.value(1)
             await asyncio.sleep_ms(20)
@@ -103,14 +116,14 @@ class mymodule(module_base.module_base):
 
     async def run(self):
         print('*** asyncio scheduler is now running the module main loop and co-routines')
-        print()
 
-        asyncio.create_task(self.run_cbus_loop())
-        asyncio.create_task(self.blink_led())
+        asyncio.create_task(self.cbus_coro())
+        asyncio.create_task(self.long_message_coro())
+        asyncio.create_task(self.blink_led_coro())
 
         while True:
             await asyncio.sleep(5)
-            mod.cbus.can.rx_queue.enqueue(self.msg3)
+            self.cbus.can.rx_queue.enqueue(self.msg3)
 
 
 mod = mymodule()

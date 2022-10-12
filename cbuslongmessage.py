@@ -4,33 +4,40 @@
 import time
 import cbus, cbusdefs, canmessage
 
-RECEIVE_TIMEOUT = 5000
-TRANSMIT_DELAY = 50
+RECEIVE_TIMEOUT = 2000
+TRANSMIT_DELAY = 20
 
-class receive_context:
+class lm_context:
 
     def __init__(self, buffer_size=64):
+        print('** lm_context constructor')
+
         self.in_use = False
         self.streamid = 0
-        self.canid = 0
         self.buffer_size = buffer_size
         self.buffer = bytearray(buffer_size)
         self.index = 0
+
+class receive_context(lm_context):
+
+    def __init__(self, buffer_size=64):
+        print('** receive_context constructor')
+        super().__init__(buffer_size)
+
+        self.canid = 0
         self.last_fragment_received = 0
         self.message_size = 0
         self.crc = 0
         self.received = 0
         self.expected_next_receive_sequence_num = 0
 
-class transmit_context:
+class transmit_context(lm_context):
 
     def __init__(self, buffer_size=64):
-        self.in_use = False
-        self.streamid = 0
-        self.buffer_size = buffer_size
+        print('** transmit_context constructor')
+        super().__init__(buffer_size)
+
         self.priority = 0
-        self.buffer = bytearray(buffer_size)
-        self.index = 0
         self.sequence_num = 0
         self.crc = 0
         self.flags = 0
@@ -43,14 +50,14 @@ class cbuslongmessage:
         print('** long message constructor')
 
         if not isinstance(bus, cbus.cbus):
-            raise TypeError('cbus is not an instance of class cbus')
+            raise TypeError('bus arg is not an instance of class cbus')
 
-        self.cbus = bus
+        self.bus = bus
         self.buffer_size = buffer_size
         self.num_contexts = num_contexts
         self.using_crc = False
         self.subscribed_ids = None
-        self.cbus.set_long_message_handler(self)
+        self.bus.set_long_message_handler(self)
         self.user_handler = None
         self.buffer_size = buffer_size
         self.num_contexts = num_contexts
@@ -100,7 +107,7 @@ class cbuslongmessage:
         else:
             self.transmit_contexts[j].crc = 0
 
-        msg = canmessage.canmessage(self.cbus.config.canid, 8)
+        msg = canmessage.canmessage(self.bus.config.canid, 8)
         msg.data[0] = cbusdefs.OPC_DTXC
         msg.data[1] = streamid
         msg.data[2] = 0
@@ -112,10 +119,10 @@ class cbuslongmessage:
 
         # send fragment
         self.transmit_contexts[j].sequence_num = 1
-        print('send fragment header')
+        self.bus.send_message(msg)
+        print('sent long message header packet')
 
     def process(self):
-
         for j in range(self.num_contexts):
             if self.receive_contexts[j].in_use and time.ticks_ms() - self.receive_contexts[j].last_fragment_received > RECEIVE_TIMEOUT:
                 print(f'receive context {j} timed out')
@@ -128,7 +135,7 @@ class cbuslongmessage:
 
         self.current_context = (self.current_context + 1) % self.num_contexts
 
-    def handle_Long_message_fragment(self, msg):
+    def handle_long_message_fragment(self, msg):
         print('handling long message fragment')
 
         if msg.data[0] != cbusdefs.OPC_DTXC:
@@ -138,14 +145,7 @@ class cbuslongmessage:
         if msg.data[2] == 0:
             print('handling header packet')
 
-            matched = False
-
-            for id in self.subscribed_ids:
-                if id == msg.data[1]:
-                    matched = True
-                    break
-
-            if not matched:
+            if not msg.data[1] in self.subscribed_ids:
                 print(f'not subscribed to id {msg.data[1]}')
                 return
 
@@ -176,7 +176,7 @@ class cbuslongmessage:
             matched = False;
 
             for i in range(self.num_contexts):
-                if self.receive_contexts[i].in_use and self.receive_contexts[i].streamid == msg.data[1] and self.receive_contexts[i].canid == self.cbus.message_canid(msg):
+                if self.receive_contexts[i].in_use and self.receive_contexts[i].streamid == msg.data[1] and self.receive_contexts[i].canid == self.bus.message_canid(msg):
                     matched = True
                     break
 

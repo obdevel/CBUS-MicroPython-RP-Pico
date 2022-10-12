@@ -6,7 +6,6 @@ import machine, time
 class cbusswitch():
 
     def __init__(self, pin):
-        # print(f'** switch constructor, pin = {pin}')
         self.pin = machine.Pin(pin, machine.Pin.IN, machine.Pin.PULL_UP)
         self.state = self.pin.value()
         self.previous_state = self.state
