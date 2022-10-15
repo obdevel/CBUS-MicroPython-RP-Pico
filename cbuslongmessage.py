@@ -4,39 +4,46 @@
 import time
 import cbus, cbusdefs, canmessage
 
-RECEIVE_TIMEOUT = 2000
-TRANSMIT_DELAY = 20
+RECEIVE_TIMEOUT = 1000
+TRANSMIT_DELAY = 10
+
+CBUS_LONG_MESSAGE_INCOMPLETE = 0
+CBUS_LONG_message_receive_complete = 1
+CBUS_LONG_MESSAGE_SEQUENCE_ERROR = 2
+CBUS_LONG_MESSAGE_TIMEOUT_ERROR = 3
+CBUS_LONG_MESSAGE_CRC_ERROR = 4
+CBUS_LONG_MESSAGE_TRUNCATED = 5
+
 
 class lm_context:
 
-    def __init__(self, buffer_size=64):
+    def __init__(self):
         print('** lm_context constructor')
 
         self.in_use = False
         self.streamid = 0
-        self.buffer_size = buffer_size
-        self.buffer = bytearray(buffer_size)
-        self.index = 0
+        self.buffer = bytearray()
+        self.message_size = 0
 
 class receive_context(lm_context):
 
-    def __init__(self, buffer_size=64):
+    def __init__(self):
         print('** receive_context constructor')
-        super().__init__(buffer_size)
+        super().__init__()
 
         self.canid = 0
-        self.last_fragment_received = 0
-        self.message_size = 0
+        self.last_fragment_received_at = 0
         self.crc = 0
         self.received = 0
         self.expected_next_receive_sequence_num = 0
 
 class transmit_context(lm_context):
 
-    def __init__(self, buffer_size=64):
+    def __init__(self):
         print('** transmit_context constructor')
-        super().__init__(buffer_size)
+        super().__init__()
 
+        self.index = 0
         self.priority = 0
         self.sequence_num = 0
         self.crc = 0
@@ -45,29 +52,21 @@ class transmit_context(lm_context):
 
 class cbuslongmessage:
 
-    def __init__(self, bus, buffer_size=64, num_contexts=4):
+    def __init__(self, bus):
 
         print('** long message constructor')
 
         if not isinstance(bus, cbus.cbus):
-            raise TypeError('bus arg is not an instance of class cbus')
+            raise TypeError('** error: bus arg is not an instance of class cbus')
 
         self.bus = bus
-        self.buffer_size = buffer_size
-        self.num_contexts = num_contexts
         self.using_crc = False
         self.subscribed_ids = None
         self.bus.set_long_message_handler(self)
         self.user_handler = None
-        self.buffer_size = buffer_size
-        self.num_contexts = num_contexts
         self.current_context = 0
-        self.receive_contexts = [receive_context(buffer_size)] * num_contexts
-        self.transmit_contexts = [transmit_context(buffer_size)] * num_contexts
-
-        for i in range(num_contexts):
-            self.receive_contexts[i].in_use = False
-            self.transmit_contexts[i].in_use = False
+        self.receive_contexts = [receive_context()]
+        self.transmit_contexts = [transmit_context()]
 
     def subscribe(self, ids, handler):
         print(f'** subscribe: {ids}')
@@ -75,154 +74,188 @@ class cbuslongmessage:
         self.user_handler = handler
 
     def send_long_message(self, message, streamid, priority=0x0b):
-        print(f'sending long message = {message}')
+        # print(f'sending long message = {message}')
 
-        for j in range(self.num_contexts):
-            if self.transmit_contexts[j].in_use and self.transmit_contexts[j].streamid == streamid:
-                print(f'already sending streamid = {streamid} in context {i}')
-                return False
-
-        matched = False
-
-        for j in range(self.num_contexts):
-            if not self.transmit_contexts[j].in_use:
-                matched = True
-                break
-
-        if not matched:
-            print('unable to find a free transmit context')
+        if len(message) >= 2**16:
+            print('** error: message is too long')
             return False
 
-        print(f'using transmit context = {j}')
+        for j in range(len(self.transmit_contexts)):
+            if self.transmit_contexts[j].in_use and self.transmit_contexts[j].streamid == streamid:
+                print(f'** error: a message is already in progress with streamid = {streamid} in context {j}')
+                return False
+
+        found_free_context = False
+
+        for j in range(len(self.transmit_contexts)):
+            if not self.transmit_contexts[j].in_use:
+                found_free_context = True
+                break
+
+        if not found_free_context:
+            self.transmit_contexts.append(transmit_context())
+            j += 1
+
         self.transmit_contexts[j].in_use = True
         self.transmit_contexts[j].streamid = streamid
         self.transmit_contexts[j].buffer = bytearray(message)
         self.transmit_contexts[j].message_size = len(message)
         self.transmit_contexts[j].priority = priority
+        self.transmit_contexts[j].sequence_num = 0
         self.transmit_contexts[j].index = 0
         self.transmit_contexts[j].flags = 0
-
-        if self.using_crc:
-            self.transmit_contexts[j].crc = crc_16(self.transmit_contexts[j].message)
-        else:
-            self.transmit_contexts[j].crc = 0
+        self.transmit_contexts[j].crc = self.crc16(ctx.buffer) if self.using_crc else 0
 
         msg = canmessage.canmessage(self.bus.config.canid, 8)
+
         msg.data[0] = cbusdefs.OPC_DTXC
         msg.data[1] = streamid
-        msg.data[2] = 0
+        msg.data[2] = self.transmit_contexts[j].sequence_num
         msg.data[3] = int(self.transmit_contexts[j].message_size / 256)
         msg.data[4] = self.transmit_contexts[j].message_size & 0xff
         msg.data[5] = int(self.transmit_contexts[j].crc / 256)
         msg.data[6] = self.transmit_contexts[j].crc & 0xff
         msg.data[7] = self.transmit_contexts[j].flags
 
-        # send fragment
+        self.bus.can.send_message(msg)
+        msg.print(False)
+
         self.transmit_contexts[j].sequence_num = 1
-        self.bus.send_message(msg)
-        print('sent long message header packet')
+        self.transmit_contexts[j].last_fragement_sent = time.ticks_ms
+        # print('sent long message header packet')
 
     def process(self):
-        for j in range(self.num_contexts):
-            if self.receive_contexts[j].in_use and time.ticks_ms() - self.receive_contexts[j].last_fragment_received > RECEIVE_TIMEOUT:
-                print(f'receive context {j} timed out')
-                # call user handler with error code
+
+        for j in range(len(self.receive_contexts)):
+            if self.receive_contexts[j].in_use and time.ticks_ms() - self.receive_contexts[j].last_fragment_received_at > RECEIVE_TIMEOUT:
+                print(f'** error: receive context {j} timed out')
+                self.user_handler(self.receive_contexts[j].buffer, self.receive_contexts[j].streamid, CBUS_LONG_MESSAGE_TIMEOUT_ERROR)
                 self.receive_contexts[j].in_use = False
 
         if self.transmit_contexts[self.current_context].in_use and time.ticks_ms() - self.transmit_contexts[self.current_context].last_fragment_sent > TRANSMIT_DELAY:
-            print(f'sending next fragment in send context {self.current_context}')
-            # send the fragment
+            # print(f'sending next fragment in send context = {self.current_context}')
 
-        self.current_context = (self.current_context + 1) % self.num_contexts
+            msg = canmessage.canmessage(self.bus.config.canid, 8)
+            msg.data[0] = cbusdefs.OPC_DTXC
+            msg.data[1] = self.transmit_contexts[j].streamid
+            msg.data[2] = self.transmit_contexts[j].sequence_num
+
+            for c in range(5):
+                if self.transmit_contexts[self.current_context].index >= self.transmit_contexts[self.current_context].message_size:
+                    # print('send: end of data')
+                    self.transmit_contexts[self.current_context].in_use = False
+                    break
+
+                msg.data[c+3] = self.transmit_contexts[self.current_context].buffer[self.transmit_contexts[self.current_context].index]
+                # print(f'added char {chr(msg.data[c+3])}')
+                self.transmit_contexts[self.current_context].index += 1
+
+            self.bus.can.send_message(msg)
+            # msg.print(False)
+            self.transmit_contexts[self.current_context].sequence_num += 1
+            self.transmit_contexts[self.current_context].last_fragement_sent = time.ticks_ms
+
+        self.current_context = (self.current_context + 1) % len(self.transmit_contexts)
 
     def handle_long_message_fragment(self, msg):
-        print('handling long message fragment')
+        # print('handling long message fragment')
 
         if msg.data[0] != cbusdefs.OPC_DTXC:
-            print(f'wrong opcode {msg.data[0]:x')
+            print(f'** error: wrong opcode {msg.data[0]:x')
+            return
+
+        if not msg.data[1] in self.subscribed_ids:
+            print(f'** note: not subscribed to stream id = {msg.data[1]}')
             return
 
         if msg.data[2] == 0:
-            print('handling header packet')
+            # print(f'handling header packet, streamid = {msg.data[1]}, size = {msg.data[4]}')
 
-            if not msg.data[1] in self.subscribed_ids:
-                print(f'not subscribed to id {msg.data[1]}')
-                return
+            found_free_context = False
 
-            matched = False
-
-            for j in range(self.num_contexts):
+            for j in range(len(self.receive_contexts)):
                 if not self.receive_contexts[j].in_use:
-                    print(f'using context = {j}')
-                    self.receive_contexts[j].in_use = True
-                    self.receive_contexts[j].streamid = msg.data[1]
-                    self.receive_contexts[j].message_size = (msg.data[3] * 256) + msg.data[4]
-                    self.receive_contexts[j].crc = (msg.data[5] * 256) + msg.data[6]
-                    self.receive_contexts[j].buffer = bytearray(self.receive_contexts[j].message_size)
-                    self.receive_contexts[j].index = 0
-                    self.receive_contexts[j].expected_next_receive_sequence_num = 1
-                    self.receive_contexts[j].canid = msg.get_canid()
-                    self.receive_contexts[j].received = 0
-                    self.receive_contexts[j].last_fragment_received = time.ticks_ms()
-                    matched = True
+                    found_free_context = True
                     break
+            
+            if not found_free_context:
+                # print('appending new receive context')
+                self.transmit_contexts.append(receive_context())
+                j += 1
 
-            if not matched:
-                print('unable to find free receive context')
-                return
+            # print(f'using receive context = {j}')
+            self.receive_contexts[j].in_use = True
+            self.receive_contexts[j].streamid = msg.data[1]
+            self.receive_contexts[j].message_size = (msg.data[3] * 256) + msg.data[4]
+            self.receive_contexts[j].crc = (msg.data[5] * 256) + msg.data[6]
+            self.receive_contexts[j].buffer = bytearray()
+            self.receive_contexts[j].expected_next_receive_sequence_num = 1
+            self.receive_contexts[j].canid = msg.get_canid()
+            self.receive_contexts[j].received = 0
+            self.receive_contexts[j].last_fragment_received_at = time.ticks_ms()
+
         else:
-            print('handling continuation packet')
 
-            matched = False;
-
-            for i in range(self.num_contexts):
-                if self.receive_contexts[i].in_use and self.receive_contexts[i].streamid == msg.data[1] and self.receive_contexts[i].canid == self.bus.message_canid(msg):
-                    matched = True
+            found_matching_context = False
+            message_receive_complete = False
+            
+            for i in range(len(self.receive_contexts)):
+                if self.receive_contexts[i].in_use and self.receive_contexts[i].streamid == msg.data[1] and self.receive_contexts[i].canid == msg.get_canid():
+                    found_matching_context = True
                     break
 
-            if not matched:
-                print('unable to find matching receive context')
+            if not found_matching_context:
+                print('** error: unable to find matching receive context for continuation packet')
                 return
 
-            print(f'using context = {i}')
+            # print(f'using receive context = {i}')
+            # print(f'handling continuation packet, streamid = {self.receive_contexts[i].streamid}')
 
             if msg.data[2] != self.receive_contexts[i].expected_next_receive_sequence_num:
-                print(f'wrong sequence number, expected {self.receive_contexts[i].expected_next_receive_sequence_num}, got {msg.data[2]}')
-                # call user handler with error code
+                print(f'** error: wrong sequence number, expected {self.receive_contexts[i].expected_next_receive_sequence_num}, got {msg.data[2]}')
+                self.user_handler(self.receive_contexts[i].buffer, self.receive_contexts[i].streamid, CBUS_LONG_MESSAGE_SEQUENCE_ERROR)
+                
                 self.receive_contexts[i].in_use = False
                 return
 
-            for j in range(5):
-                self.receive_contexts[i].buffer[self.receive_contexts[i].index] = msg.data[j + 3]
-                self.receive_contexts[i].index += 1
+            for c in range(5):
+                # print(f'processing next char = {chr(msg.data[c+3])}, len = {len(self.receive_contexts[i].buffer)}')
+                self.receive_contexts[i].buffer.append(msg.data[c+3])
                 self.receive_contexts[i].received += 1
-                self.receive_contexts[j].last_fragment_received = time.ticks_ms()
+                self.receive_contexts[i].last_fragment_received_at = time.ticks_ms()
+                self.receive_contexts[i].expected_next_receive_sequence_num = msg.data[2] + 1
 
-                if self.receive_contexts[j].received >= self.receive_contexts[j].message_size:
-                    # call user handler with success code
+                if len(self.receive_contexts[i].buffer) >= self.receive_contexts[i].message_size:
+                    message_receive_complete = True
                     break
 
-            if self.receive_contexts[j].received >= self.receive_contexts[j].message_size:
-                # call user handler with success code
-                pass
+            if len(self.receive_contexts[i].buffer) >= self.receive_contexts[i].message_size:
+                message_receive_complete = True
 
-            self.receive_contexts[j].expected_next_receive_sequence_num = (self.receive_contexts[j].expected_next_receive_sequence_num + 1) % 256
+            self.receive_contexts[i].expected_next_receive_sequence_num = msg.data[2] + 1
+
+            if message_receive_complete:
+                self.receive_contexts[i].in_use = False
+                self.user_handler(self.receive_contexts[i].buffer, self.receive_contexts[i].streamid, CBUS_LONG_message_receive_complete)
 
     def use_crc(self, crc):
         self.using_crc = crc
 
-def crc16(data: bytes, poly=0x8408):
-    data = bytearray(data)
-    crc = 0xFFFF
-    for b in data:
-        cur_byte = 0xFF & b
-        for _ in range(0, 8):
-            if (crc & 0x0001) ^ (cur_byte & 0x0001):
-                crc = (crc >> 1) ^ poly
-            else:
-                crc >>= 1
-            cur_byte >>= 1
-    crc = (~crc & 0xFFFF)
-    crc = (crc << 8) | ((crc >> 8) & 0xFF)
-    
-    return crc & 0xFFFF
+    def crc16(self, data: bytes, poly=0x8408):
+        data = bytearray(data)
+        crc = 0xffff
+
+        for b in data:
+            cur_byte = 0xff & b
+            for _ in range(0, 8):
+                if (crc & 0x0001) ^ (cur_byte & 0x0001):
+                    crc = (crc >> 1) ^ poly
+                else:
+                    crc >>= 1
+                cur_byte >>= 1
+
+        crc = (~crc & 0xffff)
+        crc = (crc << 8) | ((crc >> 8) & 0xff)
+
+        return crc & 0xffff
+

@@ -13,34 +13,11 @@ class mymodule(cbusmodule.cbusmodule):
         print('** module constructor')
         super().__init__()
 
-        self.received_message_counter = 0
-        self.led = machine.Pin(25, machine.Pin.OUT)
-
-    def f1(self, a, b, c):
-        print(f'f1: {a}, {b}, {c}')
-
-    def f2(self, a, b, c):
-        print(f'f2: {a}, {b}, {c}')
-
-    def f3(self, a, b, c):
-        print(f'f3: {a}, {b}, {c}')
-
-    def event_handler(self, msg, idx):
-        self.received_message_counter += 1
-        print(f'-- user event handler: index = {idx}, count = {self.received_message_counter}')
-        print(msg)
-        ev1 = self.cbus.config.read_event_ev(idx, 1)
-        print(f'ev1 = {ev1}')
-        fn = self.function_tab.get(ev1)
-        # print(f'f = {fn}')
-        fn[0](fn[1], fn[2], fn[3])
-        print()
-
     def initialise(self):
-        print('** module initialise')
+        # *** bare minimum module init
 
+        print('** module initialise')
         start_time = time.ticks_ms()
-        micropython.alloc_emergency_exception_buf(500)
 
         self.cbus = cbus.cbus(mcp2515.mcp2515(), cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES))
 
@@ -59,30 +36,31 @@ class mymodule(cbusmodule.cbusmodule):
                          cbusdefs.PB_CAN,
                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-        self.cbus.set_switch(22)
         self.cbus.set_leds(21, 20)
+        self.cbus.set_switch(22)
         self.cbus.set_name(self.module_name)
         self.cbus.set_params(self.module_params)
         self.cbus.set_event_handler(self.event_handler)
         self.cbus.set_frame_handler(self.frame_handler)
 
-        self.lm = cbuslongmessage.cbuslongmessage(self.cbus, 512, 4)
+        self.cbus.begin()
+
+        # *** end of bare minimum init
+
+        self.lm = cbuslongmessage.cbuslongmessage(self.cbus)
         self.lm_ids = [1, 2, 3, 4, 5]
         self.lm.subscribe(self.lm_ids, self.long_message_handler)
-
-        self.cbus.begin()
 
         self.msg1 = canmessage.canmessage(99, 5, [0x90, 0, 22, 0, 25])
         self.msg2 = canmessage.canmessage(99, 5, [0xe9, 1, 0, 0, 24, 0, 0, 0])
         self.msg3 = canmessage.canmessage(4, 5, [0x91, 0, 22, 0, 23, 0, 0, 0])
         self.msg4 = canmessage.canmessage(555, 0, [], True, False)
         self.msgx = canmessage.canmessage(444, 33, [], False, True)
-
-        self.function_tab = {
-            1: (self.f1, 1, 2, 3),
-            2: (self.f2, 2, 4, 6),
-            5: (self.f3, 5, 10, 15)
-        }
+        
+        self.lm0 = canmessage.canmessage(333, 8, [0xe9, 2, 0, 0, 11, 0, 0, 0])
+        self.lm1 = canmessage.canmessage(333, 8, [0xe9, 2, 1, 72, 101, 108, 108, 111])
+        self.lm2 = canmessage.canmessage(333, 8, [0xe9, 2, 2, 32, 119, 111, 114, 108])
+        self.lm3 = canmessage.canmessage(333, 8, [0xe9, 2, 3, 100, 0, 0, 0, 0])
 
         print()
         print(f'** initialise complete, time = {time.ticks_ms() - start_time} ms')
@@ -107,6 +85,7 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def blink_led_coro(self):
         print('** blink_led_coro start')
+        self.led = machine.Pin(25, machine.Pin.OUT)
 
         while True:
             self.led.value(1)
@@ -115,15 +94,25 @@ class mymodule(cbusmodule.cbusmodule):
             await asyncio.sleep_ms(980)
 
     async def run(self):
-        print('*** asyncio scheduler is now running the module main loop and co-routines')
-
         asyncio.create_task(self.cbus_coro())
         asyncio.create_task(self.long_message_coro())
         asyncio.create_task(self.blink_led_coro())
 
+        print('*** asyncio is now running the module main loop and co-routines')
+
+        send_lm = True
+
         while True:
             await asyncio.sleep(5)
-            self.cbus.can.rx_queue.enqueue(self.msg3)
+            
+            if send_lm:
+                self.cbus.can.rx_queue.enqueue(self.lm0)
+                self.cbus.can.rx_queue.enqueue(self.lm1)
+                self.cbus.can.rx_queue.enqueue(self.lm2)
+                self.cbus.can.rx_queue.enqueue(self.lm3)
+                send_lm = False
+            else:
+                self.cbus.can.rx_queue.enqueue(self.msg3)
 
 
 mod = mymodule()

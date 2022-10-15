@@ -27,10 +27,3 @@ class cbusmodule():
     def long_message_handler(self, message, streamid, status):
         print(f'-- user long message handler: status = {status}, streamid = {streamid}, msg = |{message}|')
         print()
-
-    def flim(self):
-        self.cbus.config.set_mode(1)
-        self.cbus.config.set_canid(5)
-        self.cbus.config.set_node_number(333)
-        self.cbus.config.reboot()
-

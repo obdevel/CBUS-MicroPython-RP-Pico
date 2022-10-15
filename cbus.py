@@ -23,10 +23,10 @@ class cbus:
         print('** cbus constructor')
 
         if not isinstance(can, canio.canio):
-            raise TypeError('can is not an instance of class canio')
+            raise TypeError('** error: can is not an instance of class canio')
 
         if not isinstance(config, cbusconfig.cbusconfig):
-            raise TypeError('config is not an instance of class cbusconfig')
+            raise TypeError('** error: config is not an instance of class cbusconfig')
 
         self.can = can
         self.config = config
