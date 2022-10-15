@@ -8,7 +8,7 @@ RECEIVE_TIMEOUT = 1000
 TRANSMIT_DELAY = 10
 
 CBUS_LONG_MESSAGE_INCOMPLETE = 0
-CBUS_LONG_message_receive_complete = 1
+CBUS_LONG_MESSAGE_COMPLETE = 1
 CBUS_LONG_MESSAGE_SEQUENCE_ERROR = 2
 CBUS_LONG_MESSAGE_TIMEOUT_ERROR = 3
 CBUS_LONG_MESSAGE_CRC_ERROR = 4
@@ -236,7 +236,7 @@ class cbuslongmessage:
 
             if message_receive_complete:
                 self.receive_contexts[i].in_use = False
-                self.user_handler(self.receive_contexts[i].buffer, self.receive_contexts[i].streamid, CBUS_LONG_message_receive_complete)
+                self.user_handler(self.receive_contexts[i].buffer, self.receive_contexts[i].streamid, CBUS_LONG_MESSAGE_COMPLETE)
 
     def use_crc(self, crc):
         self.using_crc = crc
