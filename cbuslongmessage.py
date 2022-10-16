@@ -46,7 +46,7 @@ class transmit_context(lm_context):
         self.index = 0
         self.priority = 0
         self.sequence_num = 0
-        self.crc = 0
+        self.using_crc = False
         self.flags = 0
         self.last_fragment_sent = 0
 
@@ -150,8 +150,8 @@ class cbuslongmessage:
                 # print(f'added char {chr(msg.data[c+3])}')
                 self.transmit_contexts[self.current_context].index += 1
 
+            msg.print(False)
             self.bus.can.send_message(msg)
-            # msg.print(False)
             self.transmit_contexts[self.current_context].sequence_num += 1
             self.transmit_contexts[self.current_context].last_fragement_sent = time.ticks_ms
 
@@ -214,7 +214,6 @@ class cbuslongmessage:
             if msg.data[2] != self.receive_contexts[i].expected_next_receive_sequence_num:
                 print(f'** error: wrong sequence number, expected {self.receive_contexts[i].expected_next_receive_sequence_num}, got {msg.data[2]}')
                 self.user_handler(self.receive_contexts[i].buffer, self.receive_contexts[i].streamid, CBUS_LONG_MESSAGE_SEQUENCE_ERROR)
-                
                 self.receive_contexts[i].in_use = False
                 return
 

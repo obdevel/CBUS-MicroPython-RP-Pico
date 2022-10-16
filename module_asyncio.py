@@ -94,11 +94,14 @@ class mymodule(cbusmodule.cbusmodule):
             await asyncio.sleep_ms(980)
 
     async def run(self):
+        print('** run start')
+
         asyncio.create_task(self.cbus_coro())
         asyncio.create_task(self.long_message_coro())
         asyncio.create_task(self.blink_led_coro())
 
-        print('*** asyncio is now running the module main loop and co-routines')
+
+        print('** asyncio is now running the module main loop and co-routines')
 
         send_lm = True
 

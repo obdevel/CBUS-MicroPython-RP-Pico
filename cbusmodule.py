@@ -25,5 +25,5 @@ class cbusmodule():
         print(msg)
 
     def long_message_handler(self, message, streamid, status):
-        print(f'-- user long message handler: status = {status}, streamid = {streamid}, msg = |{message}|')
+        print(f'-- user long message handler: status = {status}, streamid = {streamid}, msg = <{message}>')
         print()
