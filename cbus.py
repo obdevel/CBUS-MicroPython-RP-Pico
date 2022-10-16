@@ -22,10 +22,10 @@ class cbus:
     def __init__(self, can=None, config=None, switch=None, led_grn=None, led_ylw=None, params=None, name=None):
         print('** cbus constructor')
 
-        if not isinstance(can, canio.canio):
+        if can and not isinstance(can, canio.canio):
             raise TypeError('** error: can is not an instance of class canio')
 
-        if not isinstance(config, cbusconfig.cbusconfig):
+        if config and not isinstance(config, cbusconfig.cbusconfig):
             raise TypeError('** error: config is not an instance of class cbusconfig')
 
         self.can = can
@@ -41,7 +41,7 @@ class cbus:
             self.has_ui = True
 
         if params == None:
-            self.params = bytearray(20)
+            self.params = []
         else:
             self.params = params
 
@@ -127,7 +127,7 @@ class cbus:
         self.name = bytearray(name)
 
     def set_params(self, params):
-        self.params = bytearray(params)
+        self.params = params
 
     def set_event_handler(self, event_handler):
         self.event_handler = event_handler
@@ -141,6 +141,18 @@ class cbus:
         self.can.send_message(msg)
         self.has_ui and self.led_grn.pulse()
         self.sent_messages += 1
+
+    def set_can(self, can):
+        if can and not isinstance(can, canio.canio):
+            raise TypeError('** error: can is not an instance of class canio')
+        else:
+            self.can = can
+
+    def set_config(self, config):
+        if config and not isinstance(config, cbusconfig.cbusconfig):
+            raise TypeError('** error: config is not an instance of class cbusconfig')
+        else:
+            set.config = config
 
     def process(self, max_msgs=3):        
         start_time = time.ticks_ms()
@@ -165,7 +177,6 @@ class cbus:
         if self.has_ui:
             self.led_grn.run()
             self.led_ylw.run()
-
             self.switch.run()
 
             if self.switch.is_pressed() and self.switch.current_state_duration() >= 6000:
@@ -233,7 +244,7 @@ class cbus:
 
             else:
                 if msg.rtr and not self.enumerating:
-                    print('enum requested')
+                    print('enum response requested by another node')
                     self.respond_to_enum_request()
                 elif self.enumerating:
                     print('got enum response')
@@ -252,11 +263,10 @@ class cbus:
         return processed_msgs
 
     def handle_accessory_event(self, msg):
-
-        node_number, event_number = self.get_node_and_event_numbers_from_message(msg)
-        # print(f'handle_accessory_event: {node_number}, {event_number}')
+        # print('handle_accessory_event:')
 
         if self.event_handler is not None:
+            node_number, event_number = self.get_node_and_event_numbers_from_message(msg)
             idx = self.config.find_existing_event(node_number, event_number)
 
             if idx > -1:

@@ -113,7 +113,7 @@ class mymodule(cbusmodule.cbusmodule):
                 send_lm = False
             else:
                 self.cbus.can.rx_queue.enqueue(self.msg3)
-
+                send_lm = True
 
 mod = mymodule()
 mod.initialise()
