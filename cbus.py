@@ -139,7 +139,7 @@ class cbus:
     def send_cbus_message(self, msg):
         msg.make_header()
         self.can.send_message(msg)
-        self.has_ui and self.led_grn.pulse()
+        self.has_ui and self.config.mode == MODE_FLIM and self.led_grn.pulse()
         self.sent_messages += 1
 
     def set_can(self, can):

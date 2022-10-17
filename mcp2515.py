@@ -9,12 +9,12 @@ import canmessage
 
 # speed 8M
 MCP_8MHz_125kBPS_CFG1 = (0x81)
-MCP_8MHz_125kBPS_CFG2 = (0xE5)
+MCP_8MHz_125kBPS_CFG2 = (0xe5)
 MCP_8MHz_125kBPS_CFG3 = (0x83)
 
 # speed 16M
 MCP_16MHz_125kBPS_CFG1  = (0x43)
-MCP_16MHz_125kBPS_CFG2  = (0xE5)
+MCP_16MHz_125kBPS_CFG2  = (0xe5)
 MCP_16MHz_125kBPS_CFG3  = (0x83)
 
 # commands
@@ -26,24 +26,24 @@ LOAD_TX_BUFFER_COMMAND     = 0x40
 REQUEST_TO_SEND_COMMAND    = 0x80
 READ_FROM_RXB0SIDH_COMMAND = 0x90
 READ_FROM_RXB1SIDH_COMMAND = 0x94
-READ_STATUS_COMMAND        = 0xA0
-RX_STATUS_COMMAND          = 0xB0
+READ_STATUS_COMMAND        = 0xa0
+RX_STATUS_COMMAND          = 0xb0
 
 # registers
-BFPCTRL_REGISTER   = 0x0C
-TXRTSCTRL_REGISTER = 0x0D
-CANSTAT_REGISTER   = 0x0E
-CANCTRL_REGISTER   = 0x0F
-TEC_REGISTER       = 0x1C
-REC_REGISTER       = 0x1D
+BFPCTRL_REGISTER   = 0x0c
+TXRTSCTRL_REGISTER = 0x0d
+CANSTAT_REGISTER   = 0x0e
+CANCTRL_REGISTER   = 0x0f
+TEC_REGISTER       = 0x1c
+REC_REGISTER       = 0x1d
 RXM0SIDH_REGISTER  = 0x20
 RXM1SIDH_REGISTER  = 0x24
 CNF3_REGISTER      = 0x28
 CNF2_REGISTER      = 0x29
-CNF1_REGISTER      = 0x2A
-CANINTE_REGISTER   = 0x2B
-CANINTF_REGISTER   = 0x2C
-EFLG_REGISTER      = 0x2D
+CNF1_REGISTER      = 0x2a
+CANINTE_REGISTER   = 0x2c
+CANINTF_REGISTER   = 0x2c
+EFLG_REGISTER      = 0x2d
 TXB0CTRL_REGISTER  = 0x30
 TXB1CTRL_REGISTER  = 0x40
 TXB2CTRL_REGISTER  = 0x50
@@ -99,7 +99,7 @@ class mcp2515(canio.canio):
         self.chip_select(True)
         ret = self.read_register(CANSTAT_REGISTER)
         print(f'ret = {ret}')
-        intr_type = int(ret[0]) & 0x0E
+        intr_type = int(ret[0]) & 0x0e
 
         print(f'state = {intr_type}')
 
@@ -120,7 +120,7 @@ class mcp2515(canio.canio):
                 self.handle_rxb_interrupt()
 
             ret = self.read_register(CANSTAT_REGISTER)
-            intr_type = int(ret[0]) & 0x0E
+            intr_type = int(ret[0]) & 0x0e
             print(f'interrupt = {intr_type}')
 
         self.chip_select(False)
@@ -221,7 +221,7 @@ class mcp2515(canio.canio):
 
         rx_status = self.read_rx_status()
 
-        if rx_status & 0xC0:
+        if rx_status & 0xc0:
             print('new message available')
             got_msg = True
             message = canmessage.canmessage()
@@ -260,7 +260,7 @@ class mcp2515(canio.canio):
                 message.id |= eid0
 
             dlc = self.bus.read(1)[0]
-            message.len = dlc & 0x0F
+            message.len = dlc & 0x0f
             message.data = self.bus.read(msg.len)
 
             self.chip_select(False)
@@ -294,18 +294,18 @@ class mcp2515(canio.canio):
             print('extended message')
             v = msg.id >> 21
             self.bus.write(bytearray(v))
-            v  = (msg.id >> 13) & 0xE0
+            v  = (msg.id >> 13) & 0xe0
             v |= (msg.id >> 16) & 0x03
             v |= 0x08
             self.bus.write(bytearray(v))
-            v  = (msg.id >> 8) & 0xFF
+            v  = (msg.id >> 8) & 0xff
             self.bus.write(bytearray(v))
-            v  = msg.id & 0xFF
+            v  = msg.id & 0xff
         else:
             print('standard message')
             v = msg.id >> 3
             self.bus.write(bytearray(v))
-            v  = (msg.id << 5) & 0xE0
+            v  = (msg.id << 5) & 0xe0
             self.bus.write(bytearray(v))
             self.bus.write(bytearray(0))
             self.bus.write(bytearray(0))
@@ -370,7 +370,7 @@ class mcp2515(canio.canio):
             print('*** error: unsupported oscillator frequency')
 
         # configure interrupts
-        self.write_register(CANINTE_REGISTER, 0x1F)
+        self.write_register(CANINTE_REGISTER, 0x1f)
 
         # configure i/o pins
         self.write_register(BFPCTRL_REGISTER, 0)
@@ -448,7 +448,10 @@ class mcp2515(canio.canio):
         # print('** get_next_message')
 
         if self.available():
+            # machine.disable_irq()
             msg = self.rx_queue.dequeue()
+            # machine.enable_irq()
             return msg
         else:
             return None
+

@@ -14,7 +14,7 @@ CONFIG_TYPE_I2C_EEPROM = 1
 
 class storage_backend:
     
-    ''' abstract class for event and config storage. Other concrete classes must derive from this class'''
+    ''' abstract base class for event and config storage. Other concrete classes must derive from this class'''
 
     events = ''
     nvs = ''
@@ -215,7 +215,7 @@ class cbusconfig:
         return -1
 
     def find_event_space(self):
-        print('find_event_space')
+        # print('find_event_space')
 
         for i in range(self.num_events):
             offset = i * (self.event_size)
@@ -262,13 +262,13 @@ class cbusconfig:
         return self.events[offset]
 
     def write_event_ev(self, idx, evnum, evval):
-        print('write_event_ev')
+        # print('write_event_ev')
         offset = (idx * self.event_size) + 4 + (evnum - 1)
         self.events[offset] = evval
         self.backend.store_events(self.events)
 
     def clear_event(self, nn, en):
-        print('clear_event')
+        # print('clear_event')
 
         idx = self.find_existing_event(nn , en)
 
@@ -284,7 +284,7 @@ class cbusconfig:
         return True
 
     def count_events(self):
-        print('count_events')
+        # print('count_events')
 
         count = 0
 

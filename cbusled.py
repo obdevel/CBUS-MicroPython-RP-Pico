@@ -11,8 +11,8 @@ class cbusled():
     def __init__(self, pin):
         self.pin = machine.Pin(pin, machine.Pin.OUT)
         self.state = 0
-        self.blinking = 0
-        self.pulsing = 0
+        self.blinking = False
+        self.pulsing = False
         self.last_change_time = 0
         self.pin.value(self.state)
 
@@ -28,30 +28,31 @@ class cbusled():
             self.pulsing = 0
 
     def on(self):
-        self.blinking = 0
-        self.pulsing = 0
+        self.blinking = False
+        self.pulsing = False
         self.state = 1
         self.pin.value(self.state)
         pass
 
     def off(self):
-        self.blinking = 0
-        self.pulsing = 0
+        self.blinking = False
+        self.pulsing = False
         self.state = 0
         self.pin.value(self.state)
         pass
 
     def blink(self):
         if not self.blinking:
-            self.blinking = 1
-            self.pulsing = 0
+            self.blinking = True
+            self.pulsing = False
             self.last_change_time = time.ticks_ms()
             self.state = 0
 
     def pulse(self):
         if not self.pulsing:
-            self.pulsing = 1
-            self.blinking = 0
+            self.pulsing = True
+            self.blinking = False
             self.state = 1
             self.pin.value(self.state)
             self.last_change_time = time.ticks_ms()
+

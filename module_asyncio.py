@@ -3,7 +3,7 @@
 
 # example CBUS module main class using asyncio library
 
-import micropython, machine, time
+import machine, time
 import uasyncio as asyncio
 import cbusmodule, cbus, mcp2515, cbusdefs, cbusconfig, canmessage, cbuslongmessage
 
