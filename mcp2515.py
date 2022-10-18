@@ -348,7 +348,7 @@ class mcp2515(canio.canio):
         x = self.read_register(CNF1_REGISTER)
 
         if x[0] == 0x55:
-            print('** mcp2515 device is preesent')
+            print('** mcp2515 device is present')
         else:
             print('no response from mcp2515 device')
 

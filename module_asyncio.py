@@ -106,8 +106,8 @@ class mymodule(cbusmodule.cbusmodule):
         send_lm = True
 
         while True:
-            await asyncio.sleep(5)
-            
+            await asyncio.sleep_ms(1000)
+
             if send_lm:
                 self.cbus.can.rx_queue.enqueue(self.lm0)
                 self.cbus.can.rx_queue.enqueue(self.lm1)
