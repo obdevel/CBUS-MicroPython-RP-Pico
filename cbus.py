@@ -1,16 +1,13 @@
-## cbus.py
+# cbus.py
 
-import machine
 import time
 
 import canio
-import mcp2515
 import cbusconfig
 import cbusled
 import cbusswitch
 import cbusdefs
 import canmessage
-import cbuslongmessage
 
 MODE_SLIM = 0
 MODE_FLIM = 1
@@ -48,12 +45,12 @@ class cbus:
         else:
             self.has_ui = True
 
-        if params == None:
+        if params is None:
             self.params = []
         else:
             self.params = params
 
-        if name == None:
+        if name is None:
             self.name = bytearray(7)
         else:
             self.name = name
@@ -118,9 +115,6 @@ class cbus:
         self.can.begin()
         self.config.begin()
         self.has_ui and self.indicate_mode(self.config.mode)
-
-    def set_config(self, config):
-        self.config = config
 
     def set_switch(self, pin):
         self.switch = cbusswitch.cbusswitch(pin)
@@ -245,7 +239,7 @@ class cbus:
 
             if self.frame_handler is not None:
                 if self.opcodes is not None and len(self.opcodes) > 0:
-                    for opc in opcodes:
+                    for opc in self.opcodes:
                         if msg.data[0] == opc:
                             self.frame_handler(msg)
                             break
@@ -265,7 +259,7 @@ class cbus:
                     self.respond_to_enum_request()
                 elif self.enumerating:
                     print("got enum response")
-                    enum_responses[msg.get_canid()] = 1
+                    self.enum_responses[msg.get_canid()] = 1
                     self.num_enum_responses += 1
 
             processed_msgs += 1
@@ -305,7 +299,7 @@ class cbus:
             omsg.data[5] = self.params[5]
             omsg.data[6] = self.params[6]
             omsg.data[7] = self.params[7]
-            can.send_message(omsg)
+            self.can.send_message(omsg)
 
     def handle_rqnpn(self, msg):
         print("RQNPN")
@@ -481,7 +475,7 @@ class cbus:
             omsg.data[3] = self.params[1]
             omsg.data[4] = self.params[3]
             omsg.data[5] = self.params[8]
-            send.can.send_message(omsg)
+            self.can.send_message(omsg)
 
     def handle_rqmn(self, msg):
         print("RQMN")
@@ -557,8 +551,8 @@ class cbus:
 
     def process_enumeration_responses(self):
         print("process_enumeration_responses")
-        enum_start_time = 0
-        enumerating = False
+        self.enum_start_time = 0
+        self.enumerating = False
         new_id = -1
 
         if self.num_enum_responses == 0:

@@ -218,12 +218,12 @@ class mcp2515(canio.canio):
     def handle_rxb_interrupt(self):
         print("handle_rxb_interrupt")
 
-        got_msg = False
+        # got_msg = False
         rx_status = self.read_rx_status()
 
         if rx_status & 0xC0:
             print("new message available")
-            got_msg = True
+            # got_msg = True
             message = canmessage.canmessage()
             access_rxb0 = (rx_status & 0x40) != 0
             message.rtr = (rx_status & 0x08) != 0
@@ -261,7 +261,7 @@ class mcp2515(canio.canio):
 
             dlc = self.bus.read(1)[0]
             message.len = dlc & 0x0F
-            message.data = self.bus.read(msg.len)
+            message.data = self.bus.read(message.len)
 
             self.chip_select(False)
             self.rx_queue.enqueue(message)

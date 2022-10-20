@@ -4,7 +4,7 @@
 # SDA = pin 16, SCL = pin 17
 
 import time
-from machine import Pin, I2C, SoftI2C
+from machine import Pin, I2C
 
 
 class i2ceeprom:

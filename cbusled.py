@@ -1,6 +1,7 @@
-## cbusled.py
+# cbusled.py
 
-import machine, time
+import machine
+import time
 
 BLINK_DURATION = 500
 PULSE_DURATION = 10

@@ -53,7 +53,7 @@ class files_backend(storage_backend):
         super().__init__(self, ev_offset)
 
     def init_events(self, events):
-        print(f"** files_backend init_events")
+        print("** files_backend init_events")
 
         f = open(events_file_name, "w")
         f.write(bytearray(events))
@@ -286,8 +286,6 @@ class cbusconfig:
         if idx == -1:
             return False
 
-        offset = idx * self.event_size
-
         for i in range(self.event_size):
             self.events[i + (idx * self.event_size)] = 255
 
@@ -341,8 +339,8 @@ class cbusconfig:
         self.nvs = bytearray(10 + self.num_nvs)
         self.events = bytearray((self.num_evs + 4) * self.num_events)
 
-        self.backend.store_events(events)
-        self.backend.store_nvs(nvs)
+        self.backend.store_events(self.events)
+        self.backend.store_nvs(self.nvs)
 
         self.reboot()
 

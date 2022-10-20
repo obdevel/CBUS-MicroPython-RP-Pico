@@ -1,6 +1,7 @@
-## cbusswitch.py
+# cbusswitch.py
 
-import machine, time
+import machine
+import time
 
 
 class cbusswitch:

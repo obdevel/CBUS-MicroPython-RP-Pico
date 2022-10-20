@@ -1,7 +1,9 @@
 # cbuslongmessage.py
 
 import time
-import cbus, cbusdefs, canmessage
+import cbus
+import cbusdefs
+import canmessage
 
 RECEIVE_TIMEOUT = 1000
 TRANSMIT_DELAY = 10
@@ -107,7 +109,7 @@ class cbuslongmessage:
         self.transmit_contexts[j].sequence_num = 0
         self.transmit_contexts[j].index = 0
         self.transmit_contexts[j].flags = 0
-        self.transmit_contexts[j].crc = self.crc16(ctx.buffer) if self.using_crc else 0
+        self.transmit_contexts[j].crc = self.crc16(self.transmit_contexts[j].buffer) if self.using_crc else 0
 
         msg = canmessage.canmessage(self.bus.config.canid, 8)
 
