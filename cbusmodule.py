@@ -1,10 +1,10 @@
 # module.py
 # cbus application base class
 
-class cbusmodule():
-    
+
+class cbusmodule:
     def __init__(self):
-        print('** cbusmodule constructor')
+        print("** cbusmodule constructor")
         pass
 
     def initialise(self):
@@ -17,13 +17,15 @@ class cbusmodule():
         pass
 
     def event_handler(self, msg, idx):
-        print(f'-- user event handler: idx = {idx}')
+        print(f"-- user event handler: idx = {idx}")
         print(msg)
 
     def frame_handler(self, msg):
-        print('-- user frame handler:')
+        print("-- user frame handler:")
         print(msg)
 
     def long_message_handler(self, message, streamid, status):
-        print(f'-- user long message handler: status = {status}, streamid = {streamid}, msg = <{message}>')
+        print(
+            f"-- user long message handler: status = {status}, streamid = {streamid}, msg = <{message}>"
+        )
         print()

@@ -1,12 +1,12 @@
-
 # canio.py
+
 
 class canio:
 
-    """ a base class to represent a generic CAN bus interface """
+    """a base class to represent a generic CAN bus interface"""
 
     def __init__(self):
-        print('** canio constructor')
+        print("** canio constructor")
         pass
 
     def begin(self):
@@ -20,8 +20,6 @@ class canio:
 
     def available(self):
         pass
-   
+
     def reset(self):
         pass
-
-

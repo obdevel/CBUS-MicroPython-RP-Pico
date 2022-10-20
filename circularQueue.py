@@ -1,8 +1,7 @@
-
 # circularQueue.py
 
-class circularQueue:
 
+class circularQueue:
     def __init__(self, capacity):
         self.capacity = capacity
         self.queue = [None] * capacity
@@ -15,7 +14,7 @@ class circularQueue:
         self.gets = 0
 
     def available(self):
-        return (self.size > 0)
+        return self.size > 0
 
     def enqueue(self, item):
         if self.size == self.capacity:

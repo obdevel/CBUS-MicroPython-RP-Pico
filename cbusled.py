@@ -1,4 +1,3 @@
-
 ## cbusled.py
 
 import machine, time
@@ -6,8 +5,8 @@ import machine, time
 BLINK_DURATION = 500
 PULSE_DURATION = 10
 
-class cbusled():
 
+class cbusled:
     def __init__(self, pin):
         self.pin = machine.Pin(pin, machine.Pin.OUT)
         self.state = 0
@@ -55,4 +54,3 @@ class cbusled():
             self.state = 1
             self.pin.value(self.state)
             self.last_change_time = time.ticks_ms()
-
