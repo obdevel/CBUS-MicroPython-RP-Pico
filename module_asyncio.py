@@ -4,7 +4,9 @@
 
 import machine, time
 import uasyncio as asyncio
+from uasyncio import Lock
 import cbusmodule, cbus, mcp2515, cbusdefs, cbusconfig, canmessage, cbuslongmessage
+import aiorepl
 
 
 class mymodule(cbusmodule.cbusmodule):
@@ -89,38 +91,34 @@ class mymodule(cbusmodule.cbusmodule):
 
         while True:
             c = self.cbus.process()
-            await asyncio.sleep(0)
+            await asyncio.sleep_ms(1)
 
     async def long_message_coro(self):
         print("** long_message_coro start")
 
         while True:
             self.lm.process()
-            await asyncio.sleep_ms(0)
+            await asyncio.sleep_ms(1)
 
-    async def blink_led_coro(self):
+    async def blink_led_coro(self, lock):
         print("** blink_led_coro start")
         self.led = machine.Pin(25, machine.Pin.OUT)
 
         while True:
+            await lock.acquire()
             self.led.value(1)
+            lock.release()
             await asyncio.sleep_ms(20)
             self.led.value(0)
             await asyncio.sleep_ms(980)
 
-    async def run(self):
-        print("** run start")
-
-        asyncio.create_task(self.cbus_coro())
-        asyncio.create_task(self.long_message_coro())
-        asyncio.create_task(self.blink_led_coro())
-
-        print("** asyncio is now running the module main loop and co-routines")
-
+    async def activity_coro(self, lock):
+        print("** activity coro start")
         send_lm = True
 
         while True:
-            await asyncio.sleep_ms(1000)
+            await asyncio.sleep_ms(2000)
+            await lock.acquire()
 
             if send_lm:
                 self.cbus.can.rx_queue.enqueue(self.lm0)
@@ -131,8 +129,26 @@ class mymodule(cbusmodule.cbusmodule):
             else:
                 self.cbus.can.rx_queue.enqueue(self.msg3)
                 send_lm = True
+            
+            lock.release()
 
+    async def main(self):
+        print("** main start")
+
+        self.b_lock = Lock()
+        self.c_lock = Lock()
+
+        self.tc = asyncio.create_task(self.cbus_coro())
+        self.tl = asyncio.create_task(self.long_message_coro())
+        self.tb = asyncio.create_task(self.blink_led_coro(self.b_lock))
+        self.ta = asyncio.create_task(self.activity_coro(self.c_lock))
+
+        repl = asyncio.create_task(aiorepl.task(globals()))
+
+        print("** asyncio is now running the module main loop and co-routines")
+
+        await asyncio.gather(repl)
 
 mod = mymodule()
 mod.initialise()
-asyncio.run(mod.run())
+asyncio.run(mod.main())

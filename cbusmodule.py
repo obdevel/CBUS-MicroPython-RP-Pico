@@ -13,7 +13,7 @@ class cbusmodule:
     def run_cbus_loop(self):
         pass
 
-    def run(self):
+    def main(self):
         pass
 
     def event_handler(self, msg, idx):
