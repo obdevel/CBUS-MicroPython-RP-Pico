@@ -5,19 +5,19 @@
 
 import time
 from machine import Pin, I2C
+import logger
 
 
 class i2ceeprom:
     def __init__(self, i2caddr=0x50, scl_pin=17, sda_pin=16, size=8192):
-        print("** i2ceeprom constructor")
+        self.logger = logger.logger()
+        self.logger.log("** i2ceeprom constructor")
 
         self.i2caddr = i2caddr
-        self.freq = 400000
-        # self.bus = SoftI2C(scl=Pin(scl_pin), sda=Pin(sda_pin), freq=400_000)
         self.bus = I2C(0, scl=Pin(scl_pin), sda=Pin(sda_pin), freq=400_000)
 
         slaves = self.bus.scan()
-        print(f"found devices: {slaves}")
+        self.logger.log(f"found devices: {slaves}")
 
         self._addrbuf = bytearray(2)
         self._databuf = bytearray(1)

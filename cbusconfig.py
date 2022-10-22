@@ -3,6 +3,7 @@
 import gc
 import machine
 import i2ceeprom
+import logger
 
 nvs_file_name = "/nvs.dat"
 events_file_name = "/events.dat"
@@ -19,8 +20,9 @@ class storage_backend:
     nvs = ""
 
     def __init__(self, storage_type=CONFIG_TYPE_FILES, ev_offset=0):
-        print(
-            f"** storage_backend constructor, type = {storage_type}, offset = {ev_offset}"
+        self.logger = logger.logger()
+        self.logger.log(
+            f"storage_backend constructor, type = {storage_type}, offset = {ev_offset}"
         )
         self.storage_type = storage_type
         self.ev_offset = ev_offset
@@ -49,23 +51,24 @@ class storage_backend:
 
 class files_backend(storage_backend):
     def __init__(self, ev_offset):
-        print("** files_backend init")
+        self.logger = logger.logger()
+        self.logger.log("files_backend init")
         super().__init__(self, ev_offset)
 
     def init_events(self, events):
-        print("** files_backend init_events")
+        print("files_backend init_events")
 
         f = open(events_file_name, "w")
         f.write(bytearray(events))
         f.close()
 
     def load_events(self, ev_size):
-        print("** files_backend load_events")
+        self.logger.log("files_backend load_events")
 
         try:
             f = open(events_file_name, "r")
         except OSError:
-            print("file does not exist")
+            self.logger.log("file does not exist")
             return None
 
         data = f.read()
@@ -73,26 +76,26 @@ class files_backend(storage_backend):
         return bytearray(data.encode("ascii"))
 
     def store_events(self, events):
-        print("** files_backend store_events")
+        self.logger.log("files_backend store_events")
 
         f = open(events_file_name, "w")
         f.write(bytearray(events))
         f.close()
 
     def init_nvs(self, nvs):
-        print("** files_backend init_nvs")
+        self.logger.log("files_backend init_nvs")
 
         f = open(nvs_file_name, "w")
         f.write(bytearray(nvs))
         f.close()
 
     def load_nvs(self, num_nvs):
-        print("** files_backend load_nvs")
+        self.logger.log("files_backend load_nvs")
 
         try:
             f = open(nvs_file_name, "r")
         except OSError:
-            print("file does not exist")
+            self.logger.log("file does not exist")
             return None
 
         data = f.read()
@@ -100,7 +103,7 @@ class files_backend(storage_backend):
         return bytearray(data.encode("ascii"))
 
     def store_nvs(self, nvs):
-        print("** files_backend store_nvs")
+        self.logger.log("files_backend store_nvs")
 
         f = open(nvs_file_name, "w")
         f.write(bytearray(nvs))
@@ -109,7 +112,8 @@ class files_backend(storage_backend):
 
 class eeprom_backend(storage_backend):
     def __init__(self, ev_offset):
-        print(f"** eeprom_backend init, offset = {ev_offset}")
+        self.logger = logger.logger()
+        self.logger.log(f"eeprom_backend init, offset = {ev_offset}")
         super().__init__(self, ev_offset)
         self.eeprom = i2ceeprom.i2ceeprom()
 
@@ -144,7 +148,10 @@ class cbusconfig:
     def __init__(
         self, storage_type=CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4
     ):
-        print(f"** cbusconfig constructor, storage type = {storage_type}")
+
+        self.logger = logger.logger()
+
+        self.logger.log(f"cbusconfig constructor, storage type = {storage_type}")
 
         self.storage_type = storage_type
 
@@ -170,7 +177,7 @@ class cbusconfig:
     def begin(
         self,
     ):
-        print("** cbusconfig begin")
+        self.logger.log("cbusconfig begin")
 
         data = self.backend.load_events(len(self.events))
 
@@ -217,7 +224,13 @@ class cbusconfig:
                 # print(f'found event at index = {i}')
                 return i
 
-        print("event not found")
+        self.logger.log("event not found")
+        return -1
+
+    def find_event_by_ev(self, evnum, evval):
+        for i in range(self.num_events):
+            if self.read_event_ev(i, evnum) == evval:
+                return i
         return -1
 
     def find_event_space(self):
@@ -324,18 +337,18 @@ class cbusconfig:
             if print_all or (self.events[i * self.event_size] < 0xFF):
                 print(f"{i:3} = ", end="")
                 for j in range(0, self.event_size):
-                    print(f"{self.events[(i*self.event_size)+j]:3}", end=" ")
-                print()
+                    self.logger.log(f"{self.events[(i*self.event_size)+j]:3}", end=" ")
+                self.logger.log()
 
     def print_nvs(self):
         for i in range(self.num_nvs + 10):
-            print(f"{i:2} - {self.nvs[i]}")
+            self.logger.log(f"{i:2} - {self.nvs[i]}")
 
     def reboot(self):
         machine.soft_reset()
 
     def reset_module(self):
-        print("** reset_module")
+        self.logger.log("reset_module")
         self.nvs = bytearray(10 + self.num_nvs)
         self.events = bytearray((self.num_evs + 4) * self.num_events)
 

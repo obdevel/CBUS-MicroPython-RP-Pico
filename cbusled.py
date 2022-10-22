@@ -2,6 +2,7 @@
 
 import machine
 import time
+import logger
 
 BLINK_DURATION = 500
 PULSE_DURATION = 10
@@ -9,6 +10,7 @@ PULSE_DURATION = 10
 
 class cbusled:
     def __init__(self, pin):
+        self.logger = logger.logger()
         self.pin = machine.Pin(pin, machine.Pin.OUT)
         self.state = 0
         self.blinking = False

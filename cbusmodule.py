@@ -1,10 +1,13 @@
 # module.py
 # cbus application base class
 
+import logger
+
 
 class cbusmodule:
     def __init__(self):
-        print("** cbusmodule constructor")
+        self.logger = logger.logger()
+        self.logger.log("cbusmodule constructor")
         pass
 
     def initialise(self):
@@ -17,15 +20,15 @@ class cbusmodule:
         pass
 
     def event_handler(self, msg, idx):
-        print(f"-- user event handler: idx = {idx}")
-        print(msg)
+        self.logger.log(f"-- user event handler: idx = {idx}")
+        self.logger.log(msg)
 
     def frame_handler(self, msg):
-        print("-- user frame handler:")
-        print(msg)
+        self.logger.log("-- user frame handler:")
+        self.logger.log(msg)
 
     def long_message_handler(self, message, streamid, status):
-        print(
+        self.logger.log(
             f"-- user long message handler: status = {status}, streamid = {streamid}, msg = <{message}>"
         )
-        print()
+        self.logger.log()

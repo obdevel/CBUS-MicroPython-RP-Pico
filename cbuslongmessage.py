@@ -4,6 +4,7 @@ import time
 import cbus
 import cbusdefs
 import canmessage
+import logger
 
 RECEIVE_TIMEOUT = 1000
 TRANSMIT_DELAY = 10
@@ -18,7 +19,8 @@ CBUS_LONG_MESSAGE_TRUNCATED = 5
 
 class lm_context:
     def __init__(self):
-        print("** lm_context constructor")
+        self.logger = logger.logger()
+        self.logger.log("lm_context constructor")
 
         self.in_use = False
         self.streamid = 0
@@ -28,7 +30,8 @@ class lm_context:
 
 class receive_context(lm_context):
     def __init__(self):
-        print("** receive_context constructor")
+        self.logger = logger.logger()
+        self.logger.log("receive_context constructor")
         super().__init__()
 
         self.canid = 0
@@ -40,7 +43,8 @@ class receive_context(lm_context):
 
 class transmit_context(lm_context):
     def __init__(self):
-        print("** transmit_context constructor")
+        self.logger = logger.logger()
+        self.logger.log("transmit_context constructor")
         super().__init__()
 
         self.index = 0
@@ -53,11 +57,11 @@ class transmit_context(lm_context):
 
 class cbuslongmessage:
     def __init__(self, bus):
-
-        print("** long message constructor")
+        self.logger = logger.logger()
+        self.logger.log("long message constructor")
 
         if not isinstance(bus, cbus.cbus):
-            raise TypeError("** error: bus arg is not an instance of class cbus")
+            raise TypeError("error: bus arg is not an instance of class cbus")
 
         self.bus = bus
         self.using_crc = False
@@ -69,15 +73,15 @@ class cbuslongmessage:
         self.transmit_contexts = [transmit_context()]
 
     def subscribe(self, ids, handler):
-        print(f"** subscribe: {ids}")
+        self.logger.log(f"subscribe: {ids}")
         self.subscribed_ids = ids
         self.user_handler = handler
 
     def send_long_message(self, message, streamid, priority=0x0B):
-        # print(f'sending long message = {message}')
+        # self.logger.log(f'sending long message = {message}')
 
         if len(message) >= 2**16:
-            print("** error: message is too long")
+            self.logger.log("error: message is too long")
             return False
 
         for j in range(len(self.transmit_contexts)):
@@ -85,8 +89,8 @@ class cbuslongmessage:
                 self.transmit_contexts[j].in_use
                 and self.transmit_contexts[j].streamid == streamid
             ):
-                print(
-                    f"** error: a message is already in progress with streamid = {streamid} in context {j}"
+                self.logger.log(
+                    f"error: a message is already in progress with streamid = {streamid} in context {j}"
                 )
                 return False
 
@@ -109,7 +113,9 @@ class cbuslongmessage:
         self.transmit_contexts[j].sequence_num = 0
         self.transmit_contexts[j].index = 0
         self.transmit_contexts[j].flags = 0
-        self.transmit_contexts[j].crc = self.crc16(self.transmit_contexts[j].buffer) if self.using_crc else 0
+        self.transmit_contexts[j].crc = (
+            self.crc16(self.transmit_contexts[j].buffer) if self.using_crc else 0
+        )
 
         msg = canmessage.canmessage(self.bus.config.canid, 8)
 
@@ -127,7 +133,7 @@ class cbuslongmessage:
 
         self.transmit_contexts[j].sequence_num = 1
         self.transmit_contexts[j].last_fragement_sent = time.ticks_ms
-        # print('sent long message header packet')
+        # self.logger.log('sent long message header packet')
 
     def process(self):
 
@@ -137,7 +143,7 @@ class cbuslongmessage:
                 and time.ticks_ms() - self.receive_contexts[j].last_fragment_received_at
                 > RECEIVE_TIMEOUT
             ):
-                print(f"** error: receive context {j} timed out")
+                self.logger.log(f"error: receive context {j} timed out")
                 self.user_handler(
                     self.receive_contexts[j].buffer,
                     self.receive_contexts[j].streamid,
@@ -186,15 +192,15 @@ class cbuslongmessage:
         # print('handling long message fragment')
 
         if msg.data[0] != cbusdefs.OPC_DTXC:
-            print(f"** error: wrong opcode {msg.data[0]:x}")
+            self.logger.log(f"error: wrong opcode {msg.data[0]:x}")
             return
 
         if not msg.data[1] in self.subscribed_ids:
-            print(f"** note: not subscribed to stream id = {msg.data[1]}")
+            self.logger.log(f"note: not subscribed to stream id = {msg.data[1]}")
             return
 
         if msg.data[2] == 0:
-            # print(f'handling header packet, streamid = {msg.data[1]}, size = {msg.data[4]}')
+            # self.logger.log(f'handling header packet, streamid = {msg.data[1]}, size = {msg.data[4]}')
 
             found_free_context = False
 
@@ -208,7 +214,7 @@ class cbuslongmessage:
                 self.transmit_contexts.append(receive_context())
                 j += 1
 
-            # print(f'using receive context = {j}')
+            # self.logger.log(f'using receive context = {j}')
             self.receive_contexts[j].in_use = True
             self.receive_contexts[j].streamid = msg.data[1]
             self.receive_contexts[j].message_size = (msg.data[3] * 256) + msg.data[4]
@@ -234,8 +240,8 @@ class cbuslongmessage:
                     break
 
             if not found_matching_context:
-                print(
-                    "** error: unable to find matching receive context for continuation packet"
+                self.logger.log(
+                    "error: unable to find matching receive context for continuation packet"
                 )
                 return
 
@@ -246,8 +252,8 @@ class cbuslongmessage:
                 msg.data[2]
                 != self.receive_contexts[i].expected_next_receive_sequence_num
             ):
-                print(
-                    f"** error: wrong sequence number, expected {self.receive_contexts[i].expected_next_receive_sequence_num}, got {msg.data[2]}"
+                self.logger.log(
+                    f"error: wrong sequence number, expected {self.receive_contexts[i].expected_next_receive_sequence_num}, got {msg.data[2]}"
                 )
                 self.user_handler(
                     self.receive_contexts[i].buffer,
@@ -258,7 +264,7 @@ class cbuslongmessage:
                 return
 
             for c in range(5):
-                # print(f'processing next char = {chr(msg.data[c+3])}, len = {len(self.receive_contexts[i].buffer)}')
+                # self.logger.log(f'processing next char = {chr(msg.data[c+3])}, len = {len(self.receive_contexts[i].buffer)}')
                 self.receive_contexts[i].buffer.append(msg.data[c + 3])
                 self.receive_contexts[i].received += 1
                 self.receive_contexts[i].last_fragment_received_at = time.ticks_ms()

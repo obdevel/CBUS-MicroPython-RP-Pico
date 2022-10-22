@@ -5,6 +5,7 @@ import circularQueue
 import time
 import canio
 import canmessage
+import logger
 
 # speed 8M
 MCP_8MHz_125kBPS_CFG1 = 0x81
@@ -56,7 +57,8 @@ class mcp2515(canio.canio):
     """a canio derived class for use with an MCP2515 CAN controller device"""
 
     def __init__(self, osc=16000000, cs_pin=5, int_pin=1, bus=None, qsize=64):
-        print("** mcp2515 constructor")
+        self.logger = logger.logger()
+        self.logger.log("mcp2515 constructor")
 
         # call superclass constructor
         super().__init__()
@@ -92,7 +94,7 @@ class mcp2515(canio.canio):
 
     def isr(self, source=None):
         # CAN interrupt handler
-        print(f"** mcp2515 isr triggered, source = {source}")
+        self.logger.log(f"mcp2515 isr triggered, source = {source}")
 
         handled = False
 
@@ -101,7 +103,7 @@ class mcp2515(canio.canio):
         print(f"ret = {ret}")
         intr_type = int(ret[0]) & 0x0E
 
-        print(f"state = {intr_type}")
+        self.logger.log(f"state = {intr_type}")
 
         while intr_type != 0:
             handled = True
@@ -121,10 +123,10 @@ class mcp2515(canio.canio):
 
             ret = self.read_register(CANSTAT_REGISTER)
             intr_type = int(ret[0]) & 0x0E
-            print(f"interrupt = {intr_type}")
+            self.logger.log(f"interrupt = {intr_type}")
 
         self.chip_select(False)
-        print("** end of isr")
+        self.logger.log("end of isr")
 
         return handled
 
@@ -216,13 +218,13 @@ class mcp2515(canio.canio):
         return read[0]
 
     def handle_rxb_interrupt(self):
-        print("handle_rxb_interrupt")
+        self.logger.log("handle_rxb_interrupt")
 
         # got_msg = False
         rx_status = self.read_rx_status()
 
         if rx_status & 0xC0:
-            print("new message available")
+            self.logger.log("new message available")
             # got_msg = True
             message = canmessage.canmessage()
             access_rxb0 = (rx_status & 0x40) != 0
@@ -230,10 +232,10 @@ class mcp2515(canio.canio):
             message.ext = (rx_status & 0x10) != 0
 
             if access_rxb0:
-                print("from RXB0")
+                self.logger.log("from RXB0")
                 reg = READ_FROM_RXB0SIDH_COMMAND
             else:
-                print("from RXB1")
+                self.logger.log("from RXB1")
                 reg = READ_FROM_RXB1SIDH_COMMAND
 
             self.chip_select(True)
@@ -267,23 +269,23 @@ class mcp2515(canio.canio):
             self.rx_queue.enqueue(message)
 
         else:
-            print("no message available")
+            self.logger.log("no message available")
 
     def handle_txb_interrupt(self, txb):
-        print("handle_txb_interrupt")
+        self.logger.log("handle_txb_interrupt")
 
         self.modify_register(CANINTF_REGISTER, (0x04 << txb), 0)
 
         if self.tx_queue.available():
-            print("sending queued msg")
+            self.logger.log("sending queued msg")
             msg = self.tx_queue.dequeue()
             self.internal_send_message(msg, txb)
         else:
-            print("no queued msg to tx")
+            self.logger.log("no queued msg to tx")
             self.txb_is_free[txb] = True
 
     def internal_send_message(self, msg, txb):
-        print(
+        self.logger.log(
             f"internal_send_message using txb = {txb}, id = {msg.id:#x}, len = {msg.len}"
         )
 
@@ -293,7 +295,7 @@ class mcp2515(canio.canio):
         self.bus.write(load_tx_buffer_command)
 
         if msg.ext:
-            print("extended message")
+            self.logger.log("extended message")
             v = msg.id >> 21
             self.bus.write(bytearray(v))
             v = (msg.id >> 13) & 0xE0
@@ -304,7 +306,7 @@ class mcp2515(canio.canio):
             self.bus.write(bytearray(v))
             v = msg.id & 0xFF
         else:
-            print("standard message")
+            self.logger.log("standard message")
             v = msg.id >> 3
             self.bus.write(bytearray(v))
             v = (msg.id << 5) & 0xE0
@@ -315,7 +317,7 @@ class mcp2515(canio.canio):
         v = msg.len
 
         if msg.rtr:
-            print("rtr message")
+            self.logger.log("rtr message")
             v |= 0x40
 
         self.bus.write(bytearray(v))
@@ -330,10 +332,10 @@ class mcp2515(canio.canio):
         self.bus.write(bytearray(send_command))
         self.chip_select(False)
 
-        print("internal_send_message ends")
+        self.logger.log("internal_send_message ends")
 
     def reset(self):
-        print("** mcp2515 reset")
+        self.logger.log("mcp2515 reset")
         msg = bytearray()
         msg.append(RESET_COMMAND)
         self.chip_select(True)
@@ -342,7 +344,7 @@ class mcp2515(canio.canio):
         time.sleep_ms(5)
 
     def begin(self):
-        print("** mcp2515 begin")
+        self.logger.log("mcp2515 begin")
         self.reset()
 
         # check device is present
@@ -350,9 +352,9 @@ class mcp2515(canio.canio):
         x = self.read_register(CNF1_REGISTER)
 
         if x[0] == 0x55:
-            print("** mcp2515 device is present")
+            self.logger.log("mcp2515 device is present")
         else:
-            print("no response from mcp2515 device")
+            self.logger.log("no response from mcp2515 device")
 
         # init tx buffer states
         self.txb_is_free = [True, True, True]
@@ -369,7 +371,7 @@ class mcp2515(canio.canio):
             self.write_register(CNF2_REGISTER, MCP_8MHz_125kBPS_CFG2)
             self.write_register(CNF3_REGISTER, MCP_8MHz_125kBPS_CFG3)
         else:
-            print("*** error: unsupported oscillator frequency")
+            self.logger.log("*error: unsupported oscillator frequency")
 
         # configure interrupts
         self.write_register(CANINTE_REGISTER, 0x1F)
@@ -411,43 +413,43 @@ class mcp2515(canio.canio):
         x = self.read_register(CANCTRL_REGISTER)
 
         if x[0] != 0:
-            print("error waiting for mode change")
+            self.logger.log("error waiting for mode change")
 
         # install ISR
         self.int_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.isr)
 
-        print("** mcp2515 init complete")
+        self.logger.log("mcp2515 init complete")
 
     def available(self):
-        # print('** available')
+        # self.logger.log('available')
         return self.rx_queue.available()
 
     def send_message(self, msg):
-        print("** send_message")
+        self.logger.log("send_message")
         msg.make_header()
 
         txb = 0
 
         if self.txb_is_free[txb]:
-            print("device buffer is free, sending message immediately")
+            self.logger.log("device buffer is free, sending message immediately")
             self.internal_send_message(msg, txb)
             self.txb_is_free[txb] = False
             ret = True
         else:
-            print("device buffer is full, queueing message for later")
+            self.logger.log("device buffer is full, queueing message for later")
 
             if self.tx_queue.enqueue(msg):
-                print("message queued ok")
+                self.logger.log(" queued ok")
                 ret = True
             else:
-                print("queue is full")
+                self.logger.log("queue is full")
                 ret = False
 
-        print("** send message ends")
+        self.logger.log("send message ends")
         return ret
 
     def get_next_message(self):
-        # print('** get_next_message')
+        # print('get_next_message')
 
         if self.available():
             # machine.disable_irq()

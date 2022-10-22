@@ -15,7 +15,7 @@ class canmessage:
     def __str__(self):
         rtr = "r" if self.rtr else ""
         ext = "x" if self.ext else ""
-        ch = (
+        str = (
             f"[{self.id:x}] "
             + f"[{self.len:x}] [ "
             + " ".join("{:02x}".format(x) for x in self.data)
@@ -23,7 +23,7 @@ class canmessage:
             + rtr
             + ext
         )
-        return ch
+        return str
 
     def make_header(self, priority=0x0B):
         if self.id - self.get_canid() == 0:

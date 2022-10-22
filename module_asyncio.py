@@ -2,22 +2,30 @@
 
 # example CBUS module main class using asyncio library
 
-import machine, time
+import machine
+import time
 import uasyncio as asyncio
 from uasyncio import Lock
-import cbusmodule, cbus, mcp2515, cbusdefs, cbusconfig, canmessage, cbuslongmessage
+import cbusmodule
+import cbus
+import mcp2515
+import cbusdefs
+import cbusconfig
+import canmessage
+import cbuslongmessage
+import cbushistory
+import logger
 import aiorepl
 
 
 class mymodule(cbusmodule.cbusmodule):
     def __init__(self):
-        print("** module constructor")
         super().__init__()
+        self.logger = logger.logger()
+        self.logger.log("mymodule constructor")
 
     def initialise(self):
         # *** bare minimum module init
-
-        print("** module initialise")
         start_time = time.ticks_ms()
 
         self.cbus = cbus.cbus(
@@ -62,10 +70,15 @@ class mymodule(cbusmodule.cbusmodule):
 
         # *** end of bare minimum init
 
+        # *** cbus long message handling
         self.lm = cbuslongmessage.cbuslongmessage(self.cbus)
         self.lm_ids = [1, 2, 3, 4, 5]
         self.lm.subscribe(self.lm_ids, self.long_message_handler)
 
+        # cbus event history
+        self.history = cbushistory.cbushistory(self.cbus, max_size=256, max_age=30000)
+
+        # some test messages
         self.msg1 = canmessage.canmessage(99, 5, [0x90, 0, 22, 0, 25])
         self.msg2 = canmessage.canmessage(99, 5, [0xE9, 1, 0, 0, 24, 0, 0, 0])
         self.msg3 = canmessage.canmessage(4, 5, [0x91, 0, 22, 0, 23, 0, 0, 0])
@@ -77,31 +90,42 @@ class mymodule(cbusmodule.cbusmodule):
         self.lm2 = canmessage.canmessage(333, 8, [0xE9, 2, 2, 32, 119, 111, 114, 108])
         self.lm3 = canmessage.canmessage(333, 8, [0xE9, 2, 3, 100, 0, 0, 0, 0])
 
-        print()
-        print(f"** initialise complete, time = {time.ticks_ms() - start_time} ms")
-        print()
-        print(
+        # module initialisation complete
+
+        self.logger.log()
+        self.logger.log(
+            f"initialise complete, time = {time.ticks_ms() - start_time} ms"
+        )
+        self.logger.log()
+        self.logger.log(
             f"module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}"
         )
-        print(f"free memory = {self.cbus.config.free_memory()} bytes")
-        print()
+        self.logger.log(f"free memory = {self.cbus.config.free_memory()} bytes")
+        self.logger.log()
 
     async def cbus_coro(self):
-        print("** cbus_coro start")
+        self.logger.log("cbus_coro start")
 
         while True:
             c = self.cbus.process()
             await asyncio.sleep_ms(1)
 
     async def long_message_coro(self):
-        print("** long_message_coro start")
+        self.logger.log("long_message_coro start")
 
         while True:
             self.lm.process()
             await asyncio.sleep_ms(1)
 
+    async def history_coro(self):
+        self.logger.log("event history coro start")
+
+        while True:
+            self.history.reap()
+            await asyncio.sleep_ms(100)
+
     async def blink_led_coro(self, lock):
-        print("** blink_led_coro start")
+        self.logger.log("blink_led_coro start")
         self.led = machine.Pin(25, machine.Pin.OUT)
 
         while True:
@@ -113,7 +137,7 @@ class mymodule(cbusmodule.cbusmodule):
             await asyncio.sleep_ms(980)
 
     async def activity_coro(self, lock):
-        print("** activity coro start")
+        self.logger.log("activity coro start")
         send_lm = True
 
         while True:
@@ -129,25 +153,36 @@ class mymodule(cbusmodule.cbusmodule):
             else:
                 self.cbus.can.rx_queue.enqueue(self.msg3)
                 send_lm = True
-            
+
             lock.release()
 
     async def main(self):
-        print("** main start")
+        self.logger.log("main start")
 
+        self.a_lock = Lock()
         self.b_lock = Lock()
-        self.c_lock = Lock()
+
+        await self.a_lock.acquire()
 
         self.tc = asyncio.create_task(self.cbus_coro())
         self.tl = asyncio.create_task(self.long_message_coro())
+        self.th = asyncio.create_task(self.history_coro())
         self.tb = asyncio.create_task(self.blink_led_coro(self.b_lock))
-        self.ta = asyncio.create_task(self.activity_coro(self.c_lock))
+        self.ta = asyncio.create_task(self.activity_coro(self.a_lock))
 
         repl = asyncio.create_task(aiorepl.task(globals()))
 
-        print("** asyncio is now running the module main loop and co-routines")
+        self.logger.log("asyncio is now running the module main loop and co-routines")
 
         await asyncio.gather(repl)
+
+
+def control(state):
+    if state:
+        mod.a_lock.release()
+    else:
+        await mod.a_lock.acquire()
+
 
 mod = mymodule()
 mod.initialise()

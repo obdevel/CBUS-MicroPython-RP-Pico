@@ -88,7 +88,7 @@ __exec_task = asyncio.create_task(__code())
 async def task(g=None, prompt="--> "):
     print("Starting asyncio REPL...")
     if g is None:
-        #g = __import__("__main__").__dict__
+        g = __import__("__main__").__dict__
         pass
     try:
         micropython.kbd_intr(-1)
@@ -177,4 +177,3 @@ async def task(g=None, prompt="--> "):
                     cmd += b
     finally:
         micropython.kbd_intr(3)
-

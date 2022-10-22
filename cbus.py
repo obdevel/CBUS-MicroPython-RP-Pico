@@ -8,10 +8,27 @@ import cbusled
 import cbusswitch
 import cbusdefs
 import canmessage
+import cbushistory
+import logger
 
 MODE_SLIM = 0
 MODE_FLIM = 1
 MODE_CHANGING = 2
+
+event_opcodes = [
+    cbusdefs.OPC_ACON,
+    cbusdefs.OPC_ACOF,
+    cbusdefs.OPC_ASON,
+    cbusdefs.OPC_ASOF,
+    cbusdefs.OPC_ACON1,
+    cbusdefs.OPC_ACOF1,
+    cbusdefs.OPC_ASON1,
+    cbusdefs.OPC_ASOF1,
+    cbusdefs.OPC_ACON2,
+    cbusdefs.OPC_ACOF2,
+    cbusdefs.OPC_ASON2,
+    cbusdefs.OPC_ASOF2,
+]
 
 
 class cbus:
@@ -25,13 +42,16 @@ class cbus:
         params=None,
         name=None,
     ):
-        print("** cbus constructor")
+
+        self.logger = logger.logger()
+
+        self.logger.log("cbus constructor")
 
         if can and not isinstance(can, canio.canio):
-            raise TypeError("** error: can is not an instance of class canio")
+            raise TypeError("error: can is not an instance of class canio")
 
         if config and not isinstance(config, cbusconfig.cbusconfig):
-            raise TypeError("** error: config is not an instance of class cbusconfig")
+            raise TypeError("error: config is not an instance of class cbusconfig")
 
         self.can = can
         self.config = config
@@ -59,6 +79,8 @@ class cbus:
         self.frame_handler = None
         self.long_message_handler = None
         self.opcodes = []
+
+        self.history = None
 
         self.in_transition = False
         self.in_learn_mode = False
@@ -111,7 +133,7 @@ class cbus:
         }
 
     def begin(self):
-        print("** cbus begin")
+        self.logger.log("cbus begin")
         self.can.begin()
         self.config.begin()
         self.has_ui and self.indicate_mode(self.config.mode)
@@ -144,15 +166,18 @@ class cbus:
         self.has_ui and self.config.mode == MODE_FLIM and self.led_grn.pulse()
         self.sent_messages += 1
 
+        if self.history is not None:
+            self.history.add(msg)
+
     def set_can(self, can):
         if can and not isinstance(can, canio.canio):
-            raise TypeError("** error: can is not an instance of class canio")
+            raise TypeError("error: can is not an instance of class canio")
         else:
             self.can = can
 
     def set_config(self, config):
         if config and not isinstance(config, cbusconfig.cbusconfig):
-            raise TypeError("** error: config is not an instance of class cbusconfig")
+            raise TypeError("error: config is not an instance of class cbusconfig")
         else:
             set.config = config
 
@@ -160,21 +185,21 @@ class cbus:
         start_time = time.ticks_ms()
 
         if self.in_transition and time.ticks_ms() - self.timeout_timer >= 30000:
-            print("mode change timeout")
+            self.logger.log("mode change timeout")
             self.in_transition = False
             self.indicate_mode(self.config.mode)
             self.timeout_timer = 0
 
         if self.enumeration_required:
-            print("enumeration required")
+            self.logger.log("enumeration required")
             self.enumeration_required = False
             self.begin_enumeration()
 
         if self.enumerating and time.ticks_ms() - self.enum_start_time >= 100:
-            print("end of enumeration cycle")
+            self.logger.log("end of enumeration cycle")
             self.process_enumeration_responses()
             self.enumerating = False
-            print(f"canid is now {self.config.canid}")
+            self.logger.log(f"canid is now {self.config.canid}")
 
         if self.has_ui:
             self.led_grn.run()
@@ -185,13 +210,13 @@ class cbus:
                 self.switch.is_pressed()
                 and self.switch.current_state_duration() >= 6000
             ):
-                # print('cbus switch held for 6 seconds - blink')
+                # self.logger.log('cbus switch held for 6 seconds - blink')
                 self.indicate_mode(MODE_CHANGING)
 
             if self.switch.state_changed and not self.switch.is_pressed():
 
                 if self.switch.previous_state_duration >= 6000:
-                    print("cbus switch released after 6 seconds, mode change")
+                    self.logger.log("cbus switch released after 6 seconds, mode change")
                     self.in_transition = True
 
                     if self.config.mode == MODE_SLIM:
@@ -204,7 +229,7 @@ class cbus:
                     and self.switch.previous_state_duration >= 1000
                 ):
                     if self.config.mode == MODE_FLIM:
-                        print("flim renegotiate")
+                        self.logger.log("flim renegotiate")
                         self.init_flim()
 
                 if (
@@ -212,17 +237,22 @@ class cbus:
                     and self.switch.previous_state_duration >= 250
                 ):
                     if self.config.canid > 0:
-                        print("enumerate")
+                        self.logger.log("enumerate")
                         self.begin_enumeration()
 
         processed_msgs = 0
 
         while self.can.available() and processed_msgs < max_msgs:
-            # print(f'process: processing received messages, max = {max_msgs}, curr = {processed_msgs}')
+            # self.logger.log(f'process: processing received messages, max = {max_msgs}, curr = {processed_msgs}')
 
             msg = self.can.get_next_message()
 
             self.received_messages += 1
+
+            if self.history is not None:
+                if self.history.store_all_messages or self.message_opcode_is_event(msg):
+                    # self.logger.log("cbus adding to history")
+                    self.history.add(msg)
 
             if self.config.mode == MODE_FLIM:
                 # pulse green led
@@ -230,7 +260,7 @@ class cbus:
 
             if msg.get_canid() == self.config.canid and not self.enumerating:
                 # canid clash
-                print("canid clash")
+                self.logger.log("canid clash")
                 self.enumeration_required = True
 
             if msg.ext:
@@ -248,17 +278,17 @@ class cbus:
 
             if msg.len > 0:
                 try:
-                    # print(f'looking up opcode = {msg.data[0]:#x}')
+                    # self.logger.log(f'looking up opcode = {msg.data[0]:#x}')
                     self.func_tab.get(msg.data[0])(msg)
                 except TypeError:
-                    print(f"unhandled opcode = 0x{msg.data[0]:#x}")
+                    self.logger.log(f"unhandled opcode = 0x{msg.data[0]:#x}")
 
             else:
                 if msg.rtr and not self.enumerating:
-                    print("enum response requested by another node")
+                    self.logger.log("enum response requested by another node")
                     self.respond_to_enum_request()
                 elif self.enumerating:
-                    print("got enum response")
+                    self.logger.log("got enum response")
                     self.enum_responses[msg.get_canid()] = 1
                     self.num_enum_responses += 1
 
@@ -268,13 +298,13 @@ class cbus:
 
         if processed_msgs > 0:
             pass
-            # print(f'end of process, msgs = {processed_msgs}, run time = {run_time}')
-            # print()
+            # self.logger.log(f'end of process, msgs = {processed_msgs}, run time = {run_time}')
+            # self.logger.log()
 
         return processed_msgs
 
     def handle_accessory_event(self, msg):
-        # print('handle_accessory_event:')
+        # self.logger.log('handle_accessory_event:')
 
         if self.event_handler is not None:
             node_number, event_number = self.get_node_and_event_numbers_from_message(
@@ -283,11 +313,11 @@ class cbus:
             idx = self.config.find_existing_event(node_number, event_number)
 
             if idx > -1:
-                # print(f'calling user handler')
+                # self.logger.log(f'calling user handler')
                 self.event_handler(msg, idx)
 
     def handle_rqnp(self, msg):
-        print("RQNP")
+        self.logger.log("RQNP")
 
         if self.in_transition:
             omsg = canmessage.canmessage(self.config.canid, 8)
@@ -299,10 +329,10 @@ class cbus:
             omsg.data[5] = self.params[5]
             omsg.data[6] = self.params[6]
             omsg.data[7] = self.params[7]
-            self.can.send_message(omsg)
+            self.send_cbus_message(omsg)
 
     def handle_rqnpn(self, msg):
-        print("RQNPN")
+        self.logger.log("RQNPN")
 
         if self.get_node_number_from_message(msg) == self.config.node_number:
             paran = msg.data[3]
@@ -319,7 +349,7 @@ class cbus:
                 self.sendCMDERR(9)
 
     def handle_snn(self, msg):
-        print("SNN")
+        self.logger.log("SNN")
 
         if self.in_transition:
             self.config.set_node_number(self.get_node_number_from_message(msg))
@@ -335,7 +365,7 @@ class cbus:
             self.enumeration_required = True
 
     def handle_canid(self, msg):
-        print("CANID")
+        self.logger.log("CANID")
 
         if self.get_node_number_from_message(msg) == self.config.node_number:
             if msg.data[3] < 1 or msg.data[3] > 99:
@@ -344,7 +374,7 @@ class cbus:
                 self.config.set_canid(msg.data[3])
 
     def handle_enum(self, msg):
-        print("ENUM")
+        self.logger.log("ENUM")
 
         if (
             self.get_node_number_from_message(msg) == self.config.node_number
@@ -354,7 +384,7 @@ class cbus:
             self.begin_enumeration()
 
     def handle_nvrd(self, msg):
-        print("NVRD")
+        self.logger.log("NVRD")
 
         if self.get_node_number_from_message(msg) == self.config.node_number:
             if msg.data[3] > self.config.num_nvs:
@@ -369,7 +399,7 @@ class cbus:
                 self.send_cbus_message(omsg)
 
     def handle_nvset(self, msg):
-        print("NVSET")
+        self.logger.log("NVSET")
 
         if self.get_node_number_from_message(msg) == self.config.node_number:
             if msg.data[3] > self.config.num_nvs:
@@ -379,21 +409,21 @@ class cbus:
                 self.sendWRACK()
 
     def handle_nnlrn(self, msg):
-        print("NNLRN")
+        self.logger.log("NNLRN")
 
         if self.get_node_number_from_message(msg) == self.config.node_number:
             self.in_learn_mode = True
             self.params[8] = self.params[8] | 1 << 5
 
     def handle_nnuln(self, msg):
-        print("NNULN")
+        self.logger.log("NNULN")
 
         if self.get_node_number_from_message(msg) == self.config.node_number:
             self.in_learn_mode = False
             self.params[8] = self.params[8] % 1 << 5
 
     def handle_rqevn(self, msg):
-        print("RQEVN")
+        self.logger.log("RQEVN")
 
         if self.get_node_number_from_message(msg) == self.config.node_number:
             omsg = canmessage.canmessage(self.config.canid, 4)
@@ -404,7 +434,7 @@ class cbus:
             self.send_cbus_message(omsg)
 
     def handle_nerd(self, msg):
-        print("NERD")
+        self.logger.log("NERD")
 
         if self.get_node_number_from_message(msg) == self.config.node_number:
             omsg = canmessage.canmessage(self.config.canid, 8)
@@ -431,7 +461,7 @@ class cbus:
                     time.delay_ms(5)
 
     def handle_reval(self, msg):
-        print("REVAL")
+        self.logger.log("REVAL")
 
         if self.get_node_number_from_message(msg) == self.config.node_number:
             omsg = canmessage.canmessage(self.config.canid, 6)
@@ -444,7 +474,7 @@ class cbus:
             self.send_cbus_message(omsg)
 
     def handle_nnclr(self, msg):
-        print("NNCLR")
+        self.logger.log("NNCLR")
 
         if (
             self.get_node_number_from_message(msg) == self.config.node_number
@@ -454,7 +484,7 @@ class cbus:
             self.sendWRACK()
 
     def handle_nnevn(self, msg):
-        print("NNEVN")
+        self.logger.log("NNEVN")
 
         if self.get_node_number_from_message(msg) == self.config.node_number:
             omsg = canmessage.canmessage(self.config.canid, 4)
@@ -465,7 +495,7 @@ class cbus:
             self.send_cbus_message(omsg)
 
     def handle_qnn(self, msg):
-        print("QNN")
+        self.logger.log("QNN")
 
         if self.config.node_number > 0:
             omsg = canmessage.canmessage(self.config.canid, 6)
@@ -475,10 +505,10 @@ class cbus:
             omsg.data[3] = self.params[1]
             omsg.data[4] = self.params[3]
             omsg.data[5] = self.params[8]
-            self.can.send_message(omsg)
+            self.send_cbus_message(omsg)
 
     def handle_rqmn(self, msg):
-        print("RQMN")
+        self.logger.log("RQMN")
 
         if self.in_transition:
             omsg = canmessage.canmessage(self.config.canid, 8)
@@ -490,7 +520,7 @@ class cbus:
             self.send_cbus_message(omsg)
 
     def handle_evlrn(self, msg):
-        print("EVLRN")
+        self.logger.log("EVLRN")
 
         if self.in_learn_mode:
             if self.config.write_event(
@@ -504,7 +534,7 @@ class cbus:
                 self.sendCMDERR(10)
 
     def handle_evuln(self, msg):
-        print("EVULN")
+        self.logger.log("EVULN")
 
         if self.in_learn_mode:
             if self.config.clear_event(
@@ -516,13 +546,13 @@ class cbus:
                 self.sendCMDERR(10)
 
     def handle_dtxc(self, msg):
-        print("DTXC")
+        self.logger.log("DTXC")
 
         if self.long_message_handler is not None:
             self.long_message_handler.handle_long_message_fragment(msg)
 
     def send_WRACK(self):
-        print("send_WRACK")
+        self.logger.log("send_WRACK")
         omsg = canmessage.canmessage(self.config.canid, 3)
         omsg.data[0] = cbusdefs.OPC_WRACK
         omsg.data[1] = int(self.config.node_number / 256)
@@ -530,7 +560,7 @@ class cbus:
         self.send_cbus_message(omsg)
 
     def send_CMDERR(self, err):
-        print("send_CMDERR")
+        self.logger.log("send_CMDERR")
         omsg = canmessage.canmessage(self.config.canid, 4)
         omsg.data[0] = cbusdefs.OPC_WRACK
         omsg.data[1] = int(self.config.node_number / 256)
@@ -539,7 +569,7 @@ class cbus:
         self.send_cbus_message(omsg)
 
     def begin_enumeration(self):
-        print("begin_enumeration")
+        self.logger.log("begin_enumeration")
         omsg = canmessage.canmessage(self.config.canid, 0)
         omsg.rtr = True
         self.send_cbus_message(omsg)
@@ -550,13 +580,13 @@ class cbus:
         self.enum_start_time = time.ticks_ms()
 
     def process_enumeration_responses(self):
-        print("process_enumeration_responses")
+        self.logger.log("process_enumeration_responses")
         self.enum_start_time = 0
         self.enumerating = False
         new_id = -1
 
         if self.num_enum_responses == 0:
-            print("no enumeration responses received")
+            self.logger.log("no enumeration responses received")
             return
 
         for i in range(1, len(self.enum_responses)):
@@ -565,7 +595,7 @@ class cbus:
                 break
 
         if new_id > 0:
-            print(f"took unused can id = {new_id}")
+            self.logger.log(f"took unused can id = {new_id}")
             self.config.set_canid(new_id)
             omsg = canmessage.canmessage(self.config.canid, 3)
             omsg.data[0] = cbusdefs.OPC_NNACK
@@ -576,7 +606,7 @@ class cbus:
             self.sendCMDERR(7)
 
     def init_flim(self):
-        print("init_flim")
+        self.logger.log("init_flim")
         self.indicate_mode(MODE_CHANGING)
         self.in_transition = True
         self.timeout_timer = time.ticks_ms()
@@ -588,7 +618,7 @@ class cbus:
         self.send_cbus_message(omsg)
 
     def revert_slim(self):
-        print("revert slim")
+        self.logger.log("revert slim")
         omsg = canmessage.canmessage(self.config.canid, 3)
         omsg.data[0] = cbusdefs.OPC_NNREL
         omsg.data[1] = int(self.config.node_number / 256)
@@ -602,7 +632,7 @@ class cbus:
         self.indicate_mode(MODE_SLIM)
 
     def respond_to_enum_request(self):
-        print("respond to enum request")
+        self.logger.log("respond to enum request")
         omsg = canmessage.canmessage(self.config.canid, 0)
         self.send_cbus_message(omsg)
 
@@ -619,7 +649,7 @@ class cbus:
                 self.led_grn.off()
                 self.led_ylw.blink()
             else:
-                print("unknown mode")
+                self.logger.log("unknown mode")
 
             self.led_grn.run()
             self.led_ylw.run()
@@ -638,3 +668,12 @@ class cbus:
             ((msg.data[1] * 256) + msg.data[2]),
             ((msg.data[3] * 256) + msg.data[4]),
         )
+
+    def set_history(self, history):
+        if isinstance(history, cbushistory.cbushistory):
+            self.history = history
+        else:
+            self.logger.log("*error: history object is not an instance of cbushistory")
+
+    def message_opcode_is_event(self, msg):
+        return msg.data[0] in event_opcodes

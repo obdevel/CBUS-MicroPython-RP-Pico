@@ -1,12 +1,15 @@
 # canio.py
 
+import logger
+
 
 class canio:
 
     """a base class to represent a generic CAN bus interface"""
 
     def __init__(self):
-        print("** canio constructor")
+        self.logger = logger.logger()
+        self.logger.log("canio constructor")
         pass
 
     def begin(self):

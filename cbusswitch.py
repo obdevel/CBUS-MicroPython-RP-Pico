@@ -2,10 +2,12 @@
 
 import machine
 import time
+import logger
 
 
 class cbusswitch:
     def __init__(self, pin):
+        self.logger = logger.logger()
         self.pin = machine.Pin(pin, machine.Pin.IN, machine.Pin.PULL_UP)
         self.state = self.pin.value()
         self.previous_state = self.state
@@ -23,7 +25,7 @@ class cbusswitch:
                 time.ticks_ms() - self.previous_state_change_at
             )
             self.previous_state_change_at = time.ticks_ms()
-            print(
+            self.logger.log(
                 f"switch state changed, state = {self.state}, last duration = {self.previous_state_duration}"
             )
         else:
