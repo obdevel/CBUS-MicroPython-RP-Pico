@@ -58,7 +58,7 @@ class mcp2515(canio.canio):
 
     def __init__(self, osc=16000000, cs_pin=5, int_pin=1, bus=None, qsize=64):
         self.logger = logger.logger()
-        self.logger.log("mcp2515 constructor")
+        # self.logger.log("mcp2515 constructor")
 
         # call superclass constructor
         super().__init__()
@@ -335,7 +335,7 @@ class mcp2515(canio.canio):
         self.logger.log("internal_send_message ends")
 
     def reset(self):
-        self.logger.log("mcp2515 reset")
+        # self.logger.log("mcp2515 reset")
         msg = bytearray()
         msg.append(RESET_COMMAND)
         self.chip_select(True)
@@ -344,7 +344,7 @@ class mcp2515(canio.canio):
         time.sleep_ms(5)
 
     def begin(self):
-        self.logger.log("mcp2515 begin")
+        # self.logger.log("mcp2515 begin")
         self.reset()
 
         # check device is present
@@ -418,14 +418,14 @@ class mcp2515(canio.canio):
         # install ISR
         self.int_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.isr)
 
-        self.logger.log("mcp2515 init complete")
+        # self.logger.log("mcp2515 init complete")
 
     def available(self):
         # self.logger.log('available')
         return self.rx_queue.available()
 
     def send_message(self, msg):
-        self.logger.log("send_message")
+        # self.logger.log("send_message")
         msg.make_header()
 
         txb = 0
@@ -439,13 +439,13 @@ class mcp2515(canio.canio):
             self.logger.log("device buffer is full, queueing message for later")
 
             if self.tx_queue.enqueue(msg):
-                self.logger.log(" queued ok")
+                # self.logger.log("queued ok")
                 ret = True
             else:
                 self.logger.log("queue is full")
                 ret = False
 
-        self.logger.log("send message ends")
+        # self.logger.log("send message ends")
         return ret
 
     def get_next_message(self):

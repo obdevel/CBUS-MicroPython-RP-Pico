@@ -9,7 +9,7 @@ class canio:
 
     def __init__(self):
         self.logger = logger.logger()
-        self.logger.log("canio constructor")
+        # self.logger.log("canio constructor")
         pass
 
     def begin(self):

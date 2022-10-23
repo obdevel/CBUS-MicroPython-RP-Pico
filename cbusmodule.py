@@ -7,7 +7,7 @@ import logger
 class cbusmodule:
     def __init__(self):
         self.logger = logger.logger()
-        self.logger.log("cbusmodule constructor")
+        # self.logger.log("cbusmodule constructor")
         pass
 
     def initialise(self):

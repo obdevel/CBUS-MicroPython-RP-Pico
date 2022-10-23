@@ -15,6 +15,9 @@ MODE_SLIM = 0
 MODE_FLIM = 1
 MODE_CHANGING = 2
 
+MSGS_EVENTS_ONLY = 0
+MSGS_ALL = 1
+
 event_opcodes = [
     cbusdefs.OPC_ACON,
     cbusdefs.OPC_ACOF,
@@ -44,8 +47,7 @@ class cbus:
     ):
 
         self.logger = logger.logger()
-
-        self.logger.log("cbus constructor")
+        # self.logger.log("cbus constructor")
 
         if can and not isinstance(can, canio.canio):
             raise TypeError("error: can is not an instance of class canio")
@@ -80,6 +82,8 @@ class cbus:
         self.long_message_handler = None
         self.opcodes = []
 
+        self.consume_own_messages = False
+        self.messages_to_consume = MSGS_ALL
         self.history = None
 
         self.in_transition = False
@@ -160,6 +164,10 @@ class cbus:
         self.frame_handler = frame_handler
         self.opcodes = opcodes
 
+    def set_consume_own_messages(self, consume, which=MSGS_ALL):
+        self.consume_own_messages = consume
+        self.messages_to_consume = which
+
     def send_cbus_message(self, msg):
         msg.make_header()
         self.can.send_message(msg)
@@ -168,6 +176,9 @@ class cbus:
 
         if self.history is not None:
             self.history.add(msg)
+
+        if self.consume_own_messages:
+            self.can.rx_queue.enqueue(msg)
 
     def set_can(self, can):
         if can and not isinstance(can, canio.canio):
@@ -251,7 +262,6 @@ class cbus:
 
             if self.history is not None:
                 if self.history.store_all_messages or self.message_opcode_is_event(msg):
-                    # self.logger.log("cbus adding to history")
                     self.history.add(msg)
 
             if self.config.mode == MODE_FLIM:
@@ -677,3 +687,4 @@ class cbus:
 
     def message_opcode_is_event(self, msg):
         return msg.data[0] in event_opcodes
+

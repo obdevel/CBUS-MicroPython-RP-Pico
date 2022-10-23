@@ -21,9 +21,9 @@ class storage_backend:
 
     def __init__(self, storage_type=CONFIG_TYPE_FILES, ev_offset=0):
         self.logger = logger.logger()
-        self.logger.log(
-            f"storage_backend constructor, type = {storage_type}, offset = {ev_offset}"
-        )
+        # self.logger.log(
+        #     f"storage_backend constructor, type = {storage_type}, offset = {ev_offset}"
+        # )
         self.storage_type = storage_type
         self.ev_offset = ev_offset
 
@@ -52,18 +52,18 @@ class storage_backend:
 class files_backend(storage_backend):
     def __init__(self, ev_offset):
         self.logger = logger.logger()
-        self.logger.log("files_backend init")
+        # self.logger.log("files_backend init")
         super().__init__(self, ev_offset)
 
     def init_events(self, events):
-        print("files_backend init_events")
+        # print("files_backend init_events")
 
         f = open(events_file_name, "w")
         f.write(bytearray(events))
         f.close()
 
     def load_events(self, ev_size):
-        self.logger.log("files_backend load_events")
+        # self.logger.log("files_backend load_events")
 
         try:
             f = open(events_file_name, "r")
@@ -76,21 +76,21 @@ class files_backend(storage_backend):
         return bytearray(data.encode("ascii"))
 
     def store_events(self, events):
-        self.logger.log("files_backend store_events")
+        # self.logger.log("files_backend store_events")
 
         f = open(events_file_name, "w")
         f.write(bytearray(events))
         f.close()
 
     def init_nvs(self, nvs):
-        self.logger.log("files_backend init_nvs")
+        # self.logger.log("files_backend init_nvs")
 
         f = open(nvs_file_name, "w")
         f.write(bytearray(nvs))
         f.close()
 
     def load_nvs(self, num_nvs):
-        self.logger.log("files_backend load_nvs")
+        # self.logger.log("files_backend load_nvs")
 
         try:
             f = open(nvs_file_name, "r")
@@ -103,7 +103,7 @@ class files_backend(storage_backend):
         return bytearray(data.encode("ascii"))
 
     def store_nvs(self, nvs):
-        self.logger.log("files_backend store_nvs")
+        # self.logger.log("files_backend store_nvs")
 
         f = open(nvs_file_name, "w")
         f.write(bytearray(nvs))
@@ -113,7 +113,7 @@ class files_backend(storage_backend):
 class eeprom_backend(storage_backend):
     def __init__(self, ev_offset):
         self.logger = logger.logger()
-        self.logger.log(f"eeprom_backend init, offset = {ev_offset}")
+        # self.logger.log(f"eeprom_backend init, offset = {ev_offset}")
         super().__init__(self, ev_offset)
         self.eeprom = i2ceeprom.i2ceeprom()
 
@@ -148,10 +148,8 @@ class cbusconfig:
     def __init__(
         self, storage_type=CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4
     ):
-
         self.logger = logger.logger()
-
-        self.logger.log(f"cbusconfig constructor, storage type = {storage_type}")
+        # self.logger.log(f"cbusconfig constructor, storage type = {storage_type}")
 
         self.storage_type = storage_type
 
@@ -174,10 +172,8 @@ class cbusconfig:
         self.canid = 0
         self.node_number = 0
 
-    def begin(
-        self,
-    ):
-        self.logger.log("cbusconfig begin")
+    def begin(self):
+        # self.logger.log("cbusconfig begin")
 
         data = self.backend.load_events(len(self.events))
 

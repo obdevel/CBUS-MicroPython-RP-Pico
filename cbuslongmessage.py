@@ -20,7 +20,7 @@ CBUS_LONG_MESSAGE_TRUNCATED = 5
 class lm_context:
     def __init__(self):
         self.logger = logger.logger()
-        self.logger.log("lm_context constructor")
+        # self.logger.log("lm_context constructor")
 
         self.in_use = False
         self.streamid = 0
@@ -31,7 +31,7 @@ class lm_context:
 class receive_context(lm_context):
     def __init__(self):
         self.logger = logger.logger()
-        self.logger.log("receive_context constructor")
+        # self.logger.log("receive_context constructor")
         super().__init__()
 
         self.canid = 0
@@ -44,7 +44,7 @@ class receive_context(lm_context):
 class transmit_context(lm_context):
     def __init__(self):
         self.logger = logger.logger()
-        self.logger.log("transmit_context constructor")
+        # self.logger.log("transmit_context constructor")
         super().__init__()
 
         self.index = 0
@@ -58,7 +58,7 @@ class transmit_context(lm_context):
 class cbuslongmessage:
     def __init__(self, bus):
         self.logger = logger.logger()
-        self.logger.log("long message constructor")
+        # self.logger.log("long message constructor")
 
         if not isinstance(bus, cbus.cbus):
             raise TypeError("error: bus arg is not an instance of class cbus")
@@ -73,7 +73,7 @@ class cbuslongmessage:
         self.transmit_contexts = [transmit_context()]
 
     def subscribe(self, ids, handler):
-        self.logger.log(f"subscribe: {ids}")
+        self.logger.log(f"lm subscribe: {ids}")
         self.subscribed_ids = ids
         self.user_handler = handler
 
