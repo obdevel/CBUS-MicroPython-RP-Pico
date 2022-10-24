@@ -20,6 +20,7 @@ class logger:
 
     def log(self, msg="", severity=DEBUG):
         t = time.localtime()
-        tstr = f"{t[3]:02}:{t[4]:02}:{t[5]:02}  {msg}"
+        # tstr = f"{t[3]:02}:{t[4]:02}:{t[5]:02}  {msg}"
+        tstr = f"{time.ticks_ms():10} {msg}"
         sys.stdout.write(tstr)
         sys.stdout.write("\n")

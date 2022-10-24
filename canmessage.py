@@ -13,8 +13,8 @@ class canmessage:
         self.rtr = rtr
 
     def __str__(self):
-        rtr = "r" if self.rtr else ""
-        ext = "x" if self.ext else ""
+        rtr = "R" if self.rtr else ""
+        ext = "X" if self.ext else ""
         str = (
             f"[{self.id:x}] "
             + f"[{self.len:x}] [ "
@@ -33,8 +33,8 @@ class canmessage:
         return self.id & 0x7F
 
     def print(self, hex=True):
-        rtr = "r" if self.rtr else ""
-        ext = "x" if self.ext else ""
+        rtr = "R" if self.rtr else ""
+        ext = "X" if self.ext else ""
 
         if hex:
             print(

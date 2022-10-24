@@ -1,7 +1,7 @@
 # cbus.py
 
 import time
-
+import uasyncio as asyncio
 import canio
 import cbusconfig
 import cbusled
@@ -86,6 +86,8 @@ class cbus:
         self.messages_to_consume = MSGS_ALL
         self.history = None
 
+        self.gridconnect_server = None
+
         self.in_transition = False
         self.in_learn_mode = False
         self.enumerating = False
@@ -137,7 +139,7 @@ class cbus:
         }
 
     def begin(self):
-        self.logger.log("cbus begin")
+        # self.logger.log("cbus begin")
         self.can.begin()
         self.config.begin()
         self.has_ui and self.indicate_mode(self.config.mode)
@@ -170,6 +172,9 @@ class cbus:
 
     def send_cbus_message(self, msg):
         msg.make_header()
+        self.send_cbus_message_no_header_update(msg)
+
+    def send_cbus_message_no_header_update(self, msg):
         self.can.send_message(msg)
         self.has_ui and self.config.mode == MODE_FLIM and self.led_grn.pulse()
         self.sent_messages += 1
@@ -263,6 +268,9 @@ class cbus:
             if self.history is not None:
                 if self.history.store_all_messages or self.message_opcode_is_event(msg):
                     self.history.add(msg)
+
+            if self.gridconnect_server is not None:
+                self.gridconnect_server.output_queue.enqueue(msg)
 
             if self.config.mode == MODE_FLIM:
                 # pulse green led
@@ -688,3 +696,6 @@ class cbus:
     def message_opcode_is_event(self, msg):
         return msg.data[0] in event_opcodes
 
+    def set_gcserver(self, server):
+        import gcserver
+        self.gridconnect_server = server

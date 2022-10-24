@@ -74,4 +74,3 @@ class cbushistory:
                         if self.history[i].insert_time > (time.ticks_ms() - within):
                             return True
         return False
-

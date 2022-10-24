@@ -68,7 +68,6 @@ class mymodule(cbusmodule.cbusmodule):
         self.cbus.set_params(self.module_params)
         self.cbus.set_event_handler(self.event_handler)
         self.cbus.set_frame_handler(self.frame_handler)
-        self.cbus.set_consume_own_messages(False)
 
         self.cbus.begin()
 
@@ -88,17 +87,30 @@ class mymodule(cbusmodule.cbusmodule):
         # consume own messages
         self.cbus.set_consume_own_messages(False)
 
+        # gcserver
+        try:
+            import gcserver
+            self.logger.log("device is Pico W")
+            ssid = "HUAWEI-B311-E39A"
+            password = "33260100"
+            self.gcserver = gcserver.gcserver(self.cbus, ssid, password)
+            self.gcserver.connect_wifi()
+            self.is_picow = True
+        except:
+            self.logger.log("device is not Pico W")
+            self.is_picow = False
+
         # some test messages
         self.msg1 = canmessage.canmessage(99, 5, [0x90, 0, 22, 0, 25])
         self.msg2 = canmessage.canmessage(99, 5, [0xE9, 1, 0, 0, 24, 0, 0, 0])
         self.msg3 = canmessage.canmessage(4, 5, [0x91, 0, 22, 0, 23, 0, 0, 0])
-        self.msg4 = canmessage.canmessage(555, 0, [], True, False)
-        self.msgx = canmessage.canmessage(444, 33, [], False, True)
+        self.msg4 = canmessage.canmessage(126, 0, [], True, False)
+        self.msgx = canmessage.canmessage(126, 33, [], False, True)
 
-        self.lm0 = canmessage.canmessage(333, 8, [0xE9, 2, 0, 0, 11, 0, 0, 0])
-        self.lm1 = canmessage.canmessage(333, 8, [0xE9, 2, 1, 72, 101, 108, 108, 111])
-        self.lm2 = canmessage.canmessage(333, 8, [0xE9, 2, 2, 32, 119, 111, 114, 108])
-        self.lm3 = canmessage.canmessage(333, 8, [0xE9, 2, 3, 100, 0, 0, 0, 0])
+        self.lm0 = canmessage.canmessage(126, 8, [0xE9, 2, 0, 0, 11, 0, 0, 0])
+        self.lm1 = canmessage.canmessage(126, 8, [0xE9, 2, 1, 72, 101, 108, 108, 111])
+        self.lm2 = canmessage.canmessage(126, 8, [0xE9, 2, 2, 32, 119, 111, 114, 108])
+        self.lm3 = canmessage.canmessage(126, 8, [0xE9, 2, 3, 100, 0, 0, 0, 0])
 
         # *** module initialisation complete
 
@@ -123,14 +135,14 @@ class mymodule(cbusmodule.cbusmodule):
 
         while True:
             c = self.cbus.process()
-            await asyncio.sleep_ms(1)
+            await asyncio.sleep_ms(10)
 
     async def long_message_coro(self):
         self.logger.log("long_message_coro start")
 
         while True:
             self.lm.process()
-            await asyncio.sleep_ms(10)
+            await asyncio.sleep_ms(50)
 
     async def history_coro(self):
         self.logger.log("event history coro start")
@@ -139,9 +151,17 @@ class mymodule(cbusmodule.cbusmodule):
             self.history.reap()
             await asyncio.sleep_ms(100)
 
+    async def gcserver_coro(self):
+        self.logger.log("gcserver coro start")
+        
+        while True:
+            self.gcserver.manage_output_queue()
+            await asyncio.sleep(20)
+
     async def blink_led_coro(self, lock):
         self.logger.log("blink_led_coro start")
-        self.led = machine.Pin(25, machine.Pin.OUT)
+        # self.led = machine.Pin(25, machine.Pin.OUT)
+        self.led = machine.Pin("LED", machine.Pin.OUT)
 
         while True:
             await lock.acquire()
@@ -171,14 +191,14 @@ class mymodule(cbusmodule.cbusmodule):
 
             lock.release()
 
-    async def main_loop_coro(self):
+    async def module_main_loop_coro(self):
         self.logger.log("main loop coro start")
         
         while True:
             await asyncio.sleep_ms(50)
 
             if self.history.find_event(22, 23, 2, 50):
-                self.logger.log("** found event in history")
+                self.logger.log("** found event (22, 23) in history")
 
     # ***
     # *** module main entry point
@@ -197,12 +217,17 @@ class mymodule(cbusmodule.cbusmodule):
         self.th = asyncio.create_task(self.history_coro())
         self.tb = asyncio.create_task(self.blink_led_coro(self.b_lock))
         self.ta = asyncio.create_task(self.activity_coro(self.a_lock))
-        self.tm = asyncio.create_task(self.main_loop_coro())
+        self.tm = asyncio.create_task(self.module_main_loop_coro())
 
-        repl = asyncio.create_task(aiorepl.task(globals()))
+        # start gridconnect server coros if device is Pico W
+        if (self.is_picow):
+            self.tg = asyncio.create_task(asyncio.start_server(self.gcserver.client_connected_cb, self.gcserver.host, self.gcserver.port))
+            self.tq = asyncio.create_task(self.gcserver.manage_output_queue())
 
         self.logger.log("asyncio is now running the module main loop and co-routines")
 
+        # start async REPL and wait for complete
+        repl = asyncio.create_task(aiorepl.task(globals()))
         await asyncio.gather(repl)
 
 
@@ -212,6 +237,18 @@ def control(state):
     else:
         await mod.a_lock.acquire()
 
+def conf():
+    mod.cbus.config.set_mode(1)
+    mod.cbus.config.set_canid(5)
+    mod.cbus.config.set_node_number(333)
+
+    mod.cbus.config.events[1] = 22
+    mod.cbus.config.events[3] = 23
+    mod.cbus.config.events[4] = 1
+    mod.cbus.config.events[5] = 2
+    mod.cbus.config.events[6] = 3
+    mod.cbus.config.events[7] = 4
+    mod.cbus.config.backend.store_events(mod.cbus.config.events)
 
 mod = mymodule()
 mod.initialise()

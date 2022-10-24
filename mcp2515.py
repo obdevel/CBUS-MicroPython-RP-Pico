@@ -56,7 +56,7 @@ class mcp2515(canio.canio):
 
     """a canio derived class for use with an MCP2515 CAN controller device"""
 
-    def __init__(self, osc=16000000, cs_pin=5, int_pin=1, bus=None, qsize=64):
+    def __init__(self, osc=16000000, cs_pin=5, int_pin=1, bus=None, rxq_size=64, txq_size = 16):
         self.logger = logger.logger()
         # self.logger.log("mcp2515 constructor")
 
@@ -67,8 +67,8 @@ class mcp2515(canio.canio):
         self.osc = osc
 
         # create message buffers
-        self.rx_queue = circularQueue.circularQueue(qsize)
-        self.tx_queue = circularQueue.circularQueue(qsize)
+        self.rx_queue = circularQueue.circularQueue(rxq_size)
+        self.tx_queue = circularQueue.circularQueue(txq_size)
 
         # init chip select and interrupt pins
         self.cs_pin = machine.Pin(cs_pin, machine.Pin.OUT)

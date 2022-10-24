@@ -179,7 +179,7 @@ class cbusconfig:
 
         if data is None:
             self.backend.init_events(self.events)
-            data = self.backend.load_events()
+            data = self.backend.load_events(self.num_events)
 
         self.events = data
 
@@ -333,7 +333,7 @@ class cbusconfig:
             if print_all or (self.events[i * self.event_size] < 0xFF):
                 print(f"{i:3} = ", end="")
                 for j in range(0, self.event_size):
-                    self.logger.log(f"{self.events[(i*self.event_size)+j]:3}", end=" ")
+                    self.logger.log(f"{self.events[(i*self.event_size)+j]:3}")
                 self.logger.log()
 
     def print_nvs(self):
