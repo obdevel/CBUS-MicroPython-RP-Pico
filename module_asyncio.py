@@ -79,10 +79,10 @@ class mymodule(cbusmodule.cbusmodule):
 
         self.lm = cbuslongmessage.cbuslongmessage(self.cbus)
         self.lm_ids = [1, 2, 3, 4, 5]
-        self.lm.subscribe(self.lm_ids, self.long_message_handler)
+        self.lm.subscribe(self.lm_ids, self.long_message_handler, receive_timeout=30000)
 
         # cbus event history
-        self.history = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=120_000)
+        self.history = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=1000)
 
         # consume own messages
         self.cbus.set_consume_own_messages(False)
@@ -104,8 +104,9 @@ class mymodule(cbusmodule.cbusmodule):
         self.msg1 = canmessage.canmessage(99, 5, [0x90, 0, 22, 0, 25])
         self.msg2 = canmessage.canmessage(99, 5, [0xE9, 1, 0, 0, 24, 0, 0, 0])
         self.msg3 = canmessage.canmessage(4, 5, [0x91, 0, 22, 0, 23, 0, 0, 0])
-        self.msg4 = canmessage.canmessage(126, 0, [], True, False)
-        self.msgx = canmessage.canmessage(126, 33, [], False, True)
+        self.msg4 = canmessage.canmessage(4, 5, [0x90, 0, 22, 0, 23, 0, 0, 0])
+        self.msg5 = canmessage.canmessage(126, 0, [], True, False)
+        self.msg6 = canmessage.canmessage(126, 33, [], False, True)
 
         self.lm0 = canmessage.canmessage(126, 8, [0xE9, 2, 0, 0, 11, 0, 0, 0])
         self.lm1 = canmessage.canmessage(126, 8, [0xE9, 2, 1, 72, 101, 108, 108, 111])
@@ -160,8 +161,11 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def blink_led_coro(self, lock):
         self.logger.log("blink_led_coro start")
-        # self.led = machine.Pin(25, machine.Pin.OUT)
-        self.led = machine.Pin("LED", machine.Pin.OUT)
+
+        if (self.is_picow):
+            self.led = machine.Pin("LED", machine.Pin.OUT)
+        else:
+            self.led = machine.Pin(25, machine.Pin.OUT)
 
         while True:
             await lock.acquire()
@@ -193,19 +197,19 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def module_main_loop_coro(self):
         self.logger.log("main loop coro start")
-        
-        while True:
-            await asyncio.sleep_ms(50)
 
-            if self.history.find_event(22, 23, 2, 50):
-                self.logger.log("** found event (22, 23) in history")
+        while True:
+            if self.history.event_exists(22, 23, cbushistory.POLARITY_ON, 250) and self.history.event_exists(22, 23, cbushistory.POLARITY_OFF, 250):
+                self.logger.log("** found events in history")
+
+            await asyncio.sleep_ms(25)
 
     # ***
     # *** module main entry point
     # ***
 
-    async def main(self):
-        self.logger.log("main start")
+    async def run(self):
+        self.logger.log("run start")
 
         self.a_lock = Lock()
         self.b_lock = Lock()
@@ -226,7 +230,7 @@ class mymodule(cbusmodule.cbusmodule):
 
         self.logger.log("asyncio is now running the module main loop and co-routines")
 
-        # start async REPL and wait for complete
+        # start async REPL and wait for exit
         repl = asyncio.create_task(aiorepl.task(globals()))
         await asyncio.gather(repl)
 
@@ -250,6 +254,7 @@ def conf():
     mod.cbus.config.events[7] = 4
     mod.cbus.config.backend.store_events(mod.cbus.config.events)
 
+
 mod = mymodule()
 mod.initialise()
-asyncio.run(mod.main())
+asyncio.run(mod.run())

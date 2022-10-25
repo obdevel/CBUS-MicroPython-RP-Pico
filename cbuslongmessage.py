@@ -72,10 +72,11 @@ class cbuslongmessage:
         self.receive_contexts = [receive_context()]
         self.transmit_contexts = [transmit_context()]
 
-    def subscribe(self, ids, handler):
+    def subscribe(self, ids, handler, receive_timeout=RECEIVE_TIMEOUT):
         self.logger.log(f"lm subscribe: {ids}")
         self.subscribed_ids = ids
         self.user_handler = handler
+        self.receive_timeout = receive_timeout
 
     def send_long_message(self, message, streamid, priority=0x0B):
         # self.logger.log(f'sending long message = {message}')
@@ -141,7 +142,7 @@ class cbuslongmessage:
             if (
                 self.receive_contexts[j].in_use
                 and time.ticks_ms() - self.receive_contexts[j].last_fragment_received_at
-                > RECEIVE_TIMEOUT
+                > self.receive_timeout
             ):
                 self.logger.log(f"error: receive context {j} timed out")
                 self.user_handler(

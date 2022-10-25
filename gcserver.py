@@ -11,27 +11,26 @@ import canio
 import canmessage
 import circularQueue
 
+
 class gcserver:
 
-#     def __new__(cls):
-#         if not hasattr(cls, "instance"):
-#             cls.instance = super(gcserver, cls).__new__(cls)
-#         return cls.instance
+    #     def __new__(cls):
+    #         if not hasattr(cls, "instance"):
+    #             cls.instance = super(gcserver, cls).__new__(cls)
+    #         return cls.instance
 
-    def __init__(self, bus=None, ssid="", password="", host="", port=5550):
+    def __init__(self, bus=None, ssid="", password="", port=5550):
         self.logger = logger.logger()
         # self.logger.log("gcserver: constructor")
         self.ssid = ssid
         self.password = password
-        self.host = host
+        self.host = None
         self.port = port
         self.ip = None
         self.server = None
-        self.wifi_is_connected = False
-        self.num_active_clients = 0
         self.gc = ""
         self.clients = [None]
-        self.output_queue = circularQueue.circularQueue(32)
+        self.output_queue = circularQueue.circularQueue(16)
 
         if isinstance(bus, cbus.cbus):
             self.bus = bus
@@ -49,17 +48,17 @@ class gcserver:
         self.logger.log("gcserver: waiting for wifi...")
 
         while not self.wlan.isconnected():
-            print(".", end = "")
             time.sleep_ms(500)
 
-        print()
         self.ip = self.wlan.ifconfig()[0]
         self.logger.log(f"gcserver: connected to wifi, address = {self.ip}")
         self.host = self.ip
 
     async def client_connected_cb(self, reader, writer):
-        peer = writer.get_extra_info('peername')
-        self.logger.log(f"gcserver: connection from ip = {peer[0]}, port = {peer[1]}")
+        peer = writer.get_extra_info("peername")
+        self.logger.log(
+            f"gcserver: new connection from client, ip = {peer[0]}, port = {peer[1]}"
+        )
 
         found = False
 
@@ -75,27 +74,41 @@ class gcserver:
             idx += 1
 
         self.logger.log(f"gcserver: using client idx = {idx}")
+
         data = None
+        currgc = ""
 
         while True:
             try:
-                data = await reader.read(32)
+                data = await reader.read(64)
             except:
                 self.logger.log("socket exception")
                 break
 
             if data:
-                message = data.decode()
-                self.logger.log(f"gcserver: received '{message}' len {len(message)} from {peer}")
-                self.gc += message
+                data_decoded = data.decode()
+                self.logger.log(
+                    f"gcserver: received |{data_decoded}| len = {len(data_decoded)} from {peer}"
+                )
 
-                if self.gc[-1] == ";":
-                    m = self.GCtoCAN(self.gc)
-                    self.logger.log(f"converted = {m.__str__()}")
-                    self.bus.send_cbus_message_no_header_update(m)
-                    self.gc = ""
+                for ch in data_decoded:
+
+                    if not ch.upper() in "XSNR0123456789ABCDEF;:":
+                        continue
+
+                    if ch == ":":
+                        currgc = ch
+                    else:
+                        currgc += ch
+
+                    if ch == ";":
+                        # self.logger.log(f"gcserver: converting {currgc}")
+                        m = self.GCtoCAN(currgc)
+                        # self.logger.log(f"gcserver: converted GC msg to {m.__str__()}")
+                        self.bus.send_cbus_message_no_header_update(m)
+                        # self.bus.can.rx_queue.enqueue(m)
             else:
-                self.logger.log(f"gcserver: client idx = {idx} has disappeared, closing socket")
+                self.logger.log(f"gcserver: client idx = {idx} has gone, closing stream")
                 break
 
         writer.close()
@@ -115,22 +128,21 @@ class gcserver:
     async def send_message(self, msg):
         gc = self.CANtoGC(msg)
         count = 0
-        
+
         for idx in range(len(self.clients)):
             if self.clients[idx] is not None:
                 self.clients[idx].write(gc)
                 await self.clients[idx].drain()
                 count += 1
-                
+
         self.logger.log(f"gcserver: sent message to {count} client(s)")
 
     def print_clients(self):
         for idx in range(len(self.clients)):
             if self.clients[idx] is not None:
-                self.logger.log(f"[{idx}] {self.clients[idx].get_extra_info('peername')}")
-
-    def stop(self):
-        pass
+                self.logger.log(
+                    f"[{idx}] {self.clients[idx].get_extra_info('peername')}"
+                )
 
     def CANtoGC(self, msg):
 
@@ -141,12 +153,11 @@ class gcserver:
         for i in range(msg.len):
             gc += f"{msg.data[i]:02X}"
 
-        gc+= ";"
+        gc += ";"
         return gc
 
     def GCtoCAN(self, gc):
 
-        # gc = gc.decode()
         msg = canmessage.canmessage()
         msg.ext = True if (gc[1] == "X") else False
         pos = gc.find("R")
@@ -160,15 +171,12 @@ class gcserver:
         id = "0X" + gc[2:pos]
         msg.id = int(id)
 
-        data = gc[pos+1:-1]
-        msg.len = int(len(data)/2)
-        # print(f"data = {data}, len = {len(data)}")
+        data = gc[pos + 1 : -1]
+        msg.len = int(len(data) / 2)
 
         for i in range(msg.len):
             j = int(i)
-            t = "0x" + data[j*2:(j*2)+2]
-            # print(f"item = {t}")
+            t = "0x" + data[j * 2 : (j * 2) + 2]
             msg.data[i] = int(t)
 
         return msg
-

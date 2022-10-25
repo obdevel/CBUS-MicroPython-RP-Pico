@@ -285,9 +285,9 @@ class mcp2515(canio.canio):
             self.txb_is_free[txb] = True
 
     def internal_send_message(self, msg, txb):
-        self.logger.log(
-            f"internal_send_message using txb = {txb}, id = {msg.id:#x}, len = {msg.len}"
-        )
+#         self.logger.log(
+#             f"internal_send_message using txb = {txb}, id = {msg.id:#x}, len = {msg.len}"
+#         )
 
         self.chip_select(True)
 
@@ -295,7 +295,7 @@ class mcp2515(canio.canio):
         self.bus.write(load_tx_buffer_command)
 
         if msg.ext:
-            self.logger.log("extended message")
+            # self.logger.log("extended message")
             v = msg.id >> 21
             self.bus.write(bytearray(v))
             v = (msg.id >> 13) & 0xE0
@@ -306,7 +306,7 @@ class mcp2515(canio.canio):
             self.bus.write(bytearray(v))
             v = msg.id & 0xFF
         else:
-            self.logger.log("standard message")
+            # self.logger.log("standard message")
             v = msg.id >> 3
             self.bus.write(bytearray(v))
             v = (msg.id << 5) & 0xE0
@@ -332,7 +332,7 @@ class mcp2515(canio.canio):
         self.bus.write(bytearray(send_command))
         self.chip_select(False)
 
-        self.logger.log("internal_send_message ends")
+        # self.logger.log("internal_send_message ends")
 
     def reset(self):
         # self.logger.log("mcp2515 reset")
@@ -431,18 +431,18 @@ class mcp2515(canio.canio):
         txb = 0
 
         if self.txb_is_free[txb]:
-            self.logger.log("device buffer is free, sending message immediately")
+            # self.logger.log("device buffer is free, sending message immediately")
             self.internal_send_message(msg, txb)
             self.txb_is_free[txb] = False
             ret = True
         else:
-            self.logger.log("device buffer is full, queueing message for later")
+            # self.logger.log("device buffer is full, queueing message for later")
 
             if self.tx_queue.enqueue(msg):
                 # self.logger.log("queued ok")
                 ret = True
             else:
-                self.logger.log("queue is full")
+                # self.logger.log("queue is full")
                 ret = False
 
         # self.logger.log("send message ends")
