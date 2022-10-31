@@ -46,19 +46,22 @@ class gcserver:
         self.wlan.active(True)
         self.wlan.connect(self.ssid, self.password)
         self.logger.log("gcserver: waiting for wifi...")
+        t = time.ticks_ms()
 
-        while not self.wlan.isconnected():
+        while not self.wlan.isconnected() and t > time.ticks_ms() - 5000:
             time.sleep_ms(500)
 
-        self.ip = self.wlan.ifconfig()[0]
-        self.logger.log(f"gcserver: connected to wifi, address = {self.ip}")
-        self.host = self.ip
+        if self.wlan.isconnected():
+            self.ip = self.wlan.ifconfig()[0]
+            self.channel = self.wlan.config('channel')
+            self.logger.log(f"gcserver: connected to wifi, channel = {self.channel}, address = {self.ip}")
+            self.host = self.ip
+        else:
+            self.logger.log("gcserver: failed to connect to wifi")
 
     async def client_connected_cb(self, reader, writer):
         peer = writer.get_extra_info("peername")
-        self.logger.log(
-            f"gcserver: new connection from client, ip = {peer[0]}, port = {peer[1]}"
-        )
+        self.logger.log(f"gcserver: new connection from client, ip = {peer[0]}, port = {peer[1]}")
 
         found = False
 
@@ -104,11 +107,12 @@ class gcserver:
                     if ch == ";":
                         # self.logger.log(f"gcserver: converting {currgc}")
                         m = self.GCtoCAN(currgc)
-                        # self.logger.log(f"gcserver: converted GC msg to {m.__str__()}")
+                        self.logger.log(f"gcserver: converted GC msg to {m.__str__()}")
                         self.bus.send_cbus_message_no_header_update(m)
                         # self.bus.can.rx_queue.enqueue(m)
+                        await asyncio.sleep_ms(1)
             else:
-                self.logger.log(f"gcserver: client idx = {idx} has gone, closing stream")
+                self.logger.log(f"gcserver: client idx = {idx} disconnected, closing stream")
                 break
 
         writer.close()
@@ -146,8 +150,10 @@ class gcserver:
 
     def CANtoGC(self, msg):
 
+        tid = msg.id << 5
+
         gc = ":"
-        gc += f"X{msg.id:X}" if msg.ext else f"S{msg.id:X}"
+        gc += f"X{tid:04X}" if msg.ext else f"S{tid:04X}"
         gc += "R" if msg.rtr else "N"
 
         for i in range(msg.len):
@@ -160,16 +166,16 @@ class gcserver:
 
         msg = canmessage.canmessage()
         msg.ext = True if (gc[1] == "X") else False
-        pos = gc.find("R")
+        pos = gc.find("N")
 
         if pos == -1:
-            msg.rtr = False
-            pos = gc.find("N")
-        else:
             msg.rtr = True
+            pos = gc.find("R")
+        else:
+            msg.rtr = False
 
         id = "0X" + gc[2:pos]
-        msg.id = int(id)
+        msg.id = int(id) >> 5
 
         data = gc[pos + 1 : -1]
         msg.len = int(len(data) / 2)

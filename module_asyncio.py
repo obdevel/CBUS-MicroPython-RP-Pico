@@ -22,7 +22,6 @@ class mymodule(cbusmodule.cbusmodule):
     def __init__(self):
         super().__init__()
         self.logger = logger.logger()
-        # self.logger.log("mymodule constructor")
 
     def initialise(self):
         # ***
@@ -115,13 +114,9 @@ class mymodule(cbusmodule.cbusmodule):
 
         # *** module initialisation complete
 
-        self.logger.log(
-            f"initialise complete, time = {time.ticks_ms() - start_time} ms"
-        )
+        self.logger.log(f"initialise complete, time = {time.ticks_ms() - start_time} ms")
         self.logger.log()
-        self.logger.log(
-            f"module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}"
-        )
+        self.logger.log(f"module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}")
         self.logger.log(f"free memory = {self.cbus.config.free_memory()} bytes")
         self.logger.log()
 
@@ -180,7 +175,7 @@ class mymodule(cbusmodule.cbusmodule):
         send_lm = True
 
         while True:
-            await asyncio.sleep_ms(2000)
+            await asyncio.sleep_ms(5000)
             await lock.acquire()
 
             if send_lm:
@@ -197,12 +192,16 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def module_main_loop_coro(self):
         self.logger.log("main loop coro start")
+        delay = 100
 
         while True:
-            if self.history.event_exists(22, 23, cbushistory.POLARITY_ON, 250) and self.history.event_exists(22, 23, cbushistory.POLARITY_OFF, 250):
-                self.logger.log("** found events in history")
+            if self.history.sequence_received(((0, 22, 23), (1, 22, 23)), order=cbushistory.ORDER_GIVEN, within=1000, timespan=1000):
+                self.logger.log("** found sequence in history")
+                delay = 950
+            else:
+                delay = 100
 
-            await asyncio.sleep_ms(25)
+            await asyncio.sleep_ms(delay)
 
     # ***
     # *** module main entry point

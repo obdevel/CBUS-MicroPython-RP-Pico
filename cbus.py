@@ -266,8 +266,7 @@ class cbus:
             self.received_messages += 1
 
             if self.history is not None:
-                if self.history.store_all_messages or self.message_opcode_is_event(msg):
-                    self.history.add(msg)
+                self.history.add(msg)
 
             if self.gridconnect_server is not None:
                 self.gridconnect_server.output_queue.enqueue(msg)
