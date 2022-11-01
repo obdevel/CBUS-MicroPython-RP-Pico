@@ -70,6 +70,9 @@ class mymodule(cbusmodule.cbusmodule):
 
         self.cbus.begin()
 
+        self.lm = None
+        self.history = None
+
         # ***
         # *** end of bare minimum init
         # ***
@@ -98,6 +101,16 @@ class mymodule(cbusmodule.cbusmodule):
         except:
             self.logger.log("device is not Pico W")
             self.is_picow = False
+
+        # get NTP network time
+        if self.is_picow:
+            try:
+                import ntptime
+                self.logger.log("getting NTP time ...")
+                tt = ntptime.time()
+                self.logger.log(f"NTP time = {tt}, local")
+            except:
+                print("ntptime.py module not available")
 
         # some test messages
         self.msg1 = canmessage.canmessage(99, 5, [0x90, 0, 22, 0, 25])
@@ -132,27 +145,6 @@ class mymodule(cbusmodule.cbusmodule):
         while True:
             c = self.cbus.process()
             await asyncio.sleep_ms(10)
-
-    async def long_message_coro(self):
-        self.logger.log("long_message_coro start")
-
-        while True:
-            self.lm.process()
-            await asyncio.sleep_ms(50)
-
-    async def history_coro(self):
-        self.logger.log("event history coro start")
-
-        while True:
-            self.history.reap()
-            await asyncio.sleep_ms(100)
-
-    async def gcserver_coro(self):
-        self.logger.log("gcserver coro start")
-        
-        while True:
-            self.gcserver.manage_output_queue()
-            await asyncio.sleep(20)
 
     async def blink_led_coro(self, lock):
         self.logger.log("blink_led_coro start")
@@ -197,7 +189,7 @@ class mymodule(cbusmodule.cbusmodule):
         while True:
             if self.history.sequence_received(((0, 22, 23), (1, 22, 23)), order=cbushistory.ORDER_GIVEN, within=1000, timespan=1000):
                 self.logger.log("** found sequence in history")
-                delay = 950
+                delay = 1000
             else:
                 delay = 100
 
@@ -216,16 +208,20 @@ class mymodule(cbusmodule.cbusmodule):
         await self.a_lock.acquire()
 
         self.tc = asyncio.create_task(self.cbus_coro())
-        self.tl = asyncio.create_task(self.long_message_coro())
-        self.th = asyncio.create_task(self.history_coro())
         self.tb = asyncio.create_task(self.blink_led_coro(self.b_lock))
         self.ta = asyncio.create_task(self.activity_coro(self.a_lock))
         self.tm = asyncio.create_task(self.module_main_loop_coro())
 
+        if self.lm is not None:
+            self.tl = asyncio.create_task(self.lm.process())
+
+        if self.history is not None:
+            self.th = asyncio.create_task(self.history.reaper())
+
         # start gridconnect server coros if device is Pico W
         if (self.is_picow):
             self.tg = asyncio.create_task(asyncio.start_server(self.gcserver.client_connected_cb, self.gcserver.host, self.gcserver.port))
-            self.tq = asyncio.create_task(self.gcserver.manage_output_queue())
+            self.tq = asyncio.create_task(self.gcserver.queue_manager())
 
         self.logger.log("asyncio is now running the module main loop and co-routines")
 

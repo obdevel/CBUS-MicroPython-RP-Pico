@@ -3,6 +3,7 @@
 import time
 import logger
 import canmessage
+import uasyncio as asyncio
 
 POLARITY_OFF = 0
 POLARITY_ON = 1
@@ -61,10 +62,12 @@ class cbushistory:
         if len(self.history) < self.max_size:
             self.history.append(historyitem(msg))
 
-    def reap(self):
-        for i in range(len(self.history) - 1, -1, -1):
-            if self.history[i].insert_time + self.time_to_live < time.ticks_ms():
-                del self.history[i]
+    async def reaper(self):
+        while True:
+            for i in range(len(self.history) - 1, -1, -1):
+                if self.history[i].insert_time + self.time_to_live < time.ticks_ms():
+                    del self.history[i]
+            await asyncio.sleep_ms(20)
 
     def count(self):
         c = 0
@@ -159,7 +162,7 @@ class cbushistory:
 
         return latest_time
 
-    def sequence_received(self, events, order=ORDER_ANY, within=TIME_ANY, timespan=TIME_ANY):
+    def sequence_received(self, events=[], order=ORDER_ANY, within=TIME_ANY, timespan=TIME_ANY):
         times = []
         ret = True
 

@@ -1,6 +1,7 @@
 # cbuslongmessage.py
 
 import time
+import uasyncio as asyncio
 import cbus
 import cbusdefs
 import canmessage
@@ -136,58 +137,56 @@ class cbuslongmessage:
         self.transmit_contexts[j].last_fragement_sent = time.ticks_ms
         # self.logger.log('sent long message header packet')
 
-    def process(self):
+    async def process(self):
+        while True:
 
-        for j in range(len(self.receive_contexts)):
-            if (
-                self.receive_contexts[j].in_use
-                and time.ticks_ms() - self.receive_contexts[j].last_fragment_received_at
-                > self.receive_timeout
-            ):
-                self.logger.log(f"error: receive context {j} timed out")
-                self.user_handler(
-                    self.receive_contexts[j].buffer,
-                    self.receive_contexts[j].streamid,
-                    CBUS_LONG_MESSAGE_TIMEOUT_ERROR,
-                )
-                self.receive_contexts[j].in_use = False
-
-        if (
-            self.transmit_contexts[self.current_context].in_use
-            and time.ticks_ms()
-            - self.transmit_contexts[self.current_context].last_fragment_sent
-            > TRANSMIT_DELAY
-        ):
-            # print(f'sending next fragment in send context = {self.current_context}')
-
-            msg = canmessage.canmessage(self.bus.config.canid, 8)
-            msg.data[0] = cbusdefs.OPC_DTXC
-            msg.data[1] = self.transmit_contexts[j].streamid
-            msg.data[2] = self.transmit_contexts[j].sequence_num
-
-            for c in range(5):
+            for j in range(len(self.receive_contexts)):
                 if (
-                    self.transmit_contexts[self.current_context].index
-                    >= self.transmit_contexts[self.current_context].message_size
+                    self.receive_contexts[j].in_use
+                    and time.ticks_ms() - self.receive_contexts[j].last_fragment_received_at
+                    > self.receive_timeout
                 ):
-                    # print('send: end of data')
-                    self.transmit_contexts[self.current_context].in_use = False
-                    break
+                    self.logger.log(f"error: receive context {j} timed out")
+                    self.user_handler(
+                        self.receive_contexts[j].buffer,
+                        self.receive_contexts[j].streamid,
+                        CBUS_LONG_MESSAGE_TIMEOUT_ERROR,
+                    )
+                    self.receive_contexts[j].in_use = False
 
-                msg.data[c + 3] = self.transmit_contexts[self.current_context].buffer[
-                    self.transmit_contexts[self.current_context].index
-                ]
-                # print(f'added char {chr(msg.data[c+3])}')
-                self.transmit_contexts[self.current_context].index += 1
+            if (self.transmit_contexts[self.current_context].in_use and time.ticks_ms() - self.transmit_contexts[self.current_context].last_fragment_sent > TRANSMIT_DELAY):
+                # print(f'sending next fragment in send context = {self.current_context}')
 
-            msg.print(False)
-            self.bus.can.send_message(msg)
-            self.transmit_contexts[self.current_context].sequence_num += 1
-            self.transmit_contexts[
-                self.current_context
-            ].last_fragement_sent = time.ticks_ms
+                msg = canmessage.canmessage(self.bus.config.canid, 8)
+                msg.data[0] = cbusdefs.OPC_DTXC
+                msg.data[1] = self.transmit_contexts[j].streamid
+                msg.data[2] = self.transmit_contexts[j].sequence_num
 
-        self.current_context = (self.current_context + 1) % len(self.transmit_contexts)
+                for c in range(5):
+                    if (
+                        self.transmit_contexts[self.current_context].index
+                        >= self.transmit_contexts[self.current_context].message_size
+                    ):
+                        # print('send: end of data')
+                        self.transmit_contexts[self.current_context].in_use = False
+                        break
+
+                    msg.data[c + 3] = self.transmit_contexts[self.current_context].buffer[
+                        self.transmit_contexts[self.current_context].index
+                    ]
+                    # print(f'added char {chr(msg.data[c+3])}')
+                    self.transmit_contexts[self.current_context].index += 1
+
+                msg.print(False)
+                self.bus.can.send_message(msg)
+                self.transmit_contexts[self.current_context].sequence_num += 1
+                self.transmit_contexts[
+                    self.current_context
+                ].last_fragement_sent = time.ticks_ms
+
+            self.current_context = (self.current_context + 1) % len(self.transmit_contexts)
+
+            await asyncio.sleep_ms(50)
 
     def handle_long_message_fragment(self, msg):
         # print('handling long message fragment')

@@ -12,6 +12,12 @@ import canmessage
 import circularQueue
 
 
+class qmsg:
+    def __init__(self, source, gc):
+        self.source = source
+        self.gc = gc
+
+
 class gcserver:
 
     #     def __new__(cls):
@@ -29,8 +35,9 @@ class gcserver:
         self.ip = None
         self.server = None
         self.gc = ""
-        self.clients = [None]
+        self.clients = []
         self.output_queue = circularQueue.circularQueue(16)
+        self.peer_queue = circularQueue.circularQueue(4)
 
         if isinstance(bus, cbus.cbus):
             self.bus = bus
@@ -61,21 +68,12 @@ class gcserver:
 
     async def client_connected_cb(self, reader, writer):
         peer = writer.get_extra_info("peername")
-        self.logger.log(f"gcserver: new connection from client, ip = {peer[0]}, port = {peer[1]}")
+        cip = peer[0]
+        cport = peer[1]
+        self.logger.log(f"gcserver: new connection from client, ip = {cip}, port = {cport}")
 
-        found = False
-
-        for idx in range(len(self.clients)):
-            if self.clients[idx] is None:
-                found = True
-                break
-
-        if found:
-            self.clients[idx] = writer
-        else:
-            self.clients.append(writer)
-            idx += 1
-
+        self.clients.append(writer)
+        idx = len(self.clients) - 1
         self.logger.log(f"gcserver: using client idx = {idx}")
 
         data = None
@@ -90,9 +88,7 @@ class gcserver:
 
             if data:
                 data_decoded = data.decode()
-                self.logger.log(
-                    f"gcserver: received |{data_decoded}| len = {len(data_decoded)} from {peer}"
-                )
+                self.logger.log(f"gcserver: received |{data_decoded}| len = {len(data_decoded)} from {peer}")
 
                 for ch in data_decoded:
 
@@ -105,27 +101,39 @@ class gcserver:
                         currgc += ch
 
                     if ch == ";":
-                        # self.logger.log(f"gcserver: converting {currgc}")
                         m = self.GCtoCAN(currgc)
                         self.logger.log(f"gcserver: converted GC msg to {m.__str__()}")
                         self.bus.send_cbus_message_no_header_update(m)
                         # self.bus.can.rx_queue.enqueue(m)
+                        self.peer_queue.enqueue(qmsg(cport, currgc))
                         await asyncio.sleep_ms(1)
             else:
                 self.logger.log(f"gcserver: client idx = {idx} disconnected, closing stream")
                 break
 
+        for i in range(len(self.clients)):
+            if self.clients[i] == writer:
+                break
+
         writer.close()
         await writer.wait_closed()
-        self.clients[idx] = None
+        del self.clients[i]
 
-    async def manage_output_queue(self):
+    async def queue_manager(self):
 
         while True:
             while self.output_queue.available():
                 self.logger.log("gcserver: message(s) available to send")
                 msg = self.output_queue.dequeue()
                 await self.send_message(msg)
+
+            while self.peer_queue.available():
+                pmsg = self.peer_queue.dequeue()
+                for idx in range(len(self.clients) - 1):
+                    cport = self.clients[idx].get_extra_info("peername")
+                    if cport != pmsg.source:
+                        self.clients[idx].write(pmsg.gc)
+                        await self.clients[idx].drain()
 
             await asyncio.sleep_ms(20)
 
