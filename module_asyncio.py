@@ -14,16 +14,26 @@ import cbusconfig
 import canmessage
 import cbuslongmessage
 import cbushistory
+import cbuspubsub
+import cbusobjects
 import logger
 import aiorepl
+import queue
+from events import WaitAny
+from events import WaitAll
 
+
+# ***
+# *** module class
+# ***
 
 class mymodule(cbusmodule.cbusmodule):
     def __init__(self):
         super().__init__()
         self.logger = logger.logger()
 
-    def initialise(self):
+    def initialise(self, is_picow=False, start_gc_server=False):
+
         # ***
         # *** bare minimum module init
         # ***
@@ -68,10 +78,7 @@ class mymodule(cbusmodule.cbusmodule):
         self.cbus.set_event_handler(self.event_handler)
         self.cbus.set_frame_handler(self.frame_handler)
 
-        self.cbus.begin()
-
-        self.lm = None
-        self.history = None
+        self.cbus.begin(freq=20, max_msgs=1)
 
         # ***
         # *** end of bare minimum init
@@ -84,33 +91,38 @@ class mymodule(cbusmodule.cbusmodule):
         self.lm.subscribe(self.lm_ids, self.long_message_handler, receive_timeout=30000)
 
         # cbus event history
-        self.history = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=1000)
+        # self.history = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=1000)
 
         # consume own messages
         self.cbus.set_consume_own_messages(False)
 
-        # gcserver
-        try:
-            import gcserver
-            self.logger.log("device is Pico W")
-            ssid = "HUAWEI-B311-E39A"
-            password = "33260100"
-            self.gcserver = gcserver.gcserver(self.cbus, ssid, password)
-            self.gcserver.connect_wifi()
-            self.is_picow = True
-        except:
-            self.logger.log("device is not Pico W")
-            self.is_picow = False
+        self.is_picow = is_picow;
+        self.start_gc_server = start_gc_server
 
-        # get NTP network time
+        # start Gridconnect network server
+        if self.is_picow and self.start_gc_server:
+            try:
+                import gcserver
+                self.logger.log("device is Pico W")
+                ssid = "HUAWEI-B311-E39A"
+                password = "33260100"
+                self.gcserver = gcserver.gcserver(self.cbus, ssid, password)
+                self.gcserver.connect_wifi()
+                self.is_picow = True
+            except:
+                self.logger.log("device is not Pico W")
+                self.is_picow = False
+
+        # get network time
         if self.is_picow:
             try:
                 import ntptime
                 self.logger.log("getting NTP time ...")
+                ntptime.host = 'europe.pool.ntp.org'
                 tt = ntptime.time()
-                self.logger.log(f"NTP time = {tt}, local")
+                self.logger.log(f"NTP time = {tt}, {time.localtime(tt)}")
             except:
-                print("ntptime.py module not available")
+                print("ntptime.py module not present")
 
         # some test messages
         self.msg1 = canmessage.canmessage(99, 5, [0x90, 0, 22, 0, 25])
@@ -118,12 +130,12 @@ class mymodule(cbusmodule.cbusmodule):
         self.msg3 = canmessage.canmessage(4, 5, [0x91, 0, 22, 0, 23, 0, 0, 0])
         self.msg4 = canmessage.canmessage(4, 5, [0x90, 0, 22, 0, 23, 0, 0, 0])
         self.msg5 = canmessage.canmessage(126, 0, [], True, False)
-        self.msg6 = canmessage.canmessage(126, 33, [], False, True)
+        self.msg6 = canmessage.canmessage(126, 0, [], False, True)
 
-        self.lm0 = canmessage.canmessage(126, 8, [0xE9, 2, 0, 0, 11, 0, 0, 0])
-        self.lm1 = canmessage.canmessage(126, 8, [0xE9, 2, 1, 72, 101, 108, 108, 111])
-        self.lm2 = canmessage.canmessage(126, 8, [0xE9, 2, 2, 32, 119, 111, 114, 108])
-        self.lm3 = canmessage.canmessage(126, 8, [0xE9, 2, 3, 100, 0, 0, 0, 0])
+        self.lm0 = canmessage.canmessage(126, 8, [0xE9, 9, 0, 0, 11, 0, 0, 0])
+        self.lm1 = canmessage.canmessage(126, 8, [0xE9, 9, 1, 72, 101, 108, 108, 111])
+        self.lm2 = canmessage.canmessage(126, 8, [0xE9, 9, 2, 32, 119, 111, 114, 108])
+        self.lm3 = canmessage.canmessage(126, 8, [0xE9, 9, 3, 100, 0, 0, 0, 0])
 
         # *** module initialisation complete
 
@@ -139,20 +151,9 @@ class mymodule(cbusmodule.cbusmodule):
     # *** coroutines that run in parallel
     # ***
 
-    async def cbus_coro(self):
-        self.logger.log("cbus_coro start")
-
-        while True:
-            c = self.cbus.process()
-            await asyncio.sleep_ms(10)
-
     async def blink_led_coro(self, lock):
-        self.logger.log("blink_led_coro start")
-
-        if (self.is_picow):
-            self.led = machine.Pin("LED", machine.Pin.OUT)
-        else:
-            self.led = machine.Pin(25, machine.Pin.OUT)
+        self.logger.log("blink_led_coro: start")
+        self.led = machine.Pin("LED", machine.Pin.OUT)
 
         while True:
             await lock.acquire()
@@ -163,8 +164,8 @@ class mymodule(cbusmodule.cbusmodule):
             await asyncio.sleep_ms(980)
 
     async def activity_coro(self, lock):
-        self.logger.log("activity coro start")
-        send_lm = True
+        self.logger.log("activity_coro: start")
+        send_lm = False
 
         while True:
             await asyncio.sleep_ms(5000)
@@ -178,56 +179,100 @@ class mymodule(cbusmodule.cbusmodule):
                 send_lm = False
             else:
                 self.cbus.can.rx_queue.enqueue(self.msg3)
+                self.cbus.can.rx_queue.enqueue(self.msg4)
                 send_lm = True
 
             lock.release()
 
-    async def module_main_loop_coro(self):
-        self.logger.log("main loop coro start")
-        delay = 100
+    async def history_test_coro(self):
+        self.logger.log("history_test_coro: start")
+        event = asyncio.Event()
+        self.history2 = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=10000, event=event)
 
         while True:
-            if self.history.sequence_received(((0, 22, 23), (1, 22, 23)), order=cbushistory.ORDER_GIVEN, within=1000, timespan=1000):
-                self.logger.log("** found sequence in history")
-                delay = 1000
-            else:
-                delay = 100
+            await event.wait()
+            event.clear()
+            if self.history2.sequence_received([(0, 22, 23), (1, 22, 23)], order=cbushistory.ORDER_GIVEN, within=2000, timespan=2000, which=cbushistory.WHICH_LATEST):
+                self.logger.log(f"history_test_coro: found sequence in history")
 
-            await asyncio.sleep_ms(delay)
+    async def pubsub_test_coro(self, pevent=None):
+        self.logger.log("pubsub_test_coro: start")
+        self.sub = cbuspubsub.subscription(self.cbus, "hello", canmessage.QUERY_ALL)
+
+        while True:
+            msg = await self.sub.wait()
+            self.logger.log(f"subscriber: got subscribed item, msg = {msg.__str__()}")
+            if pevent:
+                pevent.set()
+
+    async def sensor_test_coro(self, pevent=None):
+        event = asyncio.Event()
+        self.sn1 = cbusobjects.binarysensor("sensor1", mod.cbus, (0, 22, 23), event)
+        self.logger.log(f"sensor_test_coro: start, {self.sn1.name} state = {cbusobjects.sensor_states.get(self.sn1.state)}")
+
+        while True:
+            await event.wait()
+            event.clear()
+            self.logger.log(f"sensor_test_coro: {self.sn1.name} changed state to {self.sn1.state} = {cbusobjects.sensor_states.get(self.sn1.state)}")
+            if pevent:
+                pevent.set()
+
+    async def sequence_test_coro(self):
+        evp = asyncio.Event()
+        evs = asyncio.Event()
+        
+        tp = asyncio.create_task(self.pubsub_test_coro(evp))
+        ts = asyncio.create_task(self.sensor_test_coro(evs))
+
+        while True:
+            evt = await WaitAny((evp, evs))
+
+            if evt is evp:
+                self.logger.log("pubsub is active")
+                evp.clear()
+            else:
+                self.logger.log("sensor is active")
+                evs.clear()
 
     # ***
     # *** module main entry point
     # ***
 
+#     def _handle_exception(self, loop, context):
+#         print('Global handler')
+#         sys.print_exception(context["exception"])
+#         #loop.stop()
+#         sys.exit()  # Drastic - loop.stop() does not work when used this way
+
     async def run(self):
-        self.logger.log("run start")
+
+        # loop = asyncio.get_event_loop()
+        # loop.set_exception_handler(self._handle_exception)
 
         self.a_lock = Lock()
         self.b_lock = Lock()
-
         await self.a_lock.acquire()
 
-        self.tc = asyncio.create_task(self.cbus_coro())
         self.tb = asyncio.create_task(self.blink_led_coro(self.b_lock))
         self.ta = asyncio.create_task(self.activity_coro(self.a_lock))
-        self.tm = asyncio.create_task(self.module_main_loop_coro())
-
-        if self.lm is not None:
-            self.tl = asyncio.create_task(self.lm.process())
-
-        if self.history is not None:
-            self.th = asyncio.create_task(self.history.reaper())
+        self.tm = asyncio.create_task(self.history_test_coro())
+        # self.ts = asyncio.create_task(self.pubsub_test_coro())
+        # self.tn = asyncio.create_task(self.sensor_test_coro())
+        self.tq = asyncio.create_task(self.sequence_test_coro())
 
         # start gridconnect server coros if device is Pico W
-        if (self.is_picow):
+        if self.is_picow and self.start_gc_server:
             self.tg = asyncio.create_task(asyncio.start_server(self.gcserver.client_connected_cb, self.gcserver.host, self.gcserver.port))
-            self.tq = asyncio.create_task(self.gcserver.queue_manager())
 
         self.logger.log("asyncio is now running the module main loop and co-routines")
 
         # start async REPL and wait for exit
         repl = asyncio.create_task(aiorepl.task(globals()))
         await asyncio.gather(repl)
+
+    # ***
+    # *** end of module class
+    # ***
 
 
 def control(state):
@@ -249,7 +294,26 @@ def conf():
     mod.cbus.config.events[7] = 4
     mod.cbus.config.backend.store_events(mod.cbus.config.events)
 
+def enq():
+    mod.logger.log("test messages")
+    mod.cbus.can.rx_queue.enqueue(mod.msg3)
+    mod.cbus.can.rx_queue.enqueue(mod.msg4)
+
+def enq3():
+    mod.cbus.can.rx_queue.enqueue(mod.msg3)
+
+def enq4():
+    mod.cbus.can.rx_queue.enqueue(mod.msg4)
+
+def lms():
+    mod.logger.log("test long messages")
+    mod.cbus.can.rx_queue.enqueue(mod.lm0)
+    mod.cbus.can.rx_queue.enqueue(mod.lm1)
+    mod.cbus.can.rx_queue.enqueue(mod.lm2)
+    mod.cbus.can.rx_queue.enqueue(mod.lm3)
+
 
 mod = mymodule()
-mod.initialise()
+mod.initialise(is_picow=True, start_gc_server=False)
 asyncio.run(mod.run())
+

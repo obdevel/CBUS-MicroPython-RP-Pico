@@ -31,7 +31,7 @@ class historyitem:
 
     def __init__(self, msg):
         self.msg = msg
-        self.insert_time = time.ticks_ms()
+        self.arrival_time = time.ticks_ms()
 
 
 class cbushistory:
@@ -43,37 +43,42 @@ class cbushistory:
 #            cls.instance = super(cbushistory, bus, max_size=64, time_to_live=10000, match_events_only=True).__new__(cls, bus, max_size=64, time_to_live=10000, match_events_only=True)
 #        return cls.instance
 
-    def __init__(self, bus, max_size=64, time_to_live=10000, match_events_only=True):
+    def __init__(self, bus, max_size=64, time_to_live=10000, match_events_only=True, event=None):
         self.logger = logger.logger()
         self.history = []
         self.max_size = max_size
         self.time_to_live = time_to_live
         self.match_events_only = match_events_only
         self.bus = bus
-        self.bus.set_history(self)
+        self.event = event
+        self.last_update = 0
+        self.bus.add_history(self)
+
+        asyncio.create_task(self.reaper())
 
     def set_ttl(self, time_to_live):
         self.time_to_live = time_to_live
 
     def add(self, msg):
-        if self.match_events_only and not msg.data[0] in canmessage.event_opcodes:
+        if msg.len == 0 or (self.match_events_only and not msg.data[0] in canmessage.event_opcodes):
             return
 
         if len(self.history) < self.max_size:
             self.history.append(historyitem(msg))
+            self.last_update = time.ticks_ms()
+            if self.event is not None:
+                self.event.set()
 
-    async def reaper(self):
+    async def reaper(self, freq=500):
         while True:
+            tnow = time.ticks_ms()
             for i in range(len(self.history) - 1, -1, -1):
-                if self.history[i].insert_time + self.time_to_live < time.ticks_ms():
+                if self.history[i].arrival_time + self.time_to_live < tnow:
                     del self.history[i]
-            await asyncio.sleep_ms(20)
+            await asyncio.sleep_ms(min(freq, self.time_to_live))
 
     def count(self):
-        c = 0
-        for i in range(len(self.history)):
-            c += 1
-        return c
+        return len(self.history)
 
     def clear(self):
         self.history = []
@@ -81,24 +86,27 @@ class cbushistory:
     def display(self):
         for i in range(len(self.history)):
             sc = self.history[i].msg.as_tuple()
-            it = self.history[i].insert_time
+            it = self.history[i].arrival_time
             ds = f"{i} {sc} {it}"
             self.logger.log(ds)
 
-    def event_received(self, event, within=TIME_ANY):
+    def last_update_time(self):
+        return self.last_update
+
+    def event_received(self, event, within=TIME_ANY) -> bool:
         for i in range(len(self.history)):
             if (self.history[i].msg.data[1] * 256) + self.history[i].msg.data[2] == event[1] and (self.history[i].msg.data[3] * 256) + self.history[i].msg.data[4] == event[2]:
                 if (event[0] == POLARITY_EITHER or (event[0] == POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (event[0] == POLARITY_OFF and (self.history[i].msg.data[0] & 1))):
-                    if (within == TIME_ANY or self.history[i].insert_time > (time.ticks_ms() - within)):
+                    if (within == TIME_ANY or self.history[i].arrival_time > (time.ticks_ms() - within)):
                         return True
         return False
 
-    def count_of_event(self, event, within=TIME_ANY):
+    def count_of_event(self, event, within=TIME_ANY) -> int:
         count = 0
         for i in range(len(self.history)):
             if (self.history[i].msg.data[1] * 256) + self.history[i].msg.data[2] == event[1] and (self.history[i].msg.data[3] * 256) + self.history[i].msg.data[4] == event[2]:
                 if (event[0] == POLARITY_EITHER or (event[0] == POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (event[0] == POLARITY_OFF and (self.history[i].msg.data[0] & 1))):
-                    if (self.history[i].insert_time > (time.ticks_ms() - within) or within == TIME_ANY):
+                    if (self.history[i].arrival_time > (time.ticks_ms() - within) or within == TIME_ANY):
                         count += 1
         return count
 
@@ -108,15 +116,17 @@ class cbushistory:
             if (self.history[i].msg.data[1] * 256) + self.history[i].msg.data[2] == event[1] and (self.history[i].msg.data[3] * 256) + self.history[i].msg.data[4] == event[2]:
                 if (event[0] == POLARITY_EITHER or (event[0] == POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (event[0] == POLARITY_OFF and (self.history[i].msg.data[0] & 1))):
                     if which == WHICH_ANY:
-                        return self.history[i].insert_time
+                        return self.history[i].arrival_time
                     else:
-                        times.append(self.history[i].insert_time)
+                        times.append(self.history[i].arrival_time)
 
         if len(times) > 0:
+            if which == WHICH_ANY:
+                return times[0]
             times.sort()
             if which == WHICH_EARLIEST:
                 return times[0]
-            else:
+            elif which == WHICH_LATEST:
                 return times[-1]
 
         return -1
@@ -139,8 +149,8 @@ class cbushistory:
 
         for i in range(len(self.history)):
             if (self.history[i].msg.data[1] * 256) + self.history[i].msg.data[2] == event[1] and (self.history[i].msg.data[3] * 256) + self.history[i].msg.data[4] == event[2]:
-                if self.history[i].insert_time > earliest_time:
-                    earliest_time = self.history[i].insert_time
+                if self.history[i].arrival_time > earliest_time:
+                    earliest_time = self.history[i].arrival_time
                     state = (POLARITY_OFF if (self.history[i].msg.data[0] & 1) else POLARITY_ON)
 
         return state
@@ -157,20 +167,43 @@ class cbushistory:
             elif not match_events_only:
                     match = True
 
-            if match and latest_time < self.history[i].insert_time:
-                latest_time = self.history[i].insert_time 
+            if match and latest_time < self.history[i].arrival_time:
+                latest_time = self.history[i].arrival_time 
 
         return latest_time
 
-    def sequence_received(self, events=[], order=ORDER_ANY, within=TIME_ANY, timespan=TIME_ANY):
+    def time_diff(self, events=[], within=TIME_ANY, timespan=TIMESPAN_ANY, which=WHICH_ANY):
+        atimes = []
+
+        if len(events) != 2:
+            return None
+
+        for event in events:
+            etime = self.time_received(event, which)
+
+            if etime == -1:
+                return None
+            else:
+                if within == TIME_ANY or (etime > time.ticks_ms() - within):
+                    atimes.append(etime)
+
+        if timespan == TIMESPAN_ANY or abs(atimes[1] - atimes[0]) <= timespan:
+            return atimes[1] - atimes[0]
+        else:
+            return None
+
+    def sequence_received(self, events=[], order=ORDER_ANY, within=TIME_ANY, timespan=TIME_ANY, which=WHICH_ANY):
         times = []
         ret = True
+
+        if self.count() < 1:
+            return False
 
         if len(events) < 1:
             return False
 
         for event in events:
-            etime = self.time_received(event)
+            etime = self.time_received(event, which)
 
             if etime == -1:
                 ret = False

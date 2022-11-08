@@ -168,6 +168,23 @@ async def task(g=None, prompt="--> "):
                             # Update current command.
                             cmd = hist[(hist_i - hist_b) % _HISTORY_LIMIT]
                             sys.stdout.write(cmd)
+
+                    elif c == 0x0a or c == 0x0b:  # ctrl-j or ctrl-k
+                        # Stash the current command.
+                        hist[(hist_i - hist_b) % _HISTORY_LIMIT] = cmd
+                        # Clear current command.
+                        b = "\x08" * len(cmd)
+                        sys.stdout.write(b)
+                        sys.stdout.write(" " * len(cmd))
+                        sys.stdout.write(b)
+                        # Go backwards or forwards in the history.
+                        if key == 0x0a:
+                            hist_b = min(hist_n, hist_b + 1)
+                        else:
+                            hist_b = max(0, hist_b - 1)
+                        # Update current command.
+                        cmd = hist[(hist_i - hist_b) % _HISTORY_LIMIT]
+                        sys.stdout.write(cmd)
                     else:
                         # sys.stdout.write("\\x")
                         # sys.stdout.write(hex(c))

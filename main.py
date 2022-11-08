@@ -1,1 +1,1 @@
-execfile("module_asyncio.py")
+import module_asyncio

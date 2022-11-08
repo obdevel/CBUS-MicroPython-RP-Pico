@@ -44,11 +44,10 @@ class gcserver:
         else:
             raise TypeError("error: gcserver: cbus is not an instance of class cbus")
 
+        self.tq = asyncio.create_task(self.queue_manager())
         bus.set_gcserver(self)
 
     def connect_wifi(self):
-        # *** connect to wifi here
-
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
         self.wlan.connect(self.ssid, self.password)
@@ -88,7 +87,7 @@ class gcserver:
 
             if data:
                 data_decoded = data.decode()
-                self.logger.log(f"gcserver: received |{data_decoded}| len = {len(data_decoded)} from {peer}")
+                self.logger.log(f"gcserver: received |{data_decoded}| len = {len(data_decoded)}")
 
                 for ch in data_decoded:
 

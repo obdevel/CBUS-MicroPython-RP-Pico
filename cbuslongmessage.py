@@ -73,6 +73,8 @@ class cbuslongmessage:
         self.receive_contexts = [receive_context()]
         self.transmit_contexts = [transmit_context()]
 
+        self.tl = asyncio.create_task(self.process())
+
     def subscribe(self, ids, handler, receive_timeout=RECEIVE_TIMEOUT):
         self.logger.log(f"lm subscribe: {ids}")
         self.subscribed_ids = ids
@@ -196,7 +198,7 @@ class cbuslongmessage:
             return
 
         if not msg.data[1] in self.subscribed_ids:
-            self.logger.log(f"note: not subscribed to stream id = {msg.data[1]}")
+            self.logger.log(f"handle_long_message_fragment: not subscribed to stream id = {msg.data[1]}")
             return
 
         if msg.data[2] == 0:

@@ -220,7 +220,7 @@ class cbusconfig:
                 # print(f'found event at index = {i}')
                 return i
 
-        self.logger.log("event not found")
+        # self.logger.log("event not found")
         return -1
 
     def find_event_by_ev(self, evnum, evval):

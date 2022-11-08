@@ -20,14 +20,12 @@ class circularQueue:
         if self.size == self.capacity:
             # print("error: queue is full")
             self.dropped = self.dropped + 1
-            return False
         else:
             self.tail = (self.tail + 1) % self.capacity
             self.queue[self.tail] = item
             self.size = self.size + 1
             self.hwm = self.hwm + 1 if self.size > self.hwm else self.hwm
             self.puts += 1
-            return True
 
     def dequeue(self):
         if self.size == 0:
