@@ -4,8 +4,7 @@
 # Released under the MIT License (MIT) - see LICENSE file
 
 import uasyncio as asyncio
-# from . import Delay_ms
-import delay_ms
+from . import Delay_ms
 
 # An Event-like class that can wait on an iterable of Event-like instances.
 # .wait pauses until any passed event is set.
@@ -165,4 +164,3 @@ class EButton:
             task.cancel()
         for evt in (self.press, self.double, self.long, self.release):
             evt.clear()
-            

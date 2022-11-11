@@ -1,17 +1,17 @@
 # module.py
 # cbus application base class
 
+import uasyncio as asyncio
 import logger
 
 
 class cbusmodule:
     def __init__(self):
         self.logger = logger.logger()
-        # self.logger.log("cbusmodule constructor")
-
         self.lm = None
         self.history = None
         self.start_gc_server = False
+        asyncio.create_task(self.mem_coro())
 
     def initialise(self):
         pass
@@ -30,4 +30,12 @@ class cbusmodule:
     def long_message_handler(self, message, streamid, status):
         self.logger.log("-- user long message handler:")
         self.logger.log(f"status = {status}, streamid = {streamid}, msg = <{message}>")
+
+    async def mem_coro(self):
+        import gc
+        while True:
+            gc.collect()
+            gc.threshold(gc.mem_free() // 4 + gc.mem_alloc())
+            await asyncio.sleep(5)
+
 

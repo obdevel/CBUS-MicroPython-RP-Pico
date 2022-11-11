@@ -10,7 +10,7 @@ import cbusdefs
 import canmessage
 import cbushistory
 import cbuspubsub
-import queue
+# import primitives
 import logger
 
 MODE_SLIM = 0
@@ -125,43 +125,44 @@ class cbus:
             cbusdefs.OPC_DTXC: self.handle_dtxc,
         }
 
-    def begin(self, freq=1, max_msgs=1):
+    def begin(self, freq=1, max_msgs=1) -> None:
         self.can.begin()
         self.config.begin()
         self.has_ui and self.indicate_mode(self.config.mode)
         asyncio.create_task(self.process(freq, max_msgs))
 
-    def set_switch(self, pin):
+    def set_switch(self, pin) -> None:
         self.switch = cbusswitch.cbusswitch(pin)
         self.has_ui = True
 
-    def set_leds(self, grn_pin, ylw_pin):
+    def set_leds(self, grn_pin, ylw_pin) -> None:
         self.led_grn = cbusled.cbusled(grn_pin)
         self.led_ylw = cbusled.cbusled(ylw_pin)
         self.has_ui = True
 
-    def set_name(self, name):
+    def set_name(self, name) -> None:
+        self.logger.log(f"cbus: setting name to {name}")
         self.name = bytearray(name)
 
-    def set_params(self, params):
+    def set_params(self, params) -> None:
         self.params = params
 
-    def set_event_handler(self, event_handler):
+    def set_event_handler(self, event_handler) -> None:
         self.event_handler = event_handler
 
-    def set_frame_handler(self, frame_handler, opcodes=[]):
+    def set_frame_handler(self, frame_handler, opcodes=[]) -> None:
         self.frame_handler = frame_handler
         self.opcodes = opcodes
 
-    def set_consume_own_messages(self, consume, which=MSGS_ALL):
+    def set_consume_own_messages(self, consume, which=MSGS_ALL) -> None:
         self.consume_own_messages = consume
         self.messages_to_consume = which
 
-    def send_cbus_message(self, msg):
+    def send_cbus_message(self, msg) -> None:
         msg.make_header()
         self.send_cbus_message_no_header_update(msg)
 
-    def send_cbus_message_no_header_update(self, msg):
+    def send_cbus_message_no_header_update(self, msg) -> None:
         self.can.send_message(msg)
         self.has_ui and self.config.mode == MODE_FLIM and self.led_grn.pulse()
         self.sent_messages += 1
@@ -172,13 +173,13 @@ class cbus:
         if self.consume_own_messages:
             self.can.rx_queue.enqueue(msg)
 
-    def set_can(self, can):
+    def set_can(self, can) -> None:
         if can and not isinstance(can, canio.canio):
             raise TypeError("error: can is not an instance of class canio")
         else:
             self.can = can
 
-    def set_config(self, config):
+    def set_config(self, config) -> None:
         if config and not isinstance(config, cbusconfig.cbusconfig):
             raise TypeError("error: config is not an instance of class cbusconfig")
         else:
@@ -258,7 +259,7 @@ class cbus:
                     self.gridconnect_server.output_queue.enqueue(msg)
 
                 for sub in self.subscriptions:
-                    sub.publish(msg)
+                    asyncio.create_task(sub.publish(msg))
 
                 if self.config.mode == MODE_FLIM:
                     self.led_grn.pulse()
@@ -297,7 +298,7 @@ class cbus:
 
                 self.processed_msgs += 1
 
-    def handle_accessory_event(self, msg):
+    def handle_accessory_event(self, msg) -> None:
         # self.logger.log('handle_accessory_event:')
 
         if self.event_handler is not None:
@@ -308,7 +309,7 @@ class cbus:
                 # self.logger.log(f'calling user handler')
                 self.event_handler(msg, idx)
 
-    def handle_rqnp(self, msg):
+    def handle_rqnp(self, msg) -> None:
         self.logger.log("RQNP")
 
         if self.in_transition:
@@ -323,7 +324,7 @@ class cbus:
             omsg.data[7] = self.params[7]
             self.send_cbus_message(omsg)
 
-    def handle_rqnpn(self, msg):
+    def handle_rqnpn(self, msg) -> None:
         self.logger.log("RQNPN")
 
         if msg.get_node_number() == self.config.node_number:
@@ -340,7 +341,7 @@ class cbus:
             else:
                 self.sendCMDERR(9)
 
-    def handle_snn(self, msg):
+    def handle_snn(self, msg) -> None:
         self.logger.log("SNN")
 
         if self.in_transition:
@@ -356,7 +357,7 @@ class cbus:
             self.indicateMode(MODE_FLIM)
             self.enumeration_required = True
 
-    def handle_canid(self, msg):
+    def handle_canid(self, msg) -> None:
         self.logger.log("CANID")
 
         if msg.get_node_number() == self.config.node_number:
@@ -365,7 +366,7 @@ class cbus:
             else:
                 self.config.set_canid(msg.data[3])
 
-    def handle_enum(self, msg):
+    def handle_enum(self, msg) -> None:
         self.logger.log("ENUM")
 
         if (msg.get_node_number() == self.config.node_number
@@ -374,7 +375,7 @@ class cbus:
         ):
             self.begin_enumeration()
 
-    def handle_nvrd(self, msg):
+    def handle_nvrd(self, msg) -> None:
         self.logger.log("NVRD")
 
         if msg.get_node_number() == self.config.node_number:
@@ -389,7 +390,7 @@ class cbus:
                 omsg.data[4] = self.config.read_nv(msg.data[3])
                 self.send_cbus_message(omsg)
 
-    def handle_nvset(self, msg):
+    def handle_nvset(self, msg) -> None:
         self.logger.log("NVSET")
 
         if msg.get_node_number() == self.config.node_number:
@@ -399,21 +400,21 @@ class cbus:
                 self.config.write_nv(msg.data[3], msg.data[4])
                 self.sendWRACK()
 
-    def handle_nnlrn(self, msg):
+    def handle_nnlrn(self, msg) -> None:
         self.logger.log("NNLRN")
 
         if msg.get_node_number() == self.config.node_number:
             self.in_learn_mode = True
             self.params[8] = self.params[8] | 1 << 5
 
-    def handle_nnuln(self, msg):
+    def handle_nnuln(self, msg) -> None:
         self.logger.log("NNULN")
 
         if msg.get_node_number() == self.config.node_number:
             self.in_learn_mode = False
             self.params[8] = self.params[8] % 1 << 5
 
-    def handle_rqevn(self, msg):
+    def handle_rqevn(self, msg) -> None:
         self.logger.log("RQEVN")
 
         if msg.get_node_number() == self.config.node_number:
@@ -424,7 +425,7 @@ class cbus:
             omsg.data[3] = self.config.count_events()
             self.send_cbus_message(omsg)
 
-    def handle_nerd(self, msg):
+    def handle_nerd(self, msg) -> None:
         self.logger.log("NERD")
 
         if msg.get_node_number() == self.config.node_number:
@@ -451,7 +452,7 @@ class cbus:
                     self.send_cbus_message(omsg)
                     time.delay_ms(5)
 
-    def handle_reval(self, msg):
+    def handle_reval(self, msg) -> None:
         self.logger.log("REVAL")
 
         if msg.get_node_number() == self.config.node_number:
@@ -464,7 +465,7 @@ class cbus:
             omsg.data[5] = self.config.read_event_ev(msg.data[3], msg.data[4])
             self.send_cbus_message(omsg)
 
-    def handle_nnclr(self, msg):
+    def handle_nnclr(self, msg) -> None:
         self.logger.log("NNCLR")
 
         if (
@@ -474,7 +475,7 @@ class cbus:
             self.config.clear_all_events()
             self.sendWRACK()
 
-    def handle_nnevn(self, msg):
+    def handle_nnevn(self, msg) -> None:
         self.logger.log("NNEVN")
 
         if msg.get_node_number() == self.config.node_number:
@@ -485,7 +486,7 @@ class cbus:
             omsg.data[3] = self.config.num_events - self.config.count_events()
             self.send_cbus_message(omsg)
 
-    def handle_qnn(self, msg):
+    def handle_qnn(self, msg) -> None:
         self.logger.log("QNN")
 
         if self.config.node_number > 0:
@@ -498,7 +499,7 @@ class cbus:
             omsg.data[5] = self.params[8]
             self.send_cbus_message(omsg)
 
-    def handle_rqmn(self, msg):
+    def handle_rqmn(self, msg) -> None:
         self.logger.log("RQMN")
 
         if self.in_transition:
@@ -510,7 +511,7 @@ class cbus:
 
             self.send_cbus_message(omsg)
 
-    def handle_evlrn(self, msg):
+    def handle_evlrn(self, msg) -> None:
         self.logger.log("EVLRN")
 
         if self.in_learn_mode:
@@ -524,7 +525,7 @@ class cbus:
             else:
                 self.sendCMDERR(10)
 
-    def handle_evuln(self, msg):
+    def handle_evuln(self, msg) -> None:
         self.logger.log("EVULN")
 
         if self.in_learn_mode:
@@ -536,12 +537,12 @@ class cbus:
             else:
                 self.sendCMDERR(10)
 
-    def handle_dtxc(self, msg):
+    def handle_dtxc(self, msg) -> None:
         # self.logger.log("DTXC")
         if self.long_message_handler is not None:
             self.long_message_handler.handle_long_message_fragment(msg)
 
-    def send_WRACK(self):
+    def send_WRACK(self) -> None:
         self.logger.log("send_WRACK")
         omsg = canmessage.canmessage(self.config.canid, 3)
         omsg.data[0] = cbusdefs.OPC_WRACK
@@ -549,7 +550,7 @@ class cbus:
         omsg.data[2] = self.config.node_number & 0xFF
         self.send_cbus_message(omsg)
 
-    def send_CMDERR(self, err):
+    def send_CMDERR(self, err) -> None:
         self.logger.log("send_CMDERR")
         omsg = canmessage.canmessage(self.config.canid, 4)
         omsg.data[0] = cbusdefs.OPC_WRACK
@@ -558,7 +559,7 @@ class cbus:
         omsg.data[3] = err & 0xFF
         self.send_cbus_message(omsg)
 
-    def begin_enumeration(self):
+    def begin_enumeration(self) -> None:
         self.logger.log("begin_enumeration")
         omsg = canmessage.canmessage(self.config.canid, 0)
         omsg.rtr = True
@@ -569,7 +570,7 @@ class cbus:
         self.enumerating = True
         self.enum_start_time = time.ticks_ms()
 
-    def process_enumeration_responses(self):
+    def process_enumeration_responses(self) -> None:
         self.logger.log("process_enumeration_responses")
         self.enum_start_time = 0
         self.enumerating = False
@@ -595,7 +596,7 @@ class cbus:
         else:
             self.sendCMDERR(7)
 
-    def init_flim(self):
+    def init_flim(self) -> None:
         self.logger.log("init_flim")
         self.indicate_mode(MODE_CHANGING)
         self.in_transition = True
@@ -607,7 +608,7 @@ class cbus:
         omsg.data[2] = self.config.node_number & 0xFF
         self.send_cbus_message(omsg)
 
-    def revert_slim(self):
+    def revert_slim(self) -> None:
         self.logger.log("revert slim")
         omsg = canmessage.canmessage(self.config.canid, 3)
         omsg.data[0] = cbusdefs.OPC_NNREL
@@ -621,12 +622,12 @@ class cbus:
         self.config.set_node_number(0)
         self.indicate_mode(MODE_SLIM)
 
-    def respond_to_enum_request(self):
+    def respond_to_enum_request(self) -> None:
         self.logger.log("respond to enum request")
         omsg = canmessage.canmessage(self.config.canid, 0)
         self.send_cbus_message(omsg)
 
-    def indicate_mode(self, mode):
+    def indicate_mode(self, mode) -> None:
 
         if self.has_ui:
             if mode == MODE_SLIM:
@@ -644,28 +645,28 @@ class cbus:
             self.led_grn.run()
             self.led_ylw.run()
 
-    def set_long_message_handler(self, handler):
+    def set_long_message_handler(self, handler) -> None:
         self.long_message_handler = handler
 
-    def add_history(self, history):
+    def add_history(self, history) -> None:
         if isinstance(history, cbushistory.cbushistory):
             self.histories.append(history)
         else:
             self.logger.log("*error: history object is not an instance of cbushistory")
 
-    def set_gcserver(self, server):
+    def set_gcserver(self, server) -> None:
         import gcserver
         self.gridconnect_server = server
 
-    def add_subscription(self, request):
+    def add_subscription(self, request) -> None:
         if not isinstance(request, cbuspubsub.subscription):
             self.logger.log("error: request is not valid")
         else:
-            self.logger.log(f"cbus: add subscription, id = {request.id}, type = {request.type}, query = {request.query}")
+            self.logger.log(f"cbus: add subscription, name = {request.name}, id = {request.id}, query type = {request.query_type}, query = {request.query}")
             self.subscriptions.append(request)
 
-    def remove_subscription(self, request):
-        self.logger.log(f"cbus: got subscription remove request, id = {request.id}")
+    def remove_subscription(self, request) -> None:
+        self.logger.log(f"cbus: remove subscription, id = {request.id}")
         for i in range(len(self.subscriptions)):
             if self.subscriptions[i].id == request.id:
                 del self.subscriptions[i]

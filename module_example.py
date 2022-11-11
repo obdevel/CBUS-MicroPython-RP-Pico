@@ -22,9 +22,9 @@ class mymodule(cbusmodule.cbusmodule):
     def __init__(self):
         super().__init__()
         self.logger = logger.logger()
-        # self.logger.log("mymodule constructor")
 
     def initialise(self):
+
         # ***
         # *** bare minimum module init
         # ***
@@ -75,9 +75,7 @@ class mymodule(cbusmodule.cbusmodule):
         # ***
         # *** module initialisation complete
 
-        self.logger.log(
-            f"module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}"
-        )
+        self.logger.log(f"module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}")
         self.logger.log(f"free memory = {self.cbus.config.free_memory()} bytes")
         self.logger.log()
 
@@ -87,19 +85,10 @@ class mymodule(cbusmodule.cbusmodule):
     # *** coroutines that run in parallel
     # ***
 
-    # *** main CBUS processing task
-    async def cbus_coro(self):
-        self.logger.log("cbus_coro start")
-
-        while True:
-            c = self.cbus.process()
-            await asyncio.sleep_ms(5)
-
     # *** task to blink the onboard LED
     async def blink_led_coro(self):
         self.logger.log("blink_led_coro start")
-
-        self.led = machine.Pin(25, machine.Pin.OUT)
+        self.led = machine.Pin("LED", machine.Pin.OUT)
 
         while True:
             self.led.value(1)
@@ -109,10 +98,11 @@ class mymodule(cbusmodule.cbusmodule):
 
     # *** user module application task
     async def module_main_loop_coro(self):
-        self.logger.log("main loop coro start")
+        self.logger.log("main loop coroutine start")
 
         while True:
             await asyncio.sleep_ms(25)
+
 
     # ***
     # *** module main entry point
@@ -121,7 +111,6 @@ class mymodule(cbusmodule.cbusmodule):
     async def run(self):
         self.logger.log("run start")
 
-        self.tc = asyncio.create_task(self.cbus_coro())
         self.tb = asyncio.create_task(self.blink_led_coro())
         self.tm = asyncio.create_task(self.module_main_loop_coro())
 
@@ -132,6 +121,7 @@ class mymodule(cbusmodule.cbusmodule):
         await asyncio.gather(repl)
 
 
+# create the module object and run it
 mod = mymodule()
 mod.initialise()
 asyncio.run(mod.run())

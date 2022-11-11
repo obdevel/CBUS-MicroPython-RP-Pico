@@ -7,11 +7,11 @@ import cbushistory
 import logger
 
 QUERY_UNKNOWN = -1
-QUERY_TUPLE = 1
-QUERY_SHORTCODE = 2
-QUERY_OPCODE = 3
-QUERY_REGEX = 4
-QUERY_ALL = 5
+QUERY_EVENTS = 0
+QUERY_SHORTCODES = 1
+QUERY_OPCODES = 2
+QUERY_REGEX = 3
+QUERY_ALL = 4
 
 EVENT_OFF = 0
 EVENT_ON = 1
@@ -101,20 +101,18 @@ class canmessage:
         pol = 0 if self.data[0] & 1 else 1
         return (pol, nn, en)
 
-    def matches(self, type=QUERY_ALL, query=None):
-        # self.logger.log(f"canmessage: match, type = {type}, query = {query}")
+    def matches(self, query, query_type=QUERY_ALL):
+        # self.logger.log(f"canmessage: match, query_type = {type}, query = {query}")
 
-        if type == QUERY_UNKNOWN:
-            return False
-        elif type == QUERY_TUPLE:
+        if query_type == QUERY_EVENTS:
             return True
-        elif type == QUERY_SHORTCODE:
+        elif query_type == QUERY_SHORTCODES:
             return True
-        elif type == QUERY_OPCODE:
+        elif query_type == QUERY_OPCODES:
             return True
-        elif type == QUERY_REGEX:
+        elif query_type == QUERY_REGEX:
             return True
-        elif type == QUERY_ALL:
+        elif query_type == QUERY_ALL:
             return True
         else:
             return False

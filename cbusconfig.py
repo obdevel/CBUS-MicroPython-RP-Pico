@@ -307,7 +307,7 @@ class cbusconfig:
         count = 0
 
         for i in range(self.num_events):
-            if sum(self.read_event(i)[0:4]) < 1020:
+            if sum(self.read_event(i)[0:4]) > 0:
                 count += 1
 
         return count

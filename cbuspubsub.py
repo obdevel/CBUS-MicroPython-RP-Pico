@@ -5,20 +5,21 @@ import canmessage
 import cbus
 import logger
 import uasyncio as asyncio
-import queue
+import primitives
 import random
 import re
 
 
 class subscription:
-    def __init__(self, cbus, query, type):
+    def __init__(self, name, cbus, query, query_type):
         self.logger = logger.logger()
+        self.name = name
         self.cbus = cbus
         self.id = random.randint(0, 65535)
-        self.type = type
         self.query = query
+        self.query_type = query_type
         self.regex = None
-        self.queue = queue.Queue()
+        self.queue = primitives.Queue()
         if type == canmessage.QUERY_REGEX:
             self.regex = re.compile(query)
         self.subscribe()
@@ -30,8 +31,8 @@ class subscription:
         self.logger.log("unsubscribe")
         self.cbus.remove_subscription(request)
 
-    def publish(self, msg):
-        if msg.matches(self.type, self.query):
+    async def publish(self, msg):
+        if msg.matches(self.query, self.query_type):
             self.queue.put_nowait(msg)
 
     async def wait(self):
