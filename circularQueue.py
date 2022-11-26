@@ -13,7 +13,7 @@ class circularQueue:
         self.puts = 0
         self.gets = 0
 
-    def available(self):
+    def available(self) -> int:
         return self.size > 0
 
     def enqueue(self, item):
@@ -51,18 +51,6 @@ class circularQueue:
         self.size = 0
         self.hwm = 0
         self.dropped = 0
-
-    def is_full(self):
-        return self.size == self.capacity
-
-    def is_empty(self):
-        return self.size == 0
-
-    def num_puts(self):
-        return self.puts
-
-    def num_gets(self):
-        return self.gets
 
     def display(self):
         index = self.head

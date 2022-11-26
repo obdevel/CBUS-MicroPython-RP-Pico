@@ -1,11 +1,12 @@
 # cbusled.py
 
+from micropython import const
 import machine
 import time
 import logger
 
-BLINK_DURATION = 500
-PULSE_DURATION = 10
+BLINK_DURATION = const(500)
+PULSE_DURATION = const(10)
 
 
 class cbusled:

@@ -1,13 +1,12 @@
 # cbuspubsub.py
-# publish/subscribe pattern from coroutines
+# publish/subscribe implementation of the observer pattern
 
-import canmessage
-import cbus
-import logger
-import uasyncio as asyncio
-import primitives
 import random
 import re
+
+import canmessage
+import logger
+import primitives
 
 
 class subscription:
@@ -24,18 +23,15 @@ class subscription:
             self.regex = re.compile(query)
         self.subscribe()
 
-    def subscribe(self):
+    def subscribe(self) -> None:
         self.cbus.add_subscription(self)
 
-    def unsubscribe(self, request):
-        self.logger.log("unsubscribe")
+    def unsubscribe(self, request) -> None:
         self.cbus.remove_subscription(request)
 
-    async def publish(self, msg):
+    async def publish(self, msg) -> None:
         if msg.matches(self.query, self.query_type):
             self.queue.put_nowait(msg)
 
     async def wait(self):
         return await self.queue.get()
-
-

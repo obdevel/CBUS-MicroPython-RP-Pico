@@ -1,20 +1,20 @@
 # canmessage.py
 
-import re
-import cbusconfig
+from micropython import const
+
 import cbusdefs
 import cbushistory
 import logger
 
-QUERY_UNKNOWN = -1
-QUERY_EVENTS = 0
-QUERY_SHORTCODES = 1
-QUERY_OPCODES = 2
-QUERY_REGEX = 3
-QUERY_ALL = 4
+QUERY_UNKNOWN = const(-1)
+QUERY_EVENTS = const(0)
+QUERY_SHORTCODES = const(1)
+QUERY_OPCODES = const(2)
+QUERY_REGEX = const(3)
+QUERY_ALL = const(4)
 
-EVENT_OFF = 0
-EVENT_ON = 1
+EVENT_OFF = const(0)
+EVENT_ON = const(1)
 
 event_opcodes = (
     cbusdefs.OPC_ACON,
@@ -42,16 +42,16 @@ polarity_lookup = {
     "?": cbushistory.POLARITY_UNKNOWN
 }
 
-def shortcode_to_tuple(code):
+
+def shortcode_to_tuple(code) -> tuple:
     pol = polarity_lookup.get(code[0])
     e = code.find("e")
     nn = int(code[2:e])
-    en = int(code[e+1:])
-    return (pol, nn, en)
+    en = int(code[e + 1:])
+    return pol, nn, en
 
 
 class canmessage:
-
     """a class to represent a CAN frame"""
 
     def __init__(self, id=0, len=0, data=bytearray(8), rtr=False, ext=False):
@@ -66,26 +66,25 @@ class canmessage:
         rtr = "R" if self.rtr else ""
         ext = "X" if self.ext else ""
         str = (
-            f"[{self.id:X}] "
-            + f"[{self.len:X}] [ "
-            + " ".join("{:02X}".format(x) for x in self.data)
-            + " ] "
-            + rtr
-            + ext
+                f"[{self.id:x}] "
+                + f"[{self.len:x}] [ "
+                + " ".join("{:02x}".format(x) for x in self.data)
+                + " ] "
+                + rtr
+                + ext
         )
         return str
 
-    def make_header(self, priority=0x0B):
-        if self.id - self.get_canid() == 0:
-            self.id |= priority << 7
+    def make_header(self, priority=0x0b) -> None:
+        self.id |= priority << 7
 
-    def get_canid(self):
-        return self.id & 0x7F
+    def get_canid(self) -> int:
+        return self.id & 0x7f
 
-    def is_event(self):
+    def is_event(self) -> bool:
         return self.data[0] in event_opcodes
 
-    def as_shortcode(self, either=False):
+    def as_shortcode(self, either=False) -> str:
         nn = (self.data[1] * 256) + self.data[2]
         en = (self.data[3] * 256) + self.data[4]
         if either:
@@ -95,46 +94,30 @@ class canmessage:
         code += str(nn) + "e" + str(en)
         return code
 
-    def as_tuple(self):
+    def as_tuple(self) -> tuple:
         nn = (self.data[1] * 256) + self.data[2]
         en = (self.data[3] * 256) + self.data[4]
         pol = 0 if self.data[0] & 1 else 1
-        return (pol, nn, en)
+        return pol, nn, en
 
-    def matches(self, query, query_type=QUERY_ALL):
-        # self.logger.log(f"canmessage: match, query_type = {type}, query = {query}")
-
-        if query_type == QUERY_EVENTS:
-            return True
-        elif query_type == QUERY_SHORTCODES:
-            return True
-        elif query_type == QUERY_OPCODES:
-            return True
-        elif query_type == QUERY_REGEX:
-            return True
-        elif query_type == QUERY_ALL:
-            return True
-        else:
-            return False
-
-    def get_node_number(self):
+    def get_node_number(self) -> int:
         return (self.data[1] * 256) + self.data[2]
 
-    def get_event_number(self):
+    def get_event_number(self) -> int:
         return (self.data[3] * 256) + self.data[4]
 
-    def get_node_and_event_numbers(self):
+    def get_node_and_event_numbers(self) -> tuple:
         return self.get_node_number(), self.get_event_number()
 
-    def print(self, hex=True):
+    def print(self, hex_fmt=True) -> None:
         rtr = "R" if self.rtr else ""
         ext = "X" if self.ext else ""
 
-        if hex:
+        if hex_fmt:
             print(
-                f"[{self.id:X}] [{self.len:X}] "
+                f"[{self.id:x}] [{self.len:x}] "
                 + "[ "
-                + " ".join("{:02X}".format(x) for x in self.data)
+                + " ".join("{:02x}".format(x) for x in self.data)
                 + " ] "
                 + rtr
                 + ext,
@@ -153,6 +136,22 @@ class canmessage:
 
         print()
 
+    def matches(self, query, query_type=QUERY_ALL) -> bool:
+        # self.logger.log(f"canmessage: match, query_type = {type}, query = {query}")
+
+        if query_type == QUERY_EVENTS:
+            return self.as_tuple() in query
+        elif query_type == QUERY_SHORTCODES:
+            return self.as_shortcode() in query
+        elif query_type == QUERY_OPCODES:
+            return self.data[0] in query
+        elif query_type == QUERY_REGEX:
+            return True
+        elif query_type == QUERY_ALL:
+            return True
+        else:
+            return False
+
 
 class cbusevent(canmessage):
     def __init__(self, cbus, is_long=True, nn=0, en=0, state=EVENT_OFF, addbytes=None, send_now=False):
@@ -170,23 +169,30 @@ class cbusevent(canmessage):
             elif self.state == EVENT_OFF:
                 self.send_off()
 
-    def make_event(self, opcode):
+    def from_message(self, msg) -> None:
+        self.len = msg.len
+        self.data = msg.data
+        self.nn = (msg.data[1] * 256) + msg.data[2]
+        self.en = (msg.data[3] * 256) + msg.data[4]
+
+    def make_event(self, opcode) -> None:
         self.len = 5
         self.data = bytearray([opcode, self.nn >> 8, self.nn & 0xff, self.en >> 8, self.en & 0xff])
 
-    def send_on(self):
-        self.make_event(cbusdefs.OPC_ACON)
+    def send_on(self) -> None:
+        opcode = cbusdefs.OPC_ACON if self.is_long else cbusdefs.OPC_ASON
+        self.make_event(opcode)
         self.cbus.send_cbus_message(self)
         self.state = EVENT_ON
 
-    def send_off(self):
-        self.make_event(cbusdefs.OPC_ACOF)
+    def send_off(self) -> None:
+        opcode = cbusdefs.OPC_ACOF if self.is_long else cbusdefs.OPC_ASOF
+        self.make_event(opcode)
         self.cbus.send_cbus_message(self)
         self.state = EVENT_OFF
 
-    def get_state(self):
+    def get_state(self) -> int:
         return self.state
 
-    def from_event_table(self, idx=0):
+    def from_event_table(self, idx=0) -> canmessage:
         pass
-

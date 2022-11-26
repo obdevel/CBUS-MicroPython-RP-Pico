@@ -1,82 +1,381 @@
-# mcp2515.py
+import collections
+import sys
+import time
 
 import machine
-import circularQueue
-import time
+import uasyncio as asyncio
+from micropython import const
+
 import canio
 import canmessage
+import circularQueue
 import logger
 
+
+# class CAN_CLOCK:
+#     MCP_20MHZ = 1
+#     MCP_16MHZ = 2
+#     MCP_8MHZ = 3
+#
+#
+# class CAN_SPEED:
+#     CAN_5KBPS = 1
+#     CAN_10KBPS = 2
+#     CAN_20KBPS = 3
+#     CAN_31K25BPS = 4
+#     CAN_33KBPS = 5
+#     CAN_40KBPS = 6
+#     CAN_50KBPS = 7
+#     CAN_80KBPS = 8
+#     CAN_83K3BPS = 9
+#     CAN_95KBPS = 10
+#     CAN_100KBPS = 11
+#     CAN_125KBPS = 12
+#     CAN_200KBPS = 13
+#     CAN_250KBPS = 14
+#     CAN_500KBPS = 15
+#     CAN_1000KBPS = 16
+
+
+class CAN_CLKOUT:
+    CLKOUT_DISABLE = const(-1)
+    CLKOUT_DIV1 = const(0x0)
+    CLKOUT_DIV2 = const(0x1)
+    CLKOUT_DIV4 = const(0x2)
+    CLKOUT_DIV8 = const(0x3)
+
+
+class ERROR:
+    ERROR_OK = const(0)
+    ERROR_FAIL = const(1)
+    ERROR_ALLTXBUSY = const(2)
+    ERROR_FAILINIT = const(3)
+    ERROR_FAILTX = const(4)
+    ERROR_NOMSG = const(5)
+
+
+class MASK:
+    MASK0 = const(1)
+    MASK1 = const(2)
+
+
+class RXF:
+    RXF0 = const(0)
+    RXF1 = const(1)
+    RXF2 = const(2)
+    RXF3 = const(3)
+    RXF4 = const(4)
+    RXF5 = const(5)
+
+
+class RXBn:
+    RXB0 = const(0)
+    RXB1 = const(1)
+
+
+class TXBn:
+    TXB0 = const(0)
+    TXB1 = const(1)
+    TXB2 = const(2)
+
+
+class CANINTF:
+    CANINTF_RX0IF = const(0x01)
+    CANINTF_RX1IF = const(0x02)
+    CANINTF_TX0IF = const(0x04)
+    CANINTF_TX1IF = const(0x08)
+    CANINTF_TX2IF = const(0x10)
+    CANINTF_ERRIF = const(0x20)
+    CANINTF_WAKIF = const(0x40)
+    CANINTF_MERRF = const(0x80)
+
+
+class EFLG:
+    EFLG_RX1OVR = const(1 << 7)
+    EFLG_RX0OVR = const(1 << 6)
+    EFLG_TXBO = const(1 << 5)
+    EFLG_TXEP = const(1 << 4)
+    EFLG_RXEP = const(1 << 3)
+    EFLG_TXWAR = const(1 << 2)
+    EFLG_RXWAR = const(1 << 1)
+    EFLG_EWARN = const(1 << 0)
+
+
+CANCTRL_REQOP = const(0xE0)
+CANCTRL_ABAT = const(0x10)
+CANCTRL_OSM = const(0x08)
+CANCTRL_CLKEN = const(0x04)
+CANCTRL_CLKPRE = const(0x03)
+
+
+class CANCTRL_REQOP_MODE:
+    CANCTRL_REQOP_NORMAL = const(0x00)
+    CANCTRL_REQOP_SLEEP = const(0x20)
+    CANCTRL_REQOP_LOOPBACK = const(0x40)
+    CANCTRL_REQOP_LISTENONLY = const(0x60)
+    CANCTRL_REQOP_CONFIG = const(0x80)
+    CANCTRL_REQOP_POWERUP = const(0xE0)
+
+
+CANSTAT_OPMOD = const(0xE0)
+CANSTAT_ICOD = const(0x0E)
+
+CNF3_SOF = const(0x80)
+
+TXB_EXIDE_MASK = const(0x08)
+DLC_MASK = const(0x0F)
+RTR_MASK = const(0x40)
+
+RXBnCTRL_RXM_STD = const(0x20)
+RXBnCTRL_RXM_EXT = const(0x40)
+RXBnCTRL_RXM_STDEXT = const(0x00)
+RXBnCTRL_RXM_MASK = const(0x60)
+RXBnCTRL_RTR = const(0x08)
+RXB0CTRL_BUKT = const(0x04)
+RXB0CTRL_FILHIT_MASK = const(0x03)
+RXB1CTRL_FILHIT_MASK = const(0x07)
+RXB0CTRL_FILHIT = const(0x00)
+RXB1CTRL_FILHIT = const(0x01)
+
+MCP_SIDH = const(0)
+MCP_SIDL = const(1)
+MCP_EID8 = const(2)
+MCP_EID0 = const(3)
+MCP_DLC = const(4)
+MCP_DATA = const(5)
+
+
+class STAT:
+    STAT_RX0IF = const(1 << 0)
+    STAT_RX1IF = const(1 << 1)
+
+
+STAT_RXIF_MASK = STAT.STAT_RX0IF | STAT.STAT_RX1IF
+
+
+class TXBnCTRL:
+    TXB_ABTF = const(0x40)
+    TXB_MLOA = const(0x20)
+    TXB_TXERR = const(0x10)
+    TXB_TXREQ = const(0x08)
+    TXB_TXIE = const(0x04)
+    TXB_TXP = const(0x03)
+
+
+EFLG_ERRORMASK = const(
+    EFLG.EFLG_RX1OVR
+    | EFLG.EFLG_RX0OVR
+    | EFLG.EFLG_TXBO
+    | EFLG.EFLG_TXEP
+    | EFLG.EFLG_RXEP
+)
+
+
+class INSTRUCTION:
+    INSTRUCTION_WRITE = const(0x02)
+    INSTRUCTION_READ = const(0x03)
+    INSTRUCTION_BITMOD = const(0x05)
+    INSTRUCTION_LOAD_TX0 = const(0x40)
+    INSTRUCTION_LOAD_TX1 = const(0x42)
+    INSTRUCTION_LOAD_TX2 = const(0x44)
+    INSTRUCTION_RTS_TX0 = const(0x81)
+    INSTRUCTION_RTS_TX1 = const(0x82)
+    INSTRUCTION_RTS_TX2 = const(0x84)
+    INSTRUCTION_RTS_ALL = const(0x87)
+    INSTRUCTION_READ_RX0 = const(0x90)
+    INSTRUCTION_READ_RX1 = const(0x94)
+    INSTRUCTION_READ_STATUS = const(0xA0)
+    INSTRUCTION_RX_STATUS = const(0xB0)
+    INSTRUCTION_RESET = const(0xC0)
+
+
+class REGISTER:
+    MCP_RXF0SIDH = const(0x00)
+    MCP_RXF0SIDL = const(0x01)
+    MCP_RXF0EID8 = const(0x02)
+    MCP_RXF0EID0 = const(0x03)
+    MCP_RXF1SIDH = const(0x04)
+    MCP_RXF1SIDL = const(0x05)
+    MCP_RXF1EID8 = const(0x06)
+    MCP_RXF1EID0 = const(0x07)
+    MCP_RXF2SIDH = const(0x08)
+    MCP_RXF2SIDL = const(0x09)
+    MCP_RXF2EID8 = const(0x0A)
+    MCP_RXF2EID0 = const(0x0B)
+    MCP_CANSTAT = const(0x0E)
+    MCP_CANCTRL = const(0x0F)
+    MCP_RXF3SIDH = const(0x10)
+    MCP_RXF3SIDL = const(0x11)
+    MCP_RXF3EID8 = const(0x12)
+    MCP_RXF3EID0 = const(0x13)
+    MCP_RXF4SIDH = const(0x14)
+    MCP_RXF4SIDL = const(0x15)
+    MCP_RXF4EID8 = const(0x16)
+    MCP_RXF4EID0 = const(0x17)
+    MCP_RXF5SIDH = const(0x18)
+    MCP_RXF5SIDL = const(0x19)
+    MCP_RXF5EID8 = const(0x1A)
+    MCP_RXF5EID0 = const(0x1B)
+    MCP_TEC = const(0x1C)
+    MCP_REC = const(0x1D)
+    MCP_RXM0SIDH = const(0x20)
+    MCP_RXM0SIDL = const(0x21)
+    MCP_RXM0EID8 = const(0x22)
+    MCP_RXM0EID0 = const(0x23)
+    MCP_RXM1SIDH = const(0x24)
+    MCP_RXM1SIDL = const(0x25)
+    MCP_RXM1EID8 = const(0x26)
+    MCP_RXM1EID0 = const(0x27)
+    MCP_CNF3 = const(0x28)
+    MCP_CNF2 = const(0x29)
+    MCP_CNF1 = const(0x2A)
+    MCP_CANINTE = const(0x2B)
+    MCP_CANINTF = const(0x2C)
+    MCP_EFLG = const(0x2D)
+    MCP_TXB0CTRL = const(0x30)
+    MCP_TXB0SIDH = const(0x31)
+    MCP_TXB0SIDL = const(0x32)
+    MCP_TXB0EID8 = const(0x33)
+    MCP_TXB0EID0 = const(0x34)
+    MCP_TXB0DLC = const(0x35)
+    MCP_TXB0DATA = const(0x36)
+    MCP_TXB1CTRL = const(0x40)
+    MCP_TXB1SIDH = const(0x41)
+    MCP_TXB1SIDL = const(0x42)
+    MCP_TXB1EID8 = const(0x43)
+    MCP_TXB1EID0 = const(0x44)
+    MCP_TXB1DLC = const(0x45)
+    MCP_TXB1DATA = const(0x46)
+    MCP_TXB2CTRL = const(0x50)
+    MCP_TXB2SIDH = const(0x51)
+    MCP_TXB2SIDL = const(0x52)
+    MCP_TXB2EID8 = const(0x53)
+    MCP_TXB2EID0 = const(0x54)
+    MCP_TXB2DLC = const(0x55)
+    MCP_TXB2DATA = const(0x56)
+    MCP_RXB0CTRL = const(0x60)
+    MCP_RXB0SIDH = const(0x61)
+    MCP_RXB0SIDL = const(0x62)
+    MCP_RXB0EID8 = const(0x63)
+    MCP_RXB0EID0 = const(0x64)
+    MCP_RXB0DLC = const(0x65)
+    MCP_RXB0DATA = const(0x66)
+    MCP_RXB1CTRL = const(0x70)
+    MCP_RXB1SIDH = const(0x71)
+    MCP_RXB1SIDL = const(0x72)
+    MCP_RXB1EID8 = const(0x73)
+    MCP_RXB1EID0 = const(0x74)
+    MCP_RXB1DLC = const(0x75)
+    MCP_RXB1DATA = const(0x76)
+
+
+N_TXBUFFERS = const(3)
+N_RXBUFFERS = const(2)
+
+# CAN_CFGS = {
+#     CAN_CLOCK.MCP_8MHZ: {
+#         CAN_SPEED.CAN_125KBPS: [
+#             MCP_8MHz_125kBPS_CFG1,
+#             MCP_8MHz_125kBPS_CFG2,
+#             MCP_8MHz_125kBPS_CFG3,
+#         ],
+#     },
+#     CAN_CLOCK.MCP_16MHZ: {
+#         CAN_SPEED.CAN_125KBPS: [
+#             MCP_16MHz_125kBPS_CFG1,
+#             MCP_16MHz_125kBPS_CFG2,
+#             MCP_16MHz_125kBPS_CFG3,
+#         ],
+#     },
+# }
+
 # speed 8M
-MCP_8MHz_125kBPS_CFG1 = 0x81
-MCP_8MHz_125kBPS_CFG2 = 0xE5
-MCP_8MHz_125kBPS_CFG3 = 0x83
+MCP_8MHz_125kBPS_CFG1 = const(0x01)
+MCP_8MHz_125kBPS_CFG2 = const(0xB1)
+MCP_8MHz_125kBPS_CFG3 = const(0x85)
 
 # speed 16M
-MCP_16MHz_125kBPS_CFG1 = 0x43
-MCP_16MHz_125kBPS_CFG2 = 0xE5
-MCP_16MHz_125kBPS_CFG3 = 0x83
+MCP_16MHz_125kBPS_CFG1 = const(0x03)
+MCP_16MHz_125kBPS_CFG2 = const(0xF0)
+MCP_16MHz_125kBPS_CFG3 = const(0x86)
 
-# commands
-RESET_COMMAND = 0xC0
-WRITE_COMMAND = 0x02
-READ_COMMAND = 0x03
-BIT_MODIFY_COMMAND = 0x05
-LOAD_TX_BUFFER_COMMAND = 0x40
-REQUEST_TO_SEND_COMMAND = 0x80
-READ_FROM_RXB0SIDH_COMMAND = 0x90
-READ_FROM_RXB1SIDH_COMMAND = 0x94
-READ_STATUS_COMMAND = 0xA0
-RX_STATUS_COMMAND = 0xB0
+SPI_DUMMY_INT = const(0x00)
+SPI_TRANSFER_LEN = const(1)
+SPI_HOLD_US = const(50)
 
-# registers
-BFPCTRL_REGISTER = 0x0C
-TXRTSCTRL_REGISTER = 0x0D
-CANSTAT_REGISTER = 0x0E
-CANCTRL_REGISTER = 0x0F
-TEC_REGISTER = 0x1C
-REC_REGISTER = 0x1D
-RXM0SIDH_REGISTER = 0x20
-RXM1SIDH_REGISTER = 0x24
-CNF3_REGISTER = 0x28
-CNF2_REGISTER = 0x29
-CNF1_REGISTER = 0x2A
-CANINTE_REGISTER = 0x2B
-CANINTF_REGISTER = 0x2C
-EFLG_REGISTER = 0x2D
-TXB0CTRL_REGISTER = 0x30
-TXB1CTRL_REGISTER = 0x40
-TXB2CTRL_REGISTER = 0x50
-RXB0CTRL_REGISTER = 0x60
-RXB1CTRL_REGISTER = 0x70
-RXFSIDH_REGISTER = [0x00, 0x04, 0x08, 0x10, 0x14, 0x18]
+# SPI_DEFAULT_BAUDRATE = 10000000  # 10MHz
+# SPI_DEFAULT_FIRSTBIT = machine.SPI.MSB
+# SPI_DEFAULT_POLARITY = 0
+# SPI_DEFAULT_PHASE = 0
+
+# Special address description flags for the CAN_ID
+CAN_EFF_FLAG = const(0x80000000)  # EFF/SFF is set in the MSB
+CAN_RTR_FLAG = const(0x40000000)  # remote transmission request
+CAN_ERR_FLAG = const(0x20000000)  # error message frame
+
+# Valid bits in CAN ID for frame formats
+CAN_SFF_MASK = const(0x000007FF)  # standard frame format (SFF)
+CAN_EFF_MASK = const(0x1FFFFFFF)  # extended frame format (EFF)
+CAN_ERR_MASK = const(0x1FFFFFFF)  # omit EFF, RTR, ERR flags
+
+CAN_SFF_ID_BITS = const(11)
+CAN_EFF_ID_BITS = const(29)
+
+# CAN payload length and DLC definitions according to ISO 11898-1
+CAN_MAX_DLC = const(8)
+CAN_MAX_DLEN = const(8)
+
+# CAN ID length
+CAN_IDLEN = const(4)
+
+TXBnREGS = collections.namedtuple("TXBnREGS", "CTRL SIDH DATA")
+RXBnREGS = collections.namedtuple("RXBnREGS", "CTRL SIDH DATA CANINTFRXnIF")
+
+TXB = const([
+    TXBnREGS(REGISTER.MCP_TXB0CTRL, REGISTER.MCP_TXB0SIDH, REGISTER.MCP_TXB0DATA),
+    TXBnREGS(REGISTER.MCP_TXB1CTRL, REGISTER.MCP_TXB1SIDH, REGISTER.MCP_TXB1DATA),
+    TXBnREGS(REGISTER.MCP_TXB2CTRL, REGISTER.MCP_TXB2SIDH, REGISTER.MCP_TXB2DATA),
+])
+
+RXB = const([
+    RXBnREGS(
+        REGISTER.MCP_RXB0CTRL,
+        REGISTER.MCP_RXB0SIDH,
+        REGISTER.MCP_RXB0DATA,
+        CANINTF.CANINTF_RX0IF,
+    ),
+    RXBnREGS(
+        REGISTER.MCP_RXB1CTRL,
+        REGISTER.MCP_RXB1SIDH,
+        REGISTER.MCP_RXB1DATA,
+        CANINTF.CANINTF_RX1IF,
+    ),
+])
+
+tsf = asyncio.ThreadSafeFlag()
 
 
 class mcp2515(canio.canio):
-
     """a canio derived class for use with an MCP2515 CAN controller device"""
 
-    def __init__(self, osc=16000000, cs_pin=5, int_pin=1, bus=None, rxq_size=64, txq_size = 16):
-        self.logger = logger.logger()
-        # self.logger.log("mcp2515 constructor")
-
-        # call superclass constructor
+    def __init__(self, osc=16_000_000, cs_pin=5, int_pin=1, bus=None, rxq_size=64, txq_size=16):
         super().__init__()
+        self.logger = logger.logger()
 
         # crystal frequency
         self.osc = osc
 
-        # create message buffers
+        # message buffers
         self.rx_queue = circularQueue.circularQueue(rxq_size)
         self.tx_queue = circularQueue.circularQueue(txq_size)
 
         # init chip select and interrupt pins
         self.cs_pin = machine.Pin(cs_pin, machine.Pin.OUT)
-        self.cs_pin.on()
+        self.cs_pin.high()
 
         self.int_pin = machine.Pin(int_pin, machine.Pin.IN, machine.Pin.PULL_UP)
 
-        # init SPI bus
+        # init SPI bus - default pin assignments for my shield designs
         if bus is None:
             self.bus = machine.SPI(
                 0,
@@ -92,369 +391,490 @@ class mcp2515(canio.canio):
         else:
             self.bus = bus
 
-    def isr(self, source=None):
-        # CAN interrupt handler
-        self.logger.log(f"mcp2515 isr triggered, source = {source}")
+        self.mcp2515_rx_index = 0
+        self.txb_free = [True] * 3
 
-        handled = False
+    def spi_transfer(self, value: int = SPI_DUMMY_INT, read: bool = False):
+        """Write int value to SPI and read SPI as int value simultaneously.
+        This method supports transfer single byte only,
+        and the system byte order doesn't matter because of that. The input and
+        output int value are unsigned.
+        """
+        value_as_byte = value.to_bytes(SPI_TRANSFER_LEN, sys.byteorder)
 
-        self.chip_select(True)
-        ret = self.read_register(CANSTAT_REGISTER)
-        print(f"ret = {ret}")
-        intr_type = int(ret[0]) & 0x0E
+        if read:
+            output = bytearray(SPI_TRANSFER_LEN)
+            self.bus.write_readinto(value_as_byte, output)
+            return int.from_bytes(output, sys.byteorder)
+        self.bus.write(value_as_byte)
+        return None
 
-        self.logger.log(f"state = {intr_type}")
+    def isr(self):
+        """ISR sets flag and returns"""
+        tsf.set()
 
-        while intr_type != 0:
-            handled = True
+    async def process_isr(self):
+        """processor waits for ISR flag and processes interrupt"""
+        while True:
+            await tsf.wait()
+            # TODO: check which interrupt fired, clear it and set RXB or TXB number
 
-            if intr_type == (1 << 1):  # error interrupt
-                self.modify_register(CANINTF_REGISTER, 0x20, 0)
-            elif intr_type == (2 << 1):  # wakeup interrupt
-                self.modify_register(CANINTF_REGISTER, 0x40, 0)
-            elif intr_type == (3 << 1):  # TXB0 interrupt
-                self.handle_txb_interrupt(0)
-            elif intr_type == (4 << 1):  # TXB1 interrupt
-                self.handle_txb_interrupt(1)
-            elif intr_type == (5 << 1):  # TXB2 interrupt
-                self.handle_txb_interrupt(2)
-            elif intr_type == (6 << 1) or intr_type == (7 << 1):  # RXB interrupts
-                self.handle_rxb_interrupt()
-
-            ret = self.read_register(CANSTAT_REGISTER)
-            intr_type = int(ret[0]) & 0x0E
-            self.logger.log(f"interrupt = {intr_type}")
-
-        self.chip_select(False)
-        self.logger.log("end of isr")
-
-        return handled
-
-    def chip_select(self, state):
-        if state:
-            # machine.disable_irq()
-            # print("CS low")
-            # self.cs_pin.off()
-            self.cs_pin.value(0)
-        else:
-            # print("CS high")
-            # self.cs_pin.on()
-            self.cs_pin.value(1)
-            # machine.enable_irq()
-
-    def read_register(self, reg):
-        # print(f'read_register {reg}')
-
-        msg = bytearray()
-        msg.append(READ_COMMAND)
-        msg.append(reg)
-
-        self.chip_select(True)
-        self.bus.write(msg)
-        ret = self.bus.read(1)
-        self.chip_select(False)
-
-        return ret
-
-    def read_registers(self, reg, values, n):
-        # print('read_registers')
-
-        msg = bytearray()
-        msg.append(READ_COMMAND)
-        msg.append(reg)
-
-        self.chip_select(True)
-        self.bus.write(msg)
-        value = self.bus.read(n)
-        self.chip_select(False)
-
-    def write_register(self, reg, value):
-        # print(f'write_register {reg}')
-
-        msg = bytearray()
-        msg.append(WRITE_COMMAND)
-        msg.append(reg)
-        msg.append(value)
-
-        self.chip_select(True)
-        self.bus.write(msg)
-        self.chip_select(False)
-
-    def write_registers(self, reg, values):
-        # print('write_registers')
-
-        msg = bytearray()
-        msg.append(WRITE_COMMAND)
-        msg.append(reg)
-
-        for b in values:
-            msg.append(b)
-
-        self.chip_select(True)
-        self.bus.write(msg)
-        self.chip_select(False)
-
-    def modify_register(self, reg, mask, data):
-        # print('modify_register')
-
-        msg = bytearray()
-        msg.append(BIT_MODIFY_COMMAND)
-        msg.append(reg)
-        msg.append(mask)
-        msg.append(data)
-
-        self.chip_select(True)
-        self.bus.write(msg)
-        self.chip_select(False)
-
-    def read_rx_status(self):
-        # print('read_rx_status')
-        reg = bytearray(RX_STATUS_COMMAND)
-        self.chip_select(True)
-        self.bus.write(reg)
-        read = self.bus.read(1, 0)
-        self.chip_select(False)
-
-        return read[0]
-
-    def handle_rxb_interrupt(self):
-        self.logger.log("handle_rxb_interrupt")
-
-        # got_msg = False
-        rx_status = self.read_rx_status()
-
-        if rx_status & 0xC0:
-            self.logger.log("new message available")
-            # got_msg = True
-            message = canmessage.canmessage()
-            access_rxb0 = (rx_status & 0x40) != 0
-            message.rtr = (rx_status & 0x08) != 0
-            message.ext = (rx_status & 0x10) != 0
-
-            if access_rxb0:
-                self.logger.log("from RXB0")
-                reg = READ_FROM_RXB0SIDH_COMMAND
+            err, frame = self.read_message()
+            if err == ERROR.ERROR_OK:
+                self.logger.log('mcp2515: got message')
+                self.rx_queue.enqueue(frame)
             else:
-                self.logger.log("from RXB1")
-                reg = READ_FROM_RXB1SIDH_COMMAND
+                self.logger.log(f'mcp2515: no message waiting,  err = {err}')
 
-            self.chip_select(True)
+    def available(self) -> bool:
+        return self.rx_queue.available()
 
-            v = bytearray()
-            v.append(reg)
-            self.bus.write(v)
-            message.id = self.bus.read(1)[0]
-            sidl = self.bus.read(1)
-            message.id <<= 3
-            message.id |= sidl >> 5
-            eid8 = self.bus.read(1)
+    def get_next_message(self) -> canmessage.canmessage:
+        return self.rx_queue.dequeue()
 
-            if message.ext:
-                message.id <<= 2
-                message.id |= sidl & 0x03
-                message.id <<= 8
-                message.id |= eid8
+    def begin(self) -> int:
+        self.logger.log('mcp2515 begin')
 
-            eid0 = self.bus.read(1)[0]
-
-            if message.ext:
-                message.id <<= 8
-                message.id |= eid0
-
-            dlc = self.bus.read(1)[0]
-            message.len = dlc & 0x0F
-            message.data = self.bus.read(message.len)
-
-            self.chip_select(False)
-            self.rx_queue.enqueue(message)
-
-        else:
-            self.logger.log("no message available")
-
-    def handle_txb_interrupt(self, txb):
-        self.logger.log("handle_txb_interrupt")
-
-        self.modify_register(CANINTF_REGISTER, (0x04 << txb), 0)
-
-        if self.tx_queue.available():
-            self.logger.log("sending queued msg")
-            msg = self.tx_queue.dequeue()
-            self.internal_send_message(msg, txb)
-        else:
-            self.logger.log("no queued msg to tx")
-            self.txb_is_free[txb] = True
-
-    def internal_send_message(self, msg, txb):
-#         self.logger.log(
-#             f"internal_send_message using txb = {txb}, id = {msg.id:#x}, len = {msg.len}"
-#         )
-
-        self.chip_select(True)
-
-        load_tx_buffer_command = bytearray(LOAD_TX_BUFFER_COMMAND | (txb << 1))
-        self.bus.write(load_tx_buffer_command)
-
-        if msg.ext:
-            # self.logger.log("extended message")
-            v = msg.id >> 21
-            self.bus.write(bytearray(v))
-            v = (msg.id >> 13) & 0xE0
-            v |= (msg.id >> 16) & 0x03
-            v |= 0x08
-            self.bus.write(bytearray(v))
-            v = (msg.id >> 8) & 0xFF
-            self.bus.write(bytearray(v))
-            v = msg.id & 0xFF
-        else:
-            # self.logger.log("standard message")
-            v = msg.id >> 3
-            self.bus.write(bytearray(v))
-            v = (msg.id << 5) & 0xE0
-            self.bus.write(bytearray(v))
-            self.bus.write(bytearray(0))
-            self.bus.write(bytearray(0))
-
-        v = msg.len
-
-        if msg.rtr:
-            self.logger.log("rtr message")
-            v |= 0x40
-
-        self.bus.write(bytearray(v))
-
-        if not msg.rtr:
-            self.bus.write(bytearray(msg.data))
-
-        self.chip_select(False)
-
-        self.chip_select(True)
-        send_command = REQUEST_TO_SEND_COMMAND | (1 << txb)
-        self.bus.write(bytearray(send_command))
-        self.chip_select(False)
-
-        # self.logger.log("internal_send_message ends")
-
-    def reset(self):
-        # self.logger.log("mcp2515 reset")
-        msg = bytearray()
-        msg.append(RESET_COMMAND)
-        self.chip_select(True)
-        self.bus.write(msg)
-        self.chip_select(False)
-        time.sleep_ms(5)
-
-    def begin(self):
-        # self.logger.log("mcp2515 begin")
+        # reset the device
         self.reset()
 
         # check device is present
-        self.write_register(CNF1_REGISTER, 0x55)
-        x = self.read_register(CNF1_REGISTER)
+        self.set_register(REGISTER.MCP_CNF1, 0x55)
+        tmp = self.read_register(REGISTER.MCP_CNF1)
 
-        if x[0] == 0x55:
+        if tmp == 0x55:
             self.logger.log("mcp2515 device is present")
         else:
             self.logger.log("no response from mcp2515 device")
+            return ERROR.ERROR_FAIL
 
-        # init tx buffer states
-        self.txb_is_free = [True, True, True]
+        zeros = bytearray(14)
+        self.set_registers(REGISTER.MCP_TXB0CTRL, zeros)
+        self.set_registers(REGISTER.MCP_TXB1CTRL, zeros)
+        self.set_registers(REGISTER.MCP_TXB2CTRL, zeros)
 
-        # set CNF registers for bus speed
-        # print(f'oscillator freq = {self.osc}')
+        self.set_register(REGISTER.MCP_RXB0CTRL, 0)
+        self.set_register(REGISTER.MCP_RXB1CTRL, 0)
 
-        if self.osc == 16000000:
-            self.write_register(CNF1_REGISTER, MCP_16MHz_125kBPS_CFG1)
-            self.write_register(CNF2_REGISTER, MCP_16MHz_125kBPS_CFG2)
-            self.write_register(CNF3_REGISTER, MCP_16MHz_125kBPS_CFG3)
-        elif self.osc == 8000000:
-            self.write_register(CNF1_REGISTER, MCP_8MHz_125kBPS_CFG1)
-            self.write_register(CNF2_REGISTER, MCP_8MHz_125kBPS_CFG2)
-            self.write_register(CNF3_REGISTER, MCP_8MHz_125kBPS_CFG3)
-        else:
-            self.logger.log("*error: unsupported oscillator frequency")
+        # self.set_register(
+        #     REGISTER.MCP_CANINTE,
+        #     CANINTF.CANINTF_RX0IF
+        #     | CANINTF.CANINTF_RX1IF
+        #     | CANINTF.CANINTF_ERRIF
+        #     | CANINTF.CANINTF_MERRF,
+        # )
 
-        # configure interrupts
-        self.write_register(CANINTE_REGISTER, 0x1F)
+        # enable all interrupt sources
+        self.set_register(REGISTER.MCP_CANINTF, 0xff)
 
-        # configure i/o pins
-        self.write_register(BFPCTRL_REGISTER, 0)
-        self.write_register(TXRTSCTRL_REGISTER, 0)
+        # Receives all valid messages with either Standard or Extended Identifiers that
+        # meet filter criteria. RXF0 is applied for RXB0, RXF1 is applied for RXB1
+        self.modify_register(
+            REGISTER.MCP_RXB0CTRL,
+            RXBnCTRL_RXM_MASK | RXB0CTRL_BUKT | RXB0CTRL_FILHIT_MASK,
+            RXBnCTRL_RXM_STDEXT | RXB0CTRL_BUKT | RXB0CTRL_FILHIT,
+        )
+        self.modify_register(
+            REGISTER.MCP_RXB1CTRL,
+            RXBnCTRL_RXM_MASK | RXB1CTRL_FILHIT_MASK,
+            RXBnCTRL_RXM_STDEXT | RXB1CTRL_FILHIT,
+        )
 
-        # configure receive buffer rollover
-        self.write_register(RXB0CTRL_REGISTER, 1 << 2)
-        self.write_register(RXB1CTRL_REGISTER, 0)
+        # Clear filters and masks
+        # Do not filter any standard frames for RXF0 used by RXB0
+        # Do not filter any extended frames for RXF1 used by RXB1
+        filters = (RXF.RXF0, RXF.RXF1, RXF.RXF2, RXF.RXF3, RXF.RXF4, RXF.RXF5)
+        for f in filters:
+            ext = True if f == RXF.RXF1 else False
+            result = self.set_filter(f, ext, 0)
+            if result != ERROR.ERROR_OK:
+                return result
+        masks = (MASK.MASK0, MASK.MASK1)
+        for m in masks:
+            result = self.set_filter_mask(m, True, 0)
+            if result != ERROR.ERROR_OK:
+                return result
 
-        # configure mask registers - no filters or masks set
-        values = bytearray()
-        values.append(0)
-        values.append(0)
-        values.append(0)
-        values.append(0)
-        self.write_registers(RXM0SIDH_REGISTER, values)
+        # set bit rate
+        self.set_bit_rate()
 
-        values = bytearray()
-        values.append(0)
-        values.append(0)
-        values.append(0)
-        values.append(0)
-        self.write_registers(RXM0SIDH_REGISTER, values)
-
-        # configure transmit buffer priority
-        self.write_register(TXB0CTRL_REGISTER, 0)
-        self.write_register(TXB1CTRL_REGISTER, 0)
-        self.write_register(TXB2CTRL_REGISTER, 0)
-
-        # init transmit buffer states
-        self.txb_is_free = [True, True, True]
-
-        # set mode
-        self.write_register(CANCTRL_REGISTER, 0)
-        time.sleep_ms(5)
-        x = self.read_register(CANCTRL_REGISTER)
-
-        if x[0] != 0:
-            self.logger.log("error waiting for mode change")
-
-        # install ISR
+        # install ISR and run message processor
         self.int_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.isr)
+        asyncio.create_task(self.process_isr())
 
-        # self.logger.log("mcp2515 init complete")
+        # set normal mode
+        self.set_normal_mode()
 
-    def available(self):
-        # self.logger.log('available')
-        return self.rx_queue.available()
+        return ERROR.ERROR_OK
 
-    def send_message(self, msg):
-        # self.logger.log("send_message")
-        msg.make_header()
+    def reset(self):
+        self.cs_pin.low()
+        self.spi_transfer(INSTRUCTION.INSTRUCTION_RESET)
+        self.cs_pin.high()
+        time.sleep_ms(10)
 
-        txb = 0
+    def read_register(self, reg: int) -> int:
+        self.cs_pin.low()
+        self.spi_transfer(INSTRUCTION.INSTRUCTION_READ)
+        self.spi_transfer(reg)
+        ret = self.spi_transfer(read=True)
+        self.cs_pin.high()
 
-        if self.txb_is_free[txb]:
-            # self.logger.log("device buffer is free, sending message immediately")
-            self.internal_send_message(msg, txb)
-            self.txb_is_free[txb] = False
-            ret = True
-        else:
-            # self.logger.log("device buffer is full, queueing message for later")
-
-            if self.tx_queue.enqueue(msg):
-                # self.logger.log("queued ok")
-                ret = True
-            else:
-                # self.logger.log("queue is full")
-                ret = False
-
-        # self.logger.log("send message ends")
         return ret
 
-    def get_next_message(self):
-        # print('get_next_message')
+    def read_registers(self, reg: int, n: int) -> list:
+        self.cs_pin.low()
+        self.spi_transfer(INSTRUCTION.INSTRUCTION_READ)
+        self.spi_transfer(reg)
+        # MCP2515 has auto-increment of address-pointer
+        values = []
+        for i in range(n):
+            values.append(self.spi_transfer(read=True))
+        self.cs_pin.high()
 
-        if self.available():
-            # machine.disable_irq()
-            msg = self.rx_queue.dequeue()
-            # machine.enable_irq()
+        return values
+
+    def set_register(self, reg: int, value: int) -> None:
+        self.cs_pin.low()
+        self.spi_transfer(INSTRUCTION.INSTRUCTION_WRITE)
+        self.spi_transfer(reg)
+        self.spi_transfer(value)
+        self.cs_pin.high()
+
+    def set_registers(self, reg: int, values: bytearray) -> None:
+        self.cs_pin.low()
+        self.spi_transfer(INSTRUCTION.INSTRUCTION_WRITE)
+        self.spi_transfer(reg)
+        for v in values:
+            self.spi_transfer(v)
+        self.cs_pin.high()
+
+    def modify_register(
+            self, reg: int, mask: int, data: int, spifastend: bool = False
+    ) -> None:
+        self.cs_pin.low()
+        self.spi_transfer(INSTRUCTION.INSTRUCTION_BITMOD)
+        self.spi_transfer(reg)
+        self.spi_transfer(mask)
+        self.spi_transfer(data)
+        if not spifastend:
+            self.cs_pin.high()
+        else:
+            self.cs_pin.high()
+            time.sleep_us(SPI_HOLD_US)  # type: ignore
+
+    def get_status(self) -> int:
+        self.cs_pin.low()
+        self.spi_transfer(INSTRUCTION.INSTRUCTION_READ_STATUS)
+        i = self.spi_transfer(read=True)
+        self.cs_pin.high()
+
+        return i
+
+    def set_config_mode(self) -> int:
+        return self.set_mode(CANCTRL_REQOP_MODE.CANCTRL_REQOP_CONFIG)
+
+    def set_listen_only_mode(self) -> int:
+        return self.set_mode(CANCTRL_REQOP_MODE.CANCTRL_REQOP_LISTENONLY)
+
+    def set_sleep_mode(self) -> int:
+        return self.set_mode(CANCTRL_REQOP_MODE.CANCTRL_REQOP_SLEEP)
+
+    def set_loopback_mode(self) -> int:
+        return self.set_mode(CANCTRL_REQOP_MODE.CANCTRL_REQOP_LOOPBACK)
+
+    def set_normal_mode(self) -> int:
+        return self.set_mode(CANCTRL_REQOP_MODE.CANCTRL_REQOP_NORMAL)
+
+    def set_mode(self, mode: int) -> int:
+        self.modify_register(REGISTER.MCP_CANCTRL, CANCTRL_REQOP, mode)
+
+        end_time = time.ticks_add(time.ticks_ms(), 10)  # type: ignore
+        mode_match = False
+        while time.ticks_diff(time.ticks_ms(), end_time) < 0:  # type: ignore
+            newmode = self.read_register(REGISTER.MCP_CANSTAT)
+            newmode &= CANSTAT_OPMOD
+
+            mode_match = newmode == mode
+            if mode_match:
+                break
+
+        return ERROR.ERROR_OK if mode_match else ERROR.ERROR_FAIL
+
+    def set_bit_rate(self) -> int:
+        error = self.set_config_mode()
+        if error != ERROR.ERROR_OK:
+            return error
+
+        if self.osc == 16_000_000:
+            cfg1 = MCP_16MHz_125kBPS_CFG1
+            cfg2 = MCP_16MHz_125kBPS_CFG2
+            cfg3 = MCP_16MHz_125kBPS_CFG3
+        elif self.osc == 8_000_000:
+            cfg1 = MCP_8MHz_125kBPS_CFG1
+            cfg2 = MCP_8MHz_125kBPS_CFG2
+            cfg3 = MCP_8MHz_125kBPS_CFG3
+        else:
+            raise ValueError('Unsupported oscillator frequency')
+
+        self.set_register(REGISTER.MCP_CNF1, cfg1)
+        self.set_register(REGISTER.MCP_CNF2, cfg2)
+        self.set_register(REGISTER.MCP_CNF3, cfg3)
+
+        return ERROR.ERROR_OK
+
+    # def set_CLKOUT(self, divisor: int) -> int:
+    #     if divisor == CAN_CLKOUT.CLKOUT_DISABLE:
+    #         # Turn off CLKEN
+    #         self.modify_register(REGISTER.MCP_CANCTRL, CANCTRL_CLKEN, 0x00)
+    #
+    #         # Turn on CLKOUT for SOF
+    #         self.modify_register(REGISTER.MCP_CNF3, CNF3_SOF, CNF3_SOF)
+    #         return ERROR.ERROR_OK
+    #
+    #     # Set the prescaler (CLKPRE)
+    #     self.modify_register(REGISTER.MCP_CANCTRL, CANCTRL_CLKPRE, divisor)
+    #
+    #     # Turn on CLKEN
+    #     self.modify_register(REGISTER.MCP_CANCTRL, CANCTRL_CLKEN, CANCTRL_CLKEN)
+    #
+    #     # Turn off CLKOUT for SOF
+    #     self.modify_register(REGISTER.MCP_CNF3, CNF3_SOF, 0x00)
+    #
+    #     return ERROR.ERROR_OK
+
+    def prepare_id(self, ext: int, id_: int) -> bytearray:
+        canid = id_ & 0xFFFF
+        buffer = bytearray(CAN_IDLEN)
+
+        if ext:
+            buffer[MCP_EID0] = canid & 0xFF
+            buffer[MCP_EID8] = canid >> 8
+            canid = id_ >> 16
+            buffer[MCP_SIDL] = canid & 0x03
+            buffer[MCP_SIDL] += (canid & 0x1C) << 3
+            buffer[MCP_SIDL] |= TXB_EXIDE_MASK
+            buffer[MCP_SIDH] = canid >> 5
+        else:
+            buffer[MCP_SIDH] = canid >> 3
+            buffer[MCP_SIDL] = (canid & 0x07) << 5
+            buffer[MCP_EID0] = 0
+            buffer[MCP_EID8] = 0
+
+        return buffer
+
+    def set_filter_mask(self, mask: int, ext: int, ulData: int) -> int:
+        res = self.set_config_mode()
+        if res != ERROR.ERROR_OK:
+            return res
+
+        reg = None
+        if mask == MASK.MASK0:
+            reg = REGISTER.MCP_RXM0SIDH
+        elif mask == MASK.MASK1:
+            reg = REGISTER.MCP_RXM1SIDH
+        else:
+            return ERROR.ERROR_FAIL
+
+        tbufdata = self.prepare_id(ext, ulData)
+        self.set_registers(reg, tbufdata)
+
+        return ERROR.ERROR_OK
+
+    def set_filter(self, ft: int, ext: int, ulData: int) -> int:
+        res = self.set_config_mode()
+        if res != ERROR.ERROR_OK:
+            return res
+
+        reg = None
+        if ft == RXF.RXF0:
+            reg = REGISTER.MCP_RXF0SIDH
+        elif ft == RXF.RXF1:
+            reg = REGISTER.MCP_RXF1SIDH
+        elif ft == RXF.RXF2:
+            reg = REGISTER.MCP_RXF2SIDH
+        elif ft == RXF.RXF3:
+            reg = REGISTER.MCP_RXF3SIDH
+        elif ft == RXF.RXF4:
+            reg = REGISTER.MCP_RXF4SIDH
+        elif ft == RXF.RXF5:
+            reg = REGISTER.MCP_RXF5SIDH
+        else:
+            return ERROR.ERROR_FAIL
+
+        tbufdata = self.prepare_id(ext, ulData)
+        self.set_registers(reg, tbufdata)
+
+        return ERROR.ERROR_OK
+
+    def process_txb_interrupt(self) -> None:
+        if self.tx_queue.available():
+            self.send_message_(self.tx_queue.dequeue())
+
+    def process_rxb_interrupt(self):
+        err, msg = self.read_message_()
+        if err == ERROR.ERROR_OK:
             return msg
         else:
             return None
+
+    def send_message(self, msg: canmessage.canmessage, txbn=None) -> int:
+        if self.txb_free[0] or self.txb_free[1] or self.txb_free[2]:
+            return self.send_message_(msg, txbn)
+        else:
+            self.tx_queue.enqueue(msg)
+            return ERROR.ERROR_OK
+
+    def send_message_(self, frame: canmessage.canmessage, txbn=None) -> int:
+        if txbn is None:
+            return self.send_message__(frame)
+
+        if frame.len > CAN_MAX_DLEN:
+            return ERROR.ERROR_FAILTX
+
+        txbuf = TXB[txbn]
+
+        # ext = frame.id & CAN_EFF_FLAG
+        # rtr = frame.id & CAN_RTR_FLAG
+        # id_ = frame.id & (CAN_EFF_MASK if ext else CAN_SFF_MASK)
+
+        id_ = frame.id & (CAN_EFF_MASK if frame.ext else CAN_SFF_MASK)
+
+        if frame.rtr:
+            id_ |= CAN_RTR_FLAG
+
+        data = self.prepare_id(frame.ext, id_)
+        mcp_dlc = (frame.len | RTR_MASK) if frame.rtr else frame.len
+
+        data.extend(bytearray(1 + frame.len))
+        data[MCP_DLC] = mcp_dlc
+        data[MCP_DATA: MCP_DATA + frame.len] = frame.data
+
+        self.set_registers(txbuf.SIDH, data)
+
+        self.modify_register(
+            txbuf.CTRL, TXBnCTRL.TXB_TXREQ, TXBnCTRL.TXB_TXREQ, spifastend=True
+        )
+
+        ctrl = self.read_register(txbuf.CTRL)
+        if ctrl & (TXBnCTRL.TXB_ABTF | TXBnCTRL.TXB_MLOA | TXBnCTRL.TXB_TXERR):
+            return ERROR.ERROR_FAILTX
+
+        return ERROR.ERROR_OK
+
+    def send_message__(self, frame: canmessage.canmessage) -> int:
+        if frame.len > CAN_MAX_DLEN:
+            return ERROR.ERROR_FAILTX
+
+        txBuffers = (TXBn.TXB0, TXBn.TXB1, TXBn.TXB2)
+
+        for i in range(N_TXBUFFERS):
+            txbuf = TXB[txBuffers[i]]
+            ctrlval = self.read_register(txbuf.CTRL)
+            if (ctrlval & TXBnCTRL.TXB_TXREQ) == 0:
+                return self.send_message_(frame, txBuffers[i])
+
+        return ERROR.ERROR_ALLTXBUSY
+
+    def read_message(self, rxbn: int = None) -> tuple:
+        if rxbn is None:
+            return self.read_message_()
+
+        rxb = RXB[rxbn]
+
+        tbufdata = self.read_registers(rxb.SIDH, 1 + CAN_IDLEN)
+
+        id_ = (tbufdata[MCP_SIDH] << 3) + (tbufdata[MCP_SIDL] >> 5)
+
+        if (tbufdata[MCP_SIDL] & TXB_EXIDE_MASK) == TXB_EXIDE_MASK:
+            id_ = (id_ << 2) + (tbufdata[MCP_SIDL] & 0x03)
+            id_ = (id_ << 8) + tbufdata[MCP_EID8]
+            id_ = (id_ << 8) + tbufdata[MCP_EID0]
+            id_ |= CAN_EFF_FLAG
+
+        dlc = tbufdata[MCP_DLC] & DLC_MASK
+        if dlc > CAN_MAX_DLEN:
+            return ERROR.ERROR_FAIL, None
+
+        ctrl = self.read_register(rxb.CTRL)
+        if ctrl & RXBnCTRL_RTR:
+            id_ |= CAN_RTR_FLAG
+
+        frame = canmessage.canmessage(id=id_, len=dlc)
+        frame.data = bytearray(self.read_registers(rxb.DATA, dlc))
+
+        return ERROR.ERROR_OK, frame
+
+    def read_message_(self):
+        rc = ERROR.ERROR_NOMSG, None
+
+        stat = self.get_status()
+        if stat & STAT.STAT_RX0IF and self.mcp2515_rx_index == 0:
+            rc = self.read_message(RXBn.RXB0)
+            if self.get_status() & STAT.STAT_RX1IF:
+                self.mcp2515_rx_index = 1
+            self.modify_register(REGISTER.MCP_CANINTF, RXB[RXBn.RXB0].CANINTFRXnIF, 0)
+        elif stat & STAT.STAT_RX1IF:
+            rc = self.read_message(RXBn.RXB1)
+            self.mcp2515_rx_index = 0
+            self.modify_register(REGISTER.MCP_CANINTF, RXB[RXBn.RXB1].CANINTFRXnIF, 0)
+
+        return rc
+
+    def check_receive(self) -> bool:
+        res = self.get_status()
+        if res & STAT_RXIF_MASK:
+            return True
+        return False
+
+    def check_error(self) -> bool:
+        eflg = self.check_error_flags()
+
+        if eflg & EFLG_ERRORMASK:
+            return True
+        return False
+
+    def check_error_flags(self) -> int:
+        return self.read_register(REGISTER.MCP_EFLG)
+
+    def receive_error_count(self):
+        return self.read_register(REGISTER.MCP_REC)
+
+    def transmit_error_count(self):
+        return self.read_register(REGISTER.MCP_TEC)
+
+    def clear_RXnOVR_flags(self) -> None:
+        self.modify_register(REGISTER.MCP_EFLG, EFLG.EFLG_RX0OVR | EFLG.EFLG_RX1OVR, 0)
+
+    # def get_interrupts(self) -> int:
+    #     return self.read_register(REGISTER.MCP_CANINTF)
+
+    def clear_interrupts(self) -> None:
+        self.set_register(REGISTER.MCP_CANINTF, 0)
+
+    def get_interrupt_mask(self) -> int:
+        return self.read_register(REGISTER.MCP_CANINTE)
+
+    # def clear_TX_interrupts(self) -> None:
+    #     self.modify_register(
+    #         REGISTER.MCP_CANINTF,
+    #         CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF,
+    #         0,
+    #     )
+
+    def clear_RXnOVR(self) -> None:
+        eflg = self.check_error_flags()
+        if eflg != 0:
+            self.clear_RXnOVR_flags()
+            self.clear_interrupts()
+            # modify_register(REGISTER.MCP_CANINTF, CANINTF.CANINTF_ERRIF, 0)
+
+    # def clear_MERR(self) -> None:
+    #     # self.modify_register(REGISTER.MCP_EFLG, EFLG.EFLG_RX0OVR | EFLG.EFLG_RX1OVR, 0)
+    #     # self.clear_interrupts()
+    #     self.modify_register(REGISTER.MCP_CANINTF, CANINTF.CANINTF_MERRF, 0)
+    #
+    # def clear_ERRIF(self) -> None:
+    #     # self.modify_register(REGISTER.MCP_EFLG, EFLG.EFLG_RX0OVR | EFLG.EFLG_RX1OVR, 0)
+    #     # self.clear_interrupts()
+    #     self.modify_register(REGISTER.MCP_CANINTF, CANINTF.CANINTF_ERRIF, 0)

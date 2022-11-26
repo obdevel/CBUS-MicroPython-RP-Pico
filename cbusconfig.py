@@ -221,13 +221,13 @@ class cbusconfig:
                 return i
 
         # self.logger.log("event not found")
-        return -1
+        return None
 
     def find_event_by_ev(self, evnum, evval):
         for i in range(self.num_events):
             if self.read_event_ev(i, evnum) == evval:
                 return i
-        return -1
+        return None
 
     def find_event_space(self):
         # print('find_event_space')
@@ -243,7 +243,7 @@ class cbusconfig:
             ):
                 return i
 
-        return -1
+        return None
 
     def read_event(self, index):
         # print('read_event')
@@ -260,10 +260,10 @@ class cbusconfig:
 
         idx = self.find_existing_event(nn, en)
 
-        if idx == -1:
+        if idx is None:
             idx = self.find_event_space()
 
-            if idx == -1:
+            if idx is None:
                 return False
 
         offset = idx * self.event_size
@@ -292,7 +292,7 @@ class cbusconfig:
 
         idx = self.find_existing_event(nn, en)
 
-        if idx == -1:
+        if idx == None:
             return False
 
         for i in range(self.event_size):

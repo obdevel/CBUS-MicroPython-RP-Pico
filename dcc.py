@@ -1,28 +1,29 @@
 # dcc.py
 # control a DCC system / command station
 
-from machine import UART, Pin
 import uasyncio as asyncio
+from machine import UART, Pin
+from micropython import const
 
 import canmessage
-import cbuspubsub
-import cbusobjects
 import cbusdefs
+import cbusobjects
+import cbuspubsub
 import logger
 import primitives
 
 uart1 = UART(1, baudrate=115200, tx=Pin(8), rx=Pin(9))
 
-FUNCTION_OFF = 0
-FUNCTION_ON = 1
+FUNCTION_OFF = const(0)
+FUNCTION_ON = const(1)
 
-DIRECTION_REVERSE = 0
-DIRECTION_FORWARD = 1
+DIRECTION_REVERSE = const(0)
+DIRECTION_FORWARD = const(1)
 
-POWER_OFF = 0
-POWER_ON = 1
+POWER_OFF = const(0)
+POWER_ON = const(1)
 
-active_sessions = {}   # decoder_id: loco object
+active_sessions = {}  # decoder_id: loco object
 
 
 class loco:
@@ -39,43 +40,57 @@ class loco:
 
 
 class merg_cab:
-    def __init__(self, cbus):
+    def __init__(self, cbus, timeout=2000):
         self.logger = logger.logger()
         self.cbus = cbus
+        self.timeout = timeout
         asyncio.create_task(self.keepalive())
 
     def acquire(self, loco) -> bool:
-        loco.active = False
-        active_sessions[loco.decoder_id] = loco
-        query = (cbusdefs.OPC_PLOC, cbusdefs.OPC_ERR)
-        self.sub = cbuspubsub.subscription('cab:sub', self.cbus, query, canmessage.QUERY_OPCODE_LIST)
+        self.logger.log("merg_cab: requesting session ...")
+        self.query = (cbusdefs.OPC_PLOC, cbusdefs.OPC_ERR)
+        self.sub = cbuspubsub.subscription('cab:sub', self.cbus, self.query, canmessage.QUERY_OPCODES)
+        self.msg = canmessage.canmessage()
+        ok = False
+
+        if await self.send_request(self.msg):
+            loco.session = 99
+            loco.active = True
+            active_sessions[loco.decoder_id] = loco
+            ok = True
+        else:
+            self.logger.log("merg_cab: request failed")
+
+        self.logger.log(f"merg_cab: loco {loco.decoder_id}, session = {loco.session}, active = {loco.active}")
+        return ok
+
+    def send_request(self, msg) -> bool:
+        ok = False
         evt = asyncio.Event()
         evc = asyncio.Event()
-        timer = cbusobjects.timeout(2_000, evt)
+        timer = cbusobjects.timeout(self.timeout, evt)
         tc = asyncio.create_task(timer.one_shot())
-        sc = asyncio.create_task(self.waitforsession(evc))
+        sc = asyncio.create_task(self.wait_for_response(evc))
 
-        self.logger.log("merg_cab: waiting for session ...")
+        self.logger.log("merg_cab: awaiting response ...")
         evw = await primitives.WaitAny((evt, evc)).wait()
 
         if evw is evc:
-            self.logger.log("merg_cab: received session")
-            loco.session = 99
-            loco.active = True
+            self.logger.log("merg_cab: received response")
+            ok = True
         elif evw is evt:
             self.logger.log("merg_cab: timed out")
 
         tc.cancel()
         sc.cancel()
         self.sub.unsubscribe(self.sub)
-        self.logger.log(f"merg_cab: loco {loco.decoder_id}, session = {loco.session}, active = {loco.active}")
-        return loco.active
+        return ok
 
-    async def waitforsession(self, evt):
-        await self.sub.wait()
+    async def wait_for_response(self, evt) -> None:
+        self.msg = await self.sub.wait()
         evt.set()
 
-    def dispatch_loco(self, decoder_id) -> None:
+    def dispatch(self, decoder_id) -> None:
         del active_sessions[decoder_id]
 
     def set_speed(self, decoder_id, speed) -> None:
@@ -223,4 +238,3 @@ class dccpp:
         self.response = data.decode()
         self.logger.log(f"dccpp: got response |{self.response}|, len = {len(self.response)}")
         evt.set()
-

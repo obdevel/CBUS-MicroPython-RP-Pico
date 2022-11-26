@@ -2,9 +2,10 @@
 
 import time
 import uasyncio as asyncio
+
+import canmessage
 import cbus
 import cbusdefs
-import canmessage
 import logger
 
 RECEIVE_TIMEOUT = 1000
@@ -84,14 +85,14 @@ class cbuslongmessage:
     def send_long_message(self, message, streamid, priority=0x0B):
         # self.logger.log(f'sending long message = {message}')
 
-        if len(message) >= 2**16:
+        if len(message) >= 2 ** 16:
             self.logger.log("error: message is too long")
             return False
 
         for j in range(len(self.transmit_contexts)):
             if (
-                self.transmit_contexts[j].in_use
-                and self.transmit_contexts[j].streamid == streamid
+                    self.transmit_contexts[j].in_use
+                    and self.transmit_contexts[j].streamid == streamid
             ):
                 self.logger.log(
                     f"error: a message is already in progress with streamid = {streamid} in context {j}"
@@ -144,9 +145,9 @@ class cbuslongmessage:
 
             for j in range(len(self.receive_contexts)):
                 if (
-                    self.receive_contexts[j].in_use
-                    and time.ticks_ms() - self.receive_contexts[j].last_fragment_received_at
-                    > self.receive_timeout
+                        self.receive_contexts[j].in_use
+                        and time.ticks_ms() - self.receive_contexts[j].last_fragment_received_at
+                        > self.receive_timeout
                 ):
                     self.logger.log(f"error: receive context {j} timed out")
                     self.user_handler(
@@ -156,7 +157,8 @@ class cbuslongmessage:
                     )
                     self.receive_contexts[j].in_use = False
 
-            if (self.transmit_contexts[self.current_context].in_use and time.ticks_ms() - self.transmit_contexts[self.current_context].last_fragment_sent > TRANSMIT_DELAY):
+            if (self.transmit_contexts[self.current_context].in_use and time.ticks_ms() - self.transmit_contexts[
+                self.current_context].last_fragment_sent > TRANSMIT_DELAY):
                 # print(f'sending next fragment in send context = {self.current_context}')
 
                 msg = canmessage.canmessage(self.bus.config.canid, 8)
@@ -166,8 +168,8 @@ class cbuslongmessage:
 
                 for c in range(5):
                     if (
-                        self.transmit_contexts[self.current_context].index
-                        >= self.transmit_contexts[self.current_context].message_size
+                            self.transmit_contexts[self.current_context].index
+                            >= self.transmit_contexts[self.current_context].message_size
                     ):
                         # print('send: end of data')
                         self.transmit_contexts[self.current_context].in_use = False
@@ -234,9 +236,9 @@ class cbuslongmessage:
 
             for i in range(len(self.receive_contexts)):
                 if (
-                    self.receive_contexts[i].in_use
-                    and self.receive_contexts[i].streamid == msg.data[1]
-                    and self.receive_contexts[i].canid == msg.get_canid()
+                        self.receive_contexts[i].in_use
+                        and self.receive_contexts[i].streamid == msg.data[1]
+                        and self.receive_contexts[i].canid == msg.get_canid()
                 ):
                     found_matching_context = True
                     break
@@ -251,8 +253,8 @@ class cbuslongmessage:
             # print(f'handling continuation packet, streamid = {self.receive_contexts[i].streamid}')
 
             if (
-                msg.data[2]
-                != self.receive_contexts[i].expected_next_receive_sequence_num
+                    msg.data[2]
+                    != self.receive_contexts[i].expected_next_receive_sequence_num
             ):
                 self.logger.log(
                     f"error: wrong sequence number, expected {self.receive_contexts[i].expected_next_receive_sequence_num}, got {msg.data[2]}"
@@ -271,24 +273,24 @@ class cbuslongmessage:
                 self.receive_contexts[i].received += 1
                 self.receive_contexts[i].last_fragment_received_at = time.ticks_ms()
                 self.receive_contexts[i].expected_next_receive_sequence_num = (
-                    msg.data[2] + 1
+                        msg.data[2] + 1
                 )
 
                 if (
-                    len(self.receive_contexts[i].buffer)
-                    >= self.receive_contexts[i].message_size
+                        len(self.receive_contexts[i].buffer)
+                        >= self.receive_contexts[i].message_size
                 ):
                     message_receive_complete = True
                     break
 
             if (
-                len(self.receive_contexts[i].buffer)
-                >= self.receive_contexts[i].message_size
+                    len(self.receive_contexts[i].buffer)
+                    >= self.receive_contexts[i].message_size
             ):
                 message_receive_complete = True
 
             self.receive_contexts[i].expected_next_receive_sequence_num = (
-                msg.data[2] + 1
+                    msg.data[2] + 1
             )
 
             if message_receive_complete:
