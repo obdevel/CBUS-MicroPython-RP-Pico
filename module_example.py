@@ -5,17 +5,15 @@
 #
 
 import machine
-import time
 import uasyncio as asyncio
-import aiorepl
 
-import cbusmodule
+import aiorepl
 import cbus
-import mcp2515
-import cbusdefs
 import cbusconfig
-import canmessage
+import cbusdefs
+import cbusmodule
 import logger
+import mcp2515
 
 
 class mymodule(cbusmodule.cbusmodule):
@@ -35,7 +33,7 @@ class mymodule(cbusmodule.cbusmodule):
         )
 
         self.module_id = 103
-        self.module_name = "PYCO   "
+        self.module_name = bytes('PYCO   ', 'ascii')
         self.module_params = [
             20,
             cbusdefs.MANU_MERG,
@@ -75,8 +73,9 @@ class mymodule(cbusmodule.cbusmodule):
         # ***
         # *** module initialisation complete
 
-        self.logger.log(f"module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}")
-        self.logger.log(f"free memory = {self.cbus.config.free_memory()} bytes")
+        self.logger.log(
+            f'module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
+        self.logger.log(f'free memory = {self.cbus.config.free_memory()} bytes')
         self.logger.log()
 
         # *** end of initialise method
@@ -87,34 +86,33 @@ class mymodule(cbusmodule.cbusmodule):
 
     # *** task to blink the onboard LED
     async def blink_led_coro(self):
-        self.logger.log("blink_led_coro start")
-        self.led = machine.Pin("LED", machine.Pin.OUT)
+        self.logger.log('blink_led_coro start')
+        led = machine.Pin('LED', machine.Pin.OUT)
 
         while True:
-            self.led.value(1)
+            led.value(1)
             await asyncio.sleep_ms(20)
-            self.led.value(0)
+            led.value(0)
             await asyncio.sleep_ms(980)
 
     # *** user module application task
     async def module_main_loop_coro(self):
-        self.logger.log("main loop coroutine start")
+        self.logger.log('main loop coroutine start')
 
         while True:
             await asyncio.sleep_ms(25)
-
 
     # ***
     # *** module main entry point
     # ***
 
     async def run(self):
-        self.logger.log("run start")
+        self.logger.log('run start')
 
         self.tb = asyncio.create_task(self.blink_led_coro())
         self.tm = asyncio.create_task(self.module_main_loop_coro())
 
-        self.logger.log("asyncio is now running the module main loop and co-routines")
+        self.logger.log('asyncio is now running the module main loop and co-routines')
 
         # start async REPL and wait for exit
         repl = asyncio.create_task(aiorepl.task(globals()))
@@ -125,3 +123,6 @@ class mymodule(cbusmodule.cbusmodule):
 mod = mymodule()
 mod.initialise()
 asyncio.run(mod.run())
+
+# the asyncio scheduler is now in control
+# no code after this line is executed

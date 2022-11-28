@@ -1,19 +1,21 @@
 # cbusconfig.py
 
 import gc
+
 import machine
-import i2ceeprom
+from micropython import const
+
+# import i2ceeprom
 import logger
 
-nvs_file_name = "/nvs.dat"
-events_file_name = "/events.dat"
+nvs_file_name = const('/nvs.dat')
+events_file_name = const('/events.dat')
 
-CONFIG_TYPE_FILES = 0
-CONFIG_TYPE_I2C_EEPROM = 1
+CONFIG_TYPE_FILES = const(0)
+CONFIG_TYPE_I2C_EEPROM = const(1)
 
 
 class storage_backend:
-
     """abstract base class for event and config storage. Other concrete classes must derive from this class"""
 
     events = ""
@@ -53,7 +55,7 @@ class files_backend(storage_backend):
     def __init__(self, ev_offset):
         self.logger = logger.logger()
         # self.logger.log("files_backend init")
-        super().__init__(self, ev_offset)
+        super().__init__(ev_offset)
 
     def init_events(self, events):
         # print("files_backend init_events")
@@ -110,44 +112,42 @@ class files_backend(storage_backend):
         f.close()
 
 
-class eeprom_backend(storage_backend):
-    def __init__(self, ev_offset):
-        self.logger = logger.logger()
-        # self.logger.log(f"eeprom_backend init, offset = {ev_offset}")
-        super().__init__(self, ev_offset)
-        self.eeprom = i2ceeprom.i2ceeprom()
-
-    def load_events(self, ev_size):
-
-        data = bytearray()
-
-        for i in range(0, ev_size):
-            data.extend(self.eeprom.read(i + self.ev_offset))
-
-        return data
-
-    def store_events(self, events):
-        for i in range(0, len(events)):
-            self.eeprom.write((i + self.ev_offset), events[i])
-
-    def load_nvs(self, num_nvs):
-
-        data = bytearray()
-
-        for i in range(0, num_nvs):
-            data.extend(self.eeprom.read(i))
-
-        return data
-
-    def store_nvs(self, nvs):
-        for i in range(0, len(nvs)):
-            self.eeprom.write(i, nvs[i])
+# class eeprom_backend(storage_backend):
+#     def __init__(self, ev_offset):
+#         self.logger = logger.logger()
+#         # self.logger.log(f"eeprom_backend init, offset = {ev_offset}")
+#         super().__init__(ev_offset)
+#         self.eeprom = i2ceeprom.i2ceeprom()
+#
+#     def load_events(self, ev_size):
+#
+#         data = bytearray()
+#
+#         for i in range(0, ev_size):
+#             data.extend(self.eeprom.read(i + self.ev_offset))
+#
+#         return data
+#
+#     def store_events(self, events):
+#         for i in range(0, len(events)):
+#             self.eeprom.write((i + self.ev_offset), events[i])
+#
+#     def load_nvs(self, num_nvs):
+#
+#         data = bytearray()
+#
+#         for i in range(0, num_nvs):
+#             data.extend(self.eeprom.read(i))
+#
+#         return data
+#
+#     def store_nvs(self, nvs):
+#         for i in range(0, len(nvs)):
+#             self.eeprom.write(i, nvs[i])
 
 
 class cbusconfig:
-    def __init__(
-        self, storage_type=CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4
-    ):
+    def __init__(self, storage_type=CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4):
         self.logger = logger.logger()
         # self.logger.log(f"cbusconfig constructor, storage type = {storage_type}")
 
@@ -163,8 +163,8 @@ class cbusconfig:
 
         if self.storage_type == CONFIG_TYPE_FILES:
             self.backend = files_backend(0)
-        elif self.storage_type == CONFIG_TYPE_I2C_EEPROM:
-            self.backend = eeprom_backend(self.num_evs)
+        # elif self.storage_type == CONFIG_TYPE_I2C_EEPROM:
+        #     self.backend = eeprom_backend(self.num_evs)
         else:
             raise TypeError("unknown storage type")
 
@@ -172,7 +172,7 @@ class cbusconfig:
         self.canid = 0
         self.node_number = 0
 
-    def begin(self):
+    def begin(self) -> None:
         # self.logger.log("cbusconfig begin")
 
         data = self.backend.load_events(len(self.events))
@@ -192,19 +192,19 @@ class cbusconfig:
         self.nvs = data
         self.load_module_info()
 
-    def set_mode(self, mode):
+    def set_mode(self, mode) -> None:
         self.nvs[0] = mode
         self.backend.store_nvs(self.nvs)
         self.mode = mode
 
-    def set_canid(self, canid):
+    def set_canid(self, canid) -> None:
         self.nvs[1] = canid
         self.backend.store_nvs(self.nvs)
         self.canid = canid
 
-    def set_node_number(self, node_number):
+    def set_node_number(self, node_number) -> None:
         self.nvs[2] = int(node_number / 256)
-        self.nvs[3] = node_number & 0xFF
+        self.nvs[3] = node_number & 0xff
         self.backend.store_nvs(self.nvs)
         self.node_number = node_number
 
@@ -215,7 +215,7 @@ class cbusconfig:
             offset = i * (self.event_size)
 
             if ((self.events[offset] * 256) + self.events[offset + 1]) == nn and (
-                (self.events[offset + 2] * 256) + self.events[offset + 3]
+                    (self.events[offset + 2] * 256) + self.events[offset + 3]
             ) == en:
                 # print(f'found event at index = {i}')
                 return i
@@ -236,16 +236,16 @@ class cbusconfig:
             offset = i * (self.event_size)
 
             if (
-                self.events[offset] == 255
-                and self.events[offset + 1] == 255
-                and self.events[offset + 2] == 255
-                and self.events[offset + 3] == 255
+                    self.events[offset] == 255
+                    and self.events[offset + 1] == 255
+                    and self.events[offset + 2] == 255
+                    and self.events[offset + 3] == 255
             ):
                 return i
 
         return None
 
-    def read_event(self, index):
+    def read_event(self, index) -> bytearray:
         # print('read_event')
         data = bytearray(self.event_size)
         offset = self.event_size * index
@@ -255,7 +255,7 @@ class cbusconfig:
 
         return data
 
-    def write_event(self, nn, en, evnum, evval):
+    def write_event(self, nn, en, evnum, evval) -> bool:
         # print('write_event')
 
         idx = self.find_existing_event(nn, en)
@@ -268,26 +268,26 @@ class cbusconfig:
 
         offset = idx * self.event_size
         self.events[offset] = int(nn / 256)
-        self.events[offset + 1] = nn & 0xFF
+        self.events[offset + 1] = nn & 0xff
         self.events[offset + 2] = int(en / 256)
-        self.events[offset + 3] = en & 0xFF
+        self.events[offset + 3] = en & 0xff
         self.events[offset + 4 + (evnum - 1)] = evval
 
         self.backend.store_events(self.events)
         return True
 
-    def read_event_ev(self, idx, evnum):
+    def read_event_ev(self, idx, evnum) -> int:
         # print('read_event_ev')
         offset = (idx * self.event_size) + 4 + (evnum - 1)
         return self.events[offset]
 
-    def write_event_ev(self, idx, evnum, evval):
+    def write_event_ev(self, idx, evnum, evval) -> None:
         # print('write_event_ev')
         offset = (idx * self.event_size) + 4 + (evnum - 1)
         self.events[offset] = evval
         self.backend.store_events(self.events)
 
-    def clear_event(self, nn, en):
+    def clear_event(self, nn, en) -> bool:
         # print('clear_event')
 
         idx = self.find_existing_event(nn, en)
@@ -301,7 +301,7 @@ class cbusconfig:
         self.backend.store_events(self.events)
         return True
 
-    def count_events(self):
+    def count_events(self) -> int:
         # print('count_events')
 
         count = 0
@@ -312,38 +312,38 @@ class cbusconfig:
 
         return count
 
-    def clear_all_events(self):
+    def clear_all_events(self) -> None:
         self.events = bytearray((self.num_evs + 4) * self.num_events)
         self.backend.store_events(self.events)
 
-    def read_nv(self, nvnum):
-        return self.nvs[nvnum - 9]
+    def read_nv(self, nvnum) -> int:
+        return self.nvs[nvnum + 9]
 
     def write_nv(self, nvnum, value):
         self.nvs[nvnum + 9] = value
         self.backend.store_nvs(self.nvs)
 
-    def load_module_info(self):
+    def load_module_info(self) -> None:
         self.mode = self.nvs[0]
         self.canid = self.nvs[1]
         self.node_number = (self.nvs[2] * 256) + self.nvs[3]
 
-    def print_events(self, print_all=True):
+    def print_events(self, print_all=True) -> None:
         for i in range(self.num_events):
-            if print_all or (self.events[i * self.event_size] < 0xFF):
+            if print_all or (self.events[i * self.event_size] < 0xff):
                 print(f"{i:3} = ", end="")
                 for j in range(0, self.event_size):
-                    self.logger.log(f"{self.events[(i*self.event_size)+j]:3}")
+                    self.logger.log(f"{self.events[(i * self.event_size) + j]:3}")
                 self.logger.log()
 
-    def print_nvs(self):
+    def print_nvs(self) -> None:
         for i in range(self.num_nvs + 10):
             self.logger.log(f"{i:2} - {self.nvs[i]}")
 
-    def reboot(self):
+    def reboot(self) -> None:
         machine.soft_reset()
 
-    def reset_module(self):
+    def reset_module(self) -> None:
         self.logger.log("reset_module")
         self.nvs = bytearray(10 + self.num_nvs)
         self.events = bytearray((self.num_evs + 4) * self.num_events)
@@ -353,6 +353,6 @@ class cbusconfig:
 
         self.reboot()
 
-    def free_memory(self):
+    def free_memory(self) -> int:
         gc.collect()
         return gc.mem_free()

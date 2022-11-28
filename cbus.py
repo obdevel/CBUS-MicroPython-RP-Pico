@@ -13,6 +13,7 @@ import cbushistory
 import cbusled
 import cbuspubsub
 import cbusswitch
+import gcserver
 # import primitives
 import logger
 
@@ -38,12 +39,6 @@ class cbus:
 
         self.logger = logger.logger()
 
-        if can and not isinstance(can, canio.canio):
-            raise TypeError("error: can is not an instance of class canio")
-
-        if config and not isinstance(config, cbusconfig.cbusconfig):
-            raise TypeError("error: config is not an instance of class cbusconfig")
-
         self.can = can
         self.config = config
 
@@ -57,7 +52,7 @@ class cbus:
             self.has_ui = True
 
         if params is None:
-            self.params = []
+            self.params = ()
         else:
             self.params = params
 
@@ -67,9 +62,9 @@ class cbus:
             self.name = name
 
         self.event_handler = None
+        self.opcodes = ()
         self.frame_handler = None
         self.long_message_handler = None
-        self.opcodes = []
 
         self.consume_own_messages = False
         self.messages_to_consume = MSGS_ALL
@@ -129,9 +124,9 @@ class cbus:
         }
 
     def begin(self, freq=20, max_msgs=1) -> None:
-        self.can.begin()
         self.config.begin()
         self.has_ui and self.indicate_mode(self.config.mode)
+        self.can.begin()
         asyncio.create_task(self.process(freq, max_msgs))
 
     def set_switch(self, pin) -> None:
@@ -144,7 +139,7 @@ class cbus:
         self.has_ui = True
 
     def set_name(self, name) -> None:
-        self.logger.log(f"cbus: setting name to {name}")
+        # self.logger.log(f"cbus: setting name to {name}")
         self.name = bytearray(name)
 
     def set_params(self, params) -> None:
@@ -156,10 +151,6 @@ class cbus:
     def set_frame_handler(self, frame_handler, opcodes=[]) -> None:
         self.frame_handler = frame_handler
         self.opcodes = opcodes
-
-    def set_consume_own_messages(self, consume, which=MSGS_ALL) -> None:
-        self.consume_own_messages = consume
-        self.messages_to_consume = which
 
     def send_cbus_message(self, msg) -> None:
         msg.make_header()
@@ -176,17 +167,11 @@ class cbus:
         if self.consume_own_messages:
             self.can.rx_queue.enqueue(msg)
 
-    def set_can(self, can) -> None:
-        if can and not isinstance(can, canio.canio):
-            raise TypeError("error: can is not an instance of class canio")
-        else:
-            self.can = can
+    def set_can(self, can: canio.canio) -> None:
+        self.can = can
 
-    def set_config(self, config) -> None:
-        if config and not isinstance(config, cbusconfig.cbusconfig):
-            raise TypeError("error: config is not an instance of class cbusconfig")
-        else:
-            set.config = config
+    def set_config(self, config: cbusconfig.cbusconfig) -> None:
+        self.config = config
 
     async def process(self, freq=20, max_msgs=1) -> None:
         while True:
@@ -224,7 +209,7 @@ class cbus:
                 if self.switch.state_changed and not self.switch.is_pressed():
 
                     if self.switch.previous_state_duration >= 6000:
-                        self.logger.log("cbus switch released after 6 seconds, mode change")
+                        # self.logger.log("cbus switch released after 6 seconds, mode change")
                         self.in_transition = True
 
                         if self.config.mode == MODE_SLIM:
@@ -232,18 +217,12 @@ class cbus:
                         elif self.config.mode == MODE_FLIM:
                             self.revert_slim()
 
-                    if (
-                            self.switch.previous_state_duration <= 2000
-                            and self.switch.previous_state_duration >= 1000
-                    ):
+                    if 2000 >= self.switch.previous_state_duration >= 1000:
                         if self.config.mode == MODE_FLIM:
                             self.logger.log("flim renegotiate")
                             self.init_flim()
 
-                    if (
-                            self.switch.previous_state_duration <= 1000
-                            and self.switch.previous_state_duration >= 250
-                    ):
+                    if 1000 >= self.switch.previous_state_duration >= 250:
                         if self.config.canid > 0:
                             self.logger.log("enumerate")
                             self.begin_enumeration()
@@ -554,7 +533,7 @@ class cbus:
         omsg.data[2] = self.config.node_number & 0xFF
         self.send_cbus_message(omsg)
 
-    def send_CMDERR(self, err) -> None:
+    def send_CMDERR(self, err: int) -> None:
         self.logger.log("send_CMDERR")
         omsg = canmessage.canmessage(self.config.canid, 4)
         omsg.data[0] = cbusdefs.OPC_WRACK
@@ -598,7 +577,7 @@ class cbus:
             omsg.data[2] = self.config.node_number & 0xFF
             self.send_cbus_message(omsg)
         else:
-            self.sendCMDERR(7)
+            self.send_CMDERR(7)
 
     def init_flim(self) -> None:
         self.logger.log("init_flim")
@@ -631,7 +610,7 @@ class cbus:
         omsg = canmessage.canmessage(self.config.canid, 0)
         self.send_cbus_message(omsg)
 
-    def indicate_mode(self, mode) -> None:
+    def indicate_mode(self, mode: int) -> None:
 
         if self.has_ui:
             if mode == MODE_SLIM:
@@ -652,26 +631,20 @@ class cbus:
     def set_long_message_handler(self, handler) -> None:
         self.long_message_handler = handler
 
-    def add_history(self, history) -> None:
-        if isinstance(history, cbushistory.cbushistory):
-            self.histories.append(history)
-        else:
-            self.logger.log("*error: history object is not an instance of cbushistory")
+    def add_history(self, history: cbushistory.cbushistory) -> None:
+        self.histories.append(history)
 
-    def set_gcserver(self, server) -> None:
+    def set_gcserver(self, server: gcserver.gcserver) -> None:
         self.gridconnect_server = server
 
-    def add_subscription(self, request) -> None:
-        if not isinstance(request, cbuspubsub.subscription):
-            self.logger.log("error: request is not valid")
-        else:
-            self.logger.log(
-                f"cbus: add subscription, name = {request.name}, id = {request.id}, query type = {request.query_type}, query = {request.query}")
-            self.subscriptions.append(request)
+    def add_subscription(self, sub: cbuspubsub.subscription) -> None:
+        self.logger.log(
+            f"cbus: add subscription, name = {sub.name}, id = {sub.id}, query type = {sub.query_type}, query = {sub.query}")
+        self.subscriptions.append(sub)
 
-    def remove_subscription(self, request) -> None:
-        self.logger.log(f"cbus: remove subscription, id = {request.id}")
+    def remove_subscription(self, sub: cbuspubsub.subscription) -> None:
+        self.logger.log(f"cbus: remove subscription, id = {sub.id}")
         for i in range(len(self.subscriptions)):
-            if self.subscriptions[i].id == request.id:
+            if self.subscriptions[i].id == sub.id:
                 del self.subscriptions[i]
                 break

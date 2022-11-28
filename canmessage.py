@@ -109,6 +109,17 @@ class canmessage:
     def get_node_and_event_numbers(self) -> tuple:
         return self.get_node_number(), self.get_event_number()
 
+    # def set_opcode(self, opc) -> None:
+    #     self.data[0] = opc
+    #
+    # def set_node_number(self, nn) -> None:
+    #     self.data[1] = nn >> 256
+    #     self.data[2] = nn & 0xff
+    #
+    # def set_event_number(self, en) -> None:
+    #     self.data[3] = en >> 256
+    #     self.data[4] = en & 0xff
+
     def print(self, hex_fmt=True) -> None:
         rtr = "R" if self.rtr else ""
         ext = "X" if self.ext else ""

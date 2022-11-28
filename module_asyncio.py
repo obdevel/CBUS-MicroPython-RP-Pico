@@ -54,7 +54,7 @@ class mymodule(cbusmodule.cbusmodule):
         )
 
         self.module_id = 103
-        self.module_name = bytes("PYCO   ", "ascii")
+        self.module_name = bytes('PYCO   ', 'ascii')
         self.module_params = [
             20,
             cbusdefs.MANU_MERG,
@@ -96,17 +96,16 @@ class mymodule(cbusmodule.cbusmodule):
         # *** optional configuration
         # ***
 
-        # *** CBUS long message handling
+        # consume own messages
+        self.cbus.consume_own_messages = False
 
+        # *** CBUS long message handling
         self.lm = cbuslongmessage.cbuslongmessage(self.cbus)
-        self.lm_ids = [1, 2, 3, 4, 5]
-        self.lm.subscribe(self.lm_ids, self.long_message_handler, receive_timeout=30000)
+        self.lm_ids = (1, 2, 3, 4, 5)
+        self.lm.subscribe(self.lm_ids, self.long_message_handler, receive_timeout=1_000)
 
         # CBUS event history
         # self.history = cbushistory.cbushistory(self.cbus, max_size=256, time_to_live=1000)
-
-        # consume own messages
-        # self.cbus.set_consume_own_messages(False)
 
         # network-related
         self.is_picow = is_picow
@@ -123,23 +122,25 @@ class mymodule(cbusmodule.cbusmodule):
         # *** module initialisation complete
         # ***
 
-        self.logger.log(f"initialise complete, time = {time.ticks_diff(time.ticks_ms(), start_time)} ms")
+        self.logger.log(f'initialise complete, time = {time.ticks_diff(time.ticks_ms(), start_time)} ms')
         self.logger.log()
         self.logger.log(
-            f"module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}")
-        self.logger.log(f"free memory = {self.cbus.config.free_memory()} bytes")
+            f'module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
+        self.logger.log(f'free memory = {self.cbus.config.free_memory()} bytes')
         self.logger.log()
 
         # ***
         # *** end of initialise method
         # ***
 
+    # ***
     # *** network-related methods
+    # ***
 
     def connect_wifi(self) -> None:
         try:
             import network
-            self.logger.log("device is Pico W")
+            self.logger.log('device is Pico W')
             self.wlan = network.WLAN(network.STA_IF)
             self.wlan.active(True)
             self.wlan.connect('HUAWEI-B311-E39A', '33260100')
@@ -155,25 +156,25 @@ class mymodule(cbusmodule.cbusmodule):
                 self.logger.log(f'connected to wifi, channel = {self.channel}, address = {self.ip}')
                 self.host = self.ip
             else:
-                self.logger.log("unable to connect to wifi")
+                self.logger.log('unable to connect to wifi')
 
         except ImportError:
-            self.logger.log("import failed; device is not Pico W")
+            self.logger.log('import failed; device is not Pico W')
             self.is_picow = False
 
     def get_ntp_time(self) -> None:
         try:
             import ntptime
             ntptime.host = ntp_server
-            self.logger.log(f"getting NTP time from {ntp_server} ...")
+            self.logger.log(f'getting NTP time from {ntp_server} ...')
             nt = ntptime.time()
             lt = time.gmtime(nt)
             tt = (lt[0], lt[1], lt[2], 4, lt[3], lt[4], lt[5], lt[6])
             self.rtc = machine.RTC()
             self.rtc.datetime(tt)
-            self.logger.log(f"NTP time = {tt}")
+            self.logger.log(f'NTP time = {tt}')
         except ImportError:
-            print("ntptime module not present")
+            print('ntptime module not present')
             self.is_picow = False
 
     def run_gc_server(self) -> None:
@@ -183,15 +184,15 @@ class mymodule(cbusmodule.cbusmodule):
             asyncio.create_task(
                 asyncio.start_server(self.gcserver.client_connected_cb, self.gcserver.host, self.gcserver.port))
         except ImportError:
-            self.logger.log("import failed; gcserver module not found")
+            self.logger.log('import failed; gcserver module not found')
 
     # ***
     # *** coroutines that run in parallel
     # ***
 
     async def blink_led_coro(self) -> None:
-        self.logger.log("blink_led_coro: start")
-        led = machine.Pin("LED", machine.Pin.OUT)
+        self.logger.log('blink_led_coro: start')
+        led = machine.Pin('LED', machine.Pin.OUT)
 
         while True:
             led.value(1)
@@ -200,7 +201,7 @@ class mymodule(cbusmodule.cbusmodule):
             await asyncio.sleep_ms(980)
 
     async def history_test_coro(self) -> None:
-        self.logger.log("history_test_coro: start")
+        self.logger.log('history_test_coro: start')
         evt = asyncio.Event()
         self.history2 = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=10000, event=evt)
 
@@ -209,29 +210,29 @@ class mymodule(cbusmodule.cbusmodule):
             evt.clear()
             if self.history2.sequence_received([(0, 22, 23), (1, 22, 23)], order=cbushistory.ORDER_GIVEN, within=2000,
                                                timespan=2000, which=cbushistory.WHICH_LATEST):
-                self.logger.log(f"history_test_coro: found sequence in history")
+                self.logger.log(f'history_test_coro: found sequence in history')
 
     async def pubsub_test_coro(self, pevent=None) -> None:
-        self.logger.log("pubsub_test_coro: start")
+        self.logger.log('pubsub_test_coro: start')
         self.sub = cbuspubsub.subscription('test sub', self.cbus, None, canmessage.QUERY_ALL)
 
         while True:
             msg = await self.sub.wait()
-            self.logger.log(f"pubsub_test_coro: got subscribed item, msg = {msg.__str__()}")
+            self.logger.log(f'pubsub_test_coro: got subscribed item, msg = {msg.__str__()}')
             if pevent:
                 pevent.set()
 
     async def sensor_test_coro(self, pevent=None) -> None:
         event = asyncio.Event()
-        self.sn1 = cbusobjects.binarysensor("sensor1", mod.cbus, (0, 22, 23), event)
+        self.sn1 = cbusobjects.binarysensor('sensor1', mod.cbus, (0, 22, 23), event)
         self.logger.log(
-            f"sensor_test_coro: start, {self.sn1.name} state = {cbusobjects.sensor_states.get(self.sn1.state)}")
+            f'sensor_test_coro: start, {self.sn1.name} state = {cbusobjects.sensor_states.get(self.sn1.state)}')
 
         while True:
             await event.wait()
             event.clear()
             self.logger.log(
-                f"sensor_test_coro: {self.sn1.name} changed state to {self.sn1.state} = {cbusobjects.sensor_states.get(self.sn1.state)}")
+                f'sensor_test_coro: {self.sn1.name} changed state to {self.sn1.state} = {cbusobjects.sensor_states.get(self.sn1.state)}')
             if pevent:
                 pevent.set()
 
@@ -250,13 +251,13 @@ class mymodule(cbusmodule.cbusmodule):
             evw = await primitives.WaitAny((evp, evs, evt)).wait()
 
             if evw is evp:
-                self.logger.log("any_test_coro: pubsub_test_coro event was set")
+                self.logger.log('any_test_coro: pubsub_test_coro event was set')
                 evp.clear()
             elif evw is evs:
-                self.logger.log("any_test_coro: sensor_test_coro event was set")
+                self.logger.log('any_test_coro: sensor_test_coro event was set')
                 evs.clear()
             elif evw is evt:
-                self.logger.log("any_test_coro: timer expired")
+                self.logger.log('any_test_coro: timer expired')
                 evt.clear()
                 tt.cancel()
 
@@ -266,7 +267,7 @@ class mymodule(cbusmodule.cbusmodule):
 
     #     def _handle_exception(self, loop, context):
     #         print('Global handler')
-    #         sys.print_exception(context["exception"])
+    #         sys.print_exception(context['exception'])
     #         #loop.stop()
     #         sys.exit()  # Drastic - loop.stop() does not work when used this way
 
@@ -280,7 +281,7 @@ class mymodule(cbusmodule.cbusmodule):
         self.tm = asyncio.create_task(self.history_test_coro())
         self.tq = asyncio.create_task(self.any_test_coro())
 
-        self.logger.log("asyncio is now running the module main loop and co-routines")
+        self.logger.log('asyncio is now running the module main loop and co-routines')
 
         # start async REPL and wait for exit
         repl = asyncio.create_task(aiorepl.task(globals()))
@@ -306,14 +307,14 @@ msg4 = canmessage.canmessage(4, 5, [0x90, 0, 22, 0, 23, 0, 0, 0])
 msg5 = canmessage.canmessage(126, 0, [], True, False)
 msg6 = canmessage.canmessage(126, 0, [], False, True)
 
-lm0 = canmessage.canmessage(126, 8, [0xE9, 9, 0, 0, 11, 0, 0, 0])
-lm1 = canmessage.canmessage(126, 8, [0xE9, 9, 1, 72, 101, 108, 108, 111])
-lm2 = canmessage.canmessage(126, 8, [0xE9, 9, 2, 32, 119, 111, 114, 108])
-lm3 = canmessage.canmessage(126, 8, [0xE9, 9, 3, 100, 0, 0, 0, 0])
+lm0 = canmessage.canmessage(126, 8, [0xE9, 2, 0, 0, 11, 0, 0, 0])
+lm1 = canmessage.canmessage(126, 8, [0xE9, 2, 1, 72, 101, 108, 108, 111])
+lm2 = canmessage.canmessage(126, 8, [0xE9, 2, 2, 32, 119, 111, 114, 108])
+lm3 = canmessage.canmessage(126, 8, [0xE9, 2, 3, 100, 0, 0, 0, 0])
 
 
 def enq() -> None:
-    mod.logger.log("test messages")
+    mod.logger.log('test messages')
     mod.cbus.can.rx_queue.enqueue(msg3)
     mod.cbus.can.rx_queue.enqueue(msg4)
 
@@ -327,7 +328,7 @@ def enq4() -> None:
 
 
 def lms() -> None:
-    mod.logger.log("test long messages")
+    mod.logger.log('test long messages')
     mod.cbus.can.rx_queue.enqueue(lm0)
     mod.cbus.can.rx_queue.enqueue(lm1)
     mod.cbus.can.rx_queue.enqueue(lm2)
@@ -343,18 +344,17 @@ mod = mymodule()
 mod.initialise()
 # mod.initialise(True, False)
 
-# t = cbusobjects.turnout("t1", mod.cbus, ((0, 22, 23), (1, 22, 23)), cbusobjects.STATE_ON, True,
-#                         ((0, 22, 23), (1, 22, 23)))
-# s = cbusobjects.semaphore_signal("s1", mod.cbus, ((0, 22, 23), (1, 22, 23)), cbusobjects.STATE_ON, True,
-#                                  ((0, 22, 23), (1, 22, 23)))
-# tobj = cbusobjects.routeobject(t, cbusobjects.STATE_ON, 0)
-# sobj = cbusobjects.routeobject(s, cbusobjects.STATE_OFF, 1)
-# r = cbusobjects.route("r1", mod.cbus, (tobj, sobj,))
-# r2 = cbusobjects.route("r2", mod.cbus, (tobj, sobj,))
-# c = None
+t = cbusobjects.turnout('t1', mod.cbus, ((0, 22, 23), (1, 22, 23)), cbusobjects.TURNOUT_STATE_THROWN,
+                        create_sensor=True, sensor_events=((0, 22, 23), (1, 22, 23)))
+s = cbusobjects.semaphore_signal('s1', mod.cbus, ((0, 22, 23), (1, 22, 23)), cbusobjects.SIGNAL_STATE_CLEAR,
+                                 create_sensor=False, sensor_events=((0, 22, 23), (1, 22, 23)))
+tobj = cbusobjects.routeobject(t, cbusobjects.STATE_ON, cbusobjects.WHEN_DONT_CARE)
+sobj = cbusobjects.routeobject(s, cbusobjects.STATE_OFF, cbusobjects.WHEN_AFTER)
+r = cbusobjects.route('r1', mod.cbus, (tobj, sobj,))
+r2 = cbusobjects.route('r2', mod.cbus, (tobj, sobj,))
 
 # *** start the scheduler and run the app class's main method
 asyncio.run(mod.run())
 
-# *** the scheduler is now in control
+# *** the asyncio scheduler is now in control
 # *** no code after this line is executed
