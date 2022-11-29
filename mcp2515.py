@@ -162,12 +162,12 @@ class TXBnCTRL:
     TXB_TXP = const(0x03)
 
 
-EFLG_ERRORMASK = const(
-    EFLG.EFLG_RX1OVR
-    | EFLG.EFLG_RX0OVR
-    | EFLG.EFLG_TXBO
-    | EFLG.EFLG_TXEP
-    | EFLG.EFLG_RXEP
+EFLG_ERRORMASK = (
+        EFLG.EFLG_RX1OVR
+        | EFLG.EFLG_RX0OVR
+        | EFLG.EFLG_TXBO
+        | EFLG.EFLG_TXEP
+        | EFLG.EFLG_RXEP
 )
 
 
@@ -331,13 +331,13 @@ CAN_IDLEN = const(4)
 TXBnREGS = collections.namedtuple("TXBnREGS", "CTRL SIDH DATA")
 RXBnREGS = collections.namedtuple("RXBnREGS", "CTRL SIDH DATA CANINTFRXnIF")
 
-TXB = const([
+TXB = [
     TXBnREGS(REGISTER.MCP_TXB0CTRL, REGISTER.MCP_TXB0SIDH, REGISTER.MCP_TXB0DATA),
     TXBnREGS(REGISTER.MCP_TXB1CTRL, REGISTER.MCP_TXB1SIDH, REGISTER.MCP_TXB1DATA),
     TXBnREGS(REGISTER.MCP_TXB2CTRL, REGISTER.MCP_TXB2SIDH, REGISTER.MCP_TXB2DATA),
-])
+]
 
-RXB = const([
+RXB = [
     RXBnREGS(
         REGISTER.MCP_RXB0CTRL,
         REGISTER.MCP_RXB0SIDH,
@@ -350,7 +350,7 @@ RXB = const([
         REGISTER.MCP_RXB1DATA,
         CANINTF.CANINTF_RX1IF,
     ),
-])
+]
 
 tsf = asyncio.ThreadSafeFlag()
 
@@ -729,7 +729,7 @@ class mcp2515(canio.canio):
         if txbn is None:
             return self.send_message__(frame)
 
-        if frame.len > CAN_MAX_DLEN:
+        if frame.dlc > CAN_MAX_DLEN:
             return ERROR.ERROR_FAILTX
 
         txbuf = TXB[txbn]
@@ -744,11 +744,11 @@ class mcp2515(canio.canio):
             id_ |= CAN_RTR_FLAG
 
         data = self.prepare_id(frame.ext, id_)
-        mcp_dlc = (frame.len | RTR_MASK) if frame.rtr else frame.len
+        mcp_dlc = (frame.dlc | RTR_MASK) if frame.rtr else frame.dlc
 
-        data.extend(bytearray(1 + frame.len))
+        data.extend(bytearray(1 + frame.dlc))
         data[MCP_DLC] = mcp_dlc
-        data[MCP_DATA: MCP_DATA + frame.len] = frame.data
+        data[MCP_DATA: MCP_DATA + frame.dlc] = frame.data
 
         self.set_registers(txbuf.SIDH, data)
 
@@ -763,7 +763,7 @@ class mcp2515(canio.canio):
         return ERROR.ERROR_OK
 
     def send_message__(self, frame: canmessage.canmessage) -> int:
-        if frame.len > CAN_MAX_DLEN:
+        if frame.dlc > CAN_MAX_DLEN:
             return ERROR.ERROR_FAILTX
 
         txBuffers = (TXBn.TXB0, TXBn.TXB1, TXBn.TXB2)

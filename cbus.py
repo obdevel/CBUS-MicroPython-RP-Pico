@@ -262,7 +262,7 @@ class cbus:
                 if msg.ext:
                     continue
 
-                if msg.len > 0:
+                if msg.dlc > 0:
                     try:
                         self.func_tab.get(msg.data[0])(msg)
                     except TypeError:

@@ -139,7 +139,7 @@ class gcserver:
         gc += f'X{tid:04X}' if msg.ext else f'S{tid:04X}'
         gc += 'R' if msg.rtr else 'N'
 
-        for i in range(msg.len):
+        for i in range(msg.dlc):
             gc += f'{msg.data[i]:02X}'
 
         gc += ';'
@@ -161,9 +161,9 @@ class gcserver:
         msg.id = int(id) >> 5
 
         data = gc[pos + 1: -1]
-        msg.len = int(len(data) / 2)
+        msg.dlc = int(len(data) / 2)
 
-        for i in range(msg.len):
+        for i in range(msg.dlc):
             j = int(i)
             t = '0x' + data[j * 2: (j * 2) + 2]
             msg.data[i] = int(t)

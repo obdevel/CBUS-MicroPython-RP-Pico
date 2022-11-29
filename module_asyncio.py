@@ -224,7 +224,7 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def sensor_test_coro(self, pevent=None) -> None:
         event = asyncio.Event()
-        self.sn1 = cbusobjects.binarysensor('sensor1', mod.cbus, (0, 22, 23), event)
+        self.sn1 = cbusobjects.binarysensor('sensor1', mod.cbus, ((0, 22, 23), (1, 22, 23)), (0, 22, 23), event)
         self.logger.log(
             f'sensor_test_coro: start, {self.sn1.name} state = {cbusobjects.sensor_states.get(self.sn1.state)}')
 
@@ -344,12 +344,27 @@ mod = mymodule()
 mod.initialise()
 # mod.initialise(True, False)
 
-t = cbusobjects.turnout('t1', mod.cbus, ((0, 22, 23), (1, 22, 23)), cbusobjects.TURNOUT_STATE_THROWN,
-                        create_sensor=True, sensor_events=((0, 22, 23), (1, 22, 23)))
-s = cbusobjects.semaphore_signal('s1', mod.cbus, ((0, 22, 23), (1, 22, 23)), cbusobjects.SIGNAL_STATE_CLEAR,
-                                 create_sensor=False, sensor_events=((0, 22, 23), (1, 22, 23)))
+t = cbusobjects.turnout('t1',
+                        mod.cbus,
+                        turnout_event=((0, 22, 23), (1, 22, 23)),
+                        query_event=((0, 22, 23), (1, 22, 23)),
+                        initial_state=cbusobjects.TURNOUT_STATE_THROWN,
+                        create_sensor=True,
+                        sensor_event=((0, 22, 23), (1, 22, 23)),
+                        init=False)
+
+s = cbusobjects.semaphore_signal('s1',
+                                 mod.cbus,
+                                 signal_event=((0, 22, 23), (1, 22, 23)),
+                                 query_event=None,
+                                 initial_state=cbusobjects.SIGNAL_STATE_CLEAR,
+                                 create_sensor=False,
+                                 sensor_event=None,
+                                 init=False)
+
 tobj = cbusobjects.routeobject(t, cbusobjects.STATE_ON, cbusobjects.WHEN_DONT_CARE)
 sobj = cbusobjects.routeobject(s, cbusobjects.STATE_OFF, cbusobjects.WHEN_AFTER)
+
 r = cbusobjects.route('r1', mod.cbus, (tobj, sobj,))
 r2 = cbusobjects.route('r2', mod.cbus, (tobj, sobj,))
 

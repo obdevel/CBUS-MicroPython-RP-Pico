@@ -56,7 +56,7 @@ class cbushistory:
         self.time_to_live = time_to_live
 
     def add(self, msg) -> None:
-        if msg.len == 0 or (self.match_events_only and not msg.data[0] in canmessage.event_opcodes):
+        if msg.dlc == 0 or (self.match_events_only and not msg.data[0] in canmessage.event_opcodes):
             return
 
         if self.max_size == -1 or len(self.history) < self.max_size:
