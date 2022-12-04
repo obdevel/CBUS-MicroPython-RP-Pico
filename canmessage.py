@@ -2,22 +2,24 @@
 
 from micropython import const
 
+# import cbus
 import cbusdefs
-import cbushistory
 import logger
 
+POLARITY_UNKNOWN = const(-1)
+POLARITY_OFF = const(0)
+POLARITY_ON = const(1)
+POLARITY_EITHER = const(2)
+
 QUERY_UNKNOWN = const(-1)
-QUERY_EVENTS = const(0)
+QUERY_TUPLES = const(0)
 QUERY_SHORTCODES = const(1)
 QUERY_OPCODES = const(2)
 QUERY_REGEX = const(3)
 QUERY_CANID = const(4)
-QUERY_ALL = const(5)
-
-EVENT_EITHER = cbushistory.POLARITY_EITHER
-EVENT_OFF = cbushistory.POLARITY_OFF
-EVENT_ON = cbushistory.POLARITY_ON
-EVENT_UNKNOWN = cbushistory.POLARITY_UNKNOWN
+QUERY_RTR = const(5)
+QUERY_EXT = const(6)
+QUERY_ALL = const(7)
 
 event_opcodes = (
     cbusdefs.OPC_ACON,
@@ -39,27 +41,26 @@ event_opcodes = (
 )
 
 polarity_lookup = {
-    "*": EVENT_EITHER,
-    "+": EVENT_ON,
-    "-": EVENT_OFF,
-    "?": EVENT_UNKNOWN
+    "*": POLARITY_EITHER,
+    "+": POLARITY_ON,
+    "-": POLARITY_OFF,
+    "?": POLARITY_UNKNOWN
 }
 
 
 def shortcode_to_tuple(code) -> tuple:
-    pol = polarity_lookup.get(code[0])
+    polarity = polarity_lookup.get(code[0])
     e = code.find("e")
     nn = int(code[2:e])
     en = int(code[e + 1:])
-    return pol, nn, en
+    return polarity, nn, en
 
 
 class canmessage:
-    """a class to represent a CAN frame"""
-
     def __init__(self, canid=0, dlc=0, data=bytearray(8), rtr=False, ext=False):
         self.logger = logger.logger()
         self.canid = canid
+        self.make_header()
         self.dlc = dlc
         self.data = bytearray(data)
         self.ext = ext
@@ -71,7 +72,7 @@ class canmessage:
         cstr = (
                 f"[{self.canid:x}] "
                 + f"[{self.dlc:x}] [ "
-                + " ".join("{:02x}".format(x) for x in self.data)
+                + " ".join("{:02x}".format(x) for x in self.data[:self.dlc])
                 + " ] "
                 + rtr
                 + ext
@@ -79,7 +80,8 @@ class canmessage:
         return cstr
 
     def make_header(self, priority=0x0b) -> None:
-        self.canid |= priority << 7
+        # (priority << 7) + (id & 0x7f)
+        self.canid = (priority << 7) + self.get_canid()
 
     def get_canid(self) -> int:
         return self.canid & 0x7f
@@ -88,8 +90,8 @@ class canmessage:
         return self.data[0] in event_opcodes
 
     def as_shortcode(self, either=False) -> str:
-        nn = (self.data[1] * 256) + self.data[2]
-        en = (self.data[3] * 256) + self.data[4]
+        nn = self.get_node_number()
+        en = self.get_event_number()
         if either:
             code = "*n"
         else:
@@ -97,30 +99,15 @@ class canmessage:
         code += str(nn) + "e" + str(en)
         return code
 
-    def as_tuple(self) -> tuple:
-        if self.data[0] in event_opcodes:
-            nn = (self.data[1] * 256) + self.data[2]
-            en = (self.data[3] * 256) + self.data[4]
-            pol = 0 if self.data[0] & 1 else 1
-            return pol, nn, en
-        else:
-            return tuple(self.data)
-
     def __iter__(self):
-        if self.data[0] in event_opcodes:
-            nn = (self.data[1] * 256) + self.data[2]
-            en = (self.data[3] * 256) + self.data[4]
-            pol = 0 if self.data[0] & 1 else 1
-            for x in range(3):
-                if x == 0:
-                    yield pol
-                elif x == 1:
-                    yield nn
-                else:
-                    yield en
-        else:
-            for x in range(self.dlc):
-                yield self.data[x]
+        if self.dlc > 0:
+            if self.data[0] in event_opcodes:
+                polarity = 0 if self.data[0] & 1 else 1
+                for x in polarity, self.get_node_number(), self.get_event_number():
+                    yield x
+            else:
+                for x in self.data[:self.dlc]:
+                    yield x
 
     def get_node_number(self) -> int:
         return (self.data[1] * 256) + self.data[2]
@@ -139,7 +126,7 @@ class canmessage:
             print(
                 f"[{self.canid:x}] [{self.dlc:x}] "
                 + "[ "
-                + " ".join("{:02x}".format(x) for x in self.data)
+                + " ".join("{:02x}".format(x) for x in self.data[:self.dlc])
                 + " ] "
                 + rtr
                 + ext,
@@ -149,7 +136,7 @@ class canmessage:
             print(
                 f"[{self.canid}] [{self.dlc}] "
                 + "[ "
-                + " ".join("{:02}".format(x) for x in self.data)
+                + " ".join("{:02}".format(x) for x in self.data[:self.dlc])
                 + " ] "
                 + rtr
                 + ext,
@@ -159,9 +146,7 @@ class canmessage:
         print()
 
     def matches(self, query, query_type=QUERY_ALL) -> bool:
-        # self.logger.log(f"canmessage: match, query_type = {type}, query = {query}")
-
-        if query_type == QUERY_EVENTS:
+        if query_type == QUERY_TUPLES:
             return tuple(self) in query
         elif query_type == QUERY_SHORTCODES:
             return self.as_shortcode() in query
@@ -171,6 +156,10 @@ class canmessage:
             return True
         elif query_type == QUERY_CANID:
             return self.get_canid() == query
+        elif query_type == QUERY_RTR:
+            return self.rtr
+        elif query_type == QUERY_EXT:
+            return self.ext
         elif query_type == QUERY_ALL:
             return True
         else:
@@ -178,72 +167,71 @@ class canmessage:
 
 
 class cbusevent(canmessage):
-    """a class to represent a CBUS event"""
-
-    def __init__(self, cbus, nn=0, en=0, pol=EVENT_OFF, send_now=False):
+    def __init__(self, cbus, polarity=POLARITY_OFF, nn=0, en=0, send_now=False):
         super().__init__()
         self.cbus = cbus
+        self.canid = cbus.config.canid
+        self.make_header()
+        self.dlc = 5
         self.nn = nn
         self.en = en
-        self.pol = pol
+        self.polarity = polarity
 
         if send_now:
             self.send()
 
-    def from_message(self, msg):
-        self.pol = EVENT_OFF if msg.data[0] & 1 else EVENT_ON
-        self.nn = msg.get_node_number()
-        self.en = msg.get_event_number()
-        self.make_event(msg.data[0])
-        return self
-
-    def send(self) -> None:
-        if self.pol == EVENT_ON:
-            self.send_on()
-        elif self.pol == EVENT_OFF:
-            self.send_off()
-
-    def make_event(self, opcode) -> None:
-        self.dlc = 5
+    def sync_data(self, opcode) -> None:
         self.data = bytearray([opcode, self.nn >> 8, self.nn & 0xff, self.en >> 8, self.en & 0xff])
 
+    def send(self) -> None:
+        if self.polarity == POLARITY_ON:
+            self.send_on()
+        elif self.polarity == POLARITY_OFF:
+            self.send_off()
+
     def send_on(self) -> None:
-        opcode = cbusdefs.OPC_ACON if self.nn > 0 else cbusdefs.OPC_ASON
-        self.make_event(opcode)
+        opcode = cbusdefs.OPC_ASON if self.nn == 0 else cbusdefs.OPC_ACON
+        self.sync_data(opcode)
         self.cbus.send_cbus_message(self)
-        self.pol = EVENT_ON
+        self.polarity = POLARITY_ON
 
     def send_off(self) -> None:
-        opcode = cbusdefs.OPC_ACOF if self.nn > 0 else cbusdefs.OPC_ASOF
-        self.make_event(opcode)
+        opcode = cbusdefs.OPC_ASOF if self.nn == 0 else cbusdefs.OPC_ACOF
+        self.sync_data(opcode)
         self.cbus.send_cbus_message(self)
-        self.pol = EVENT_OFF
-
-    def from_event_table(self, idx=0) -> canmessage:
-        pass
+        self.polarity = POLARITY_OFF
 
 
-def msg_from_tuple(t: tuple) -> canmessage:
+def message_from_tuple(t: tuple) -> canmessage:
     msg = canmessage()
-    msg.dlc = 5
+    tlen = len(t)
+    msg.dlc = 5 if tlen == 3 else tlen
 
-    if t[0] == 0:
-        msg.data[0] = cbusdefs.OPC_ACOF if t[1] else cbusdefs.OPC_ASOF
-    elif t[1] == 1:
-        msg.data[0] = cbusdefs.OPC_ACON if t[1] else cbusdefs.OPC_ASON
+    if tlen == 3:
+        if t[0] == 0:
+            msg.data[0] = cbusdefs.OPC_ACOF if t[1] else cbusdefs.OPC_ASOF
+        elif t[0] == 1:
+            msg.data[0] = cbusdefs.OPC_ACON if t[1] else cbusdefs.OPC_ASON
+        else:
+            msg.data[0] = t[0]
+
+        msg.data[1] = t[1] >> 8
+        msg.data[2] = t[1] & 0xff
+        msg.data[3] = t[2] >> 8
+        msg.data[4] = t[2] & 0xff
     else:
-        msg.data[0] = t[0]
+        for x in range(tlen):
+            msg.data[x] = t[x]
 
-    msg.data[1] = t[1] >> 8
-    msg.data[2] = t[1] & 0xff
-    msg.data[3] = t[2] >> 8
-    msg.data[4] = t[2] & 0xff
     return msg
 
 
 def event_from_tuple(cbus, t: tuple) -> cbusevent:
-    evt = cbusevent(cbus)
-    evt.pol = t[0]
+    msg = message_from_tuple(t)
+    evt = event_from_message(cbus, msg)
+    evt.id = cbus.config.canid
+    evt.dlc = 5
+    evt.polarity = t[0]
     evt.nn = t[1]
     evt.en = t[2]
     return evt
@@ -251,7 +239,24 @@ def event_from_tuple(cbus, t: tuple) -> cbusevent:
 
 def event_from_message(cbus, msg: canmessage) -> cbusevent:
     evt = cbusevent(cbus)
-    evt.pol = EVENT_OFF if msg.data[0] & 1 else EVENT_ON
+    evt.id = cbus.config.canid if msg.canid == 0 else msg.canid
+    evt.dlc = 5
+    evt.polarity = POLARITY_OFF if msg.data[0] & 1 else POLARITY_ON
+    for i in range(evt.dlc):
+        evt.data[i] = msg.data[i]
     evt.nn = msg.get_node_number()
     evt.en = msg.get_event_number()
+    return evt
+
+
+def event_from_table(cbus, idx) -> canmessage:
+    evt = cbusevent(cbus)
+    evt.id = cbus.config.canid
+    evdata = cbus.config.read_event(idx)
+    for i in range(4):
+        evt.data[i + 1] = evdata[i]
+    evt.dlc = 5
+    evt.polarity = POLARITY_UNKNOWN
+    evt.nn = evt.get_node_number()
+    evt.en = evt.get_event_number()
     return evt

@@ -307,7 +307,10 @@ class cbusconfig:
         count = 0
 
         for i in range(self.num_events):
-            if sum(self.read_event(i)[0:4]) > 0:
+            t = self.read_event(i)
+            if t[0] == 255 and t[1] == 255 and t[2] == 255 and t[3] == 255:
+                pass
+            else:
                 count += 1
 
         return count

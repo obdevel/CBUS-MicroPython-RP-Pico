@@ -6,7 +6,7 @@ import re
 
 import canmessage
 import logger
-import primitives
+from primitives import Queue
 
 
 class subscription:
@@ -18,7 +18,7 @@ class subscription:
         self.query = query
         self.query_type = query_type
         self.regex = None
-        self.queue = primitives.Queue()
+        self.queue = Queue()
         if type == canmessage.QUERY_REGEX:
             self.regex = re.compile(query)
         self.subscribe()

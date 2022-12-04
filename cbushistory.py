@@ -8,11 +8,6 @@ from micropython import const
 import canmessage
 import logger
 
-POLARITY_UNKNOWN = const(-1)
-POLARITY_OFF = const(0)
-POLARITY_ON = const(1)
-POLARITY_EITHER = const(2)
-
 ORDER_ANY = const(0)
 ORDER_GIVEN = const(1)
 ORDER_REVERSE = const(2)
@@ -81,7 +76,7 @@ class cbushistory:
 
     def display(self) -> None:
         for i in range(len(self.history)):
-            sc = self.history[i].msg.as_tuple()
+            sc = tuple(self.history[i].msg)
             it = self.history[i].arrival_time
             ds = f"{i} {sc} {it}"
             self.logger.log(ds)
@@ -89,34 +84,34 @@ class cbushistory:
     def last_update_time(self) -> int:
         return self.last_update
 
-    def event_received(self, event, within=TIME_ANY) -> bool:
+    def event_received(self, event: tuple, within=TIME_ANY) -> bool:
         for i in range(len(self.history)):
             if self.history[i].msg.get_node_number == event[1] and self.history[i].msg.get_event_number() == event[2]:
-                if event[0] == POLARITY_EITHER or (
-                        event[0] == POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (
-                        event[0] == POLARITY_OFF and (self.history[i].msg.data[0] & 1)):
+                if event[0] == canmessage.POLARITY_EITHER or (
+                        event[0] == canmessage.POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (
+                        event[0] == canmessage.POLARITY_OFF and (self.history[i].msg.data[0] & 1)):
                     if within == TIME_ANY or self.history[i].arrival_time > (time.ticks_ms() - within):
                         return True
         return False
 
-    def count_of_event(self, event, within=TIME_ANY) -> int:
+    def count_of_event(self, event: tuple, within=TIME_ANY) -> int:
         count = 0
         for i in range(len(self.history)):
             if self.history[i].msg.get_node_number() == event[1] and self.history[i].msg.get_event_number() == event[2]:
-                if event[0] == POLARITY_EITHER or (
-                        event[0] == POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (
-                        event[0] == POLARITY_OFF and (self.history[i].msg.data[0] & 1)):
+                if event[0] == canmessage.POLARITY_EITHER or (
+                        event[0] == canmessage.POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (
+                        event[0] == canmessage.POLARITY_OFF and (self.history[i].msg.data[0] & 1)):
                     if self.history[i].arrival_time > (time.ticks_ms() - within) or within == TIME_ANY:
                         count += 1
         return count
 
-    def time_received(self, event, which=WHICH_ANY) -> int:
+    def time_received(self, event: tuple, which=WHICH_ANY) -> int:
         times = []
         for i in range(len(self.history)):
             if self.history[i].msg.get_node_number() == event[1] and self.history[i].msg.get_event_number() == event[2]:
-                if event[0] == POLARITY_EITHER or (
-                        event[0] == POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (
-                        event[0] == POLARITY_OFF and (self.history[i].msg.data[0] & 1)):
+                if event[0] == canmessage.POLARITY_EITHER or (
+                        event[0] == canmessage.POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (
+                        event[0] == canmessage.POLARITY_OFF and (self.history[i].msg.data[0] & 1)):
                     if which == WHICH_ANY:
                         return self.history[i].arrival_time
                     else:
@@ -133,39 +128,40 @@ class cbushistory:
 
         return -1
 
-    def received_before(self, event1, event2) -> bool:
+    def received_before(self, event1: tuple, event2: tuple) -> bool:
         return self.time_received(event1) < self.time_received(event2)
 
-    def received_after(self, event1, event2) -> bool:
+    def received_after(self, event1: tuple, event2: tuple) -> bool:
         return self.time_received(event1) > self.time_received(event2)
 
-    def received_in_order(self, event1, event2, order=ORDER_BEFORE) -> bool:
+    def received_in_order(self, event1: tuple, event2: tuple, order=ORDER_BEFORE) -> bool:
         if order == ORDER_BEFORE:
             return self.received_before(event1, event2)
         else:
             return self.received_after(event1, event2)
 
-    def current_event_state(self, event) -> int:
-        state = POLARITY_UNKNOWN
+    def current_event_state(self, event: tuple) -> int:
+        state = canmessage.POLARITY_UNKNOWN
         earliest_time = 0
 
         for i in range(len(self.history)):
             if self.history[i].msg.get_node_number() == event[1] and self.history[i].msg.get_event_number() == event[2]:
                 if self.history[i].arrival_time > earliest_time:
                     earliest_time = self.history[i].arrival_time
-                    state = (POLARITY_OFF if (self.history[i].msg.data[0] & 1) else POLARITY_ON)
+                    state = (canmessage.POLARITY_OFF if (self.history[i].msg.data[0] & 1) else canmessage.POLARITY_ON)
 
         return state
 
-    def time_of_last_message(self, polarity=POLARITY_EITHER, match_events_only=True) -> int:
+    def time_of_last_message(self, polarity=canmessage.POLARITY_EITHER, match_events_only=True) -> int:
         latest_time = 0
 
         for i in range(len(self.history)):
             match = False
 
             if match_events_only and self.history[i].msg.is_event():
-                if polarity == POLARITY_EITHER or (polarity == POLARITY_OFF and self.history[i].msg.data[0] & 1) or (
-                        polarity == POLARITY_ON and not (self.history[i].msg.data[0] & 1)):
+                if polarity == canmessage.POLARITY_EITHER or (
+                        polarity == canmessage.POLARITY_OFF and self.history[i].msg.data[0] & 1) or (
+                        polarity == canmessage.POLARITY_ON and not (self.history[i].msg.data[0] & 1)):
                     match = True
             elif not match_events_only:
                 match = True
@@ -175,7 +171,7 @@ class cbushistory:
 
         return latest_time
 
-    def time_diff(self, events=(), within=TIME_ANY, timespan=TIMESPAN_ANY, which=WHICH_ANY):
+    def time_diff(self, events: tuple, within=TIME_ANY, timespan=TIMESPAN_ANY, which=WHICH_ANY):
         atimes = []
 
         if len(events) != 2:
@@ -195,7 +191,7 @@ class cbushistory:
         else:
             return None
 
-    def sequence_received(self, events=(), order=ORDER_ANY, within=TIME_ANY, timespan=TIME_ANY,
+    def sequence_received(self, events: tuple, order=ORDER_ANY, within=TIME_ANY, timespan=TIME_ANY,
                           which=WHICH_ANY) -> bool:
         times = []
         ret = True

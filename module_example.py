@@ -87,7 +87,10 @@ class mymodule(cbusmodule.cbusmodule):
     # *** task to blink the onboard LED
     async def blink_led_coro(self):
         self.logger.log('blink_led_coro start')
-        led = machine.Pin('LED', machine.Pin.OUT)
+        try:
+            led = machine.Pin('LED', machine.Pin.OUT)
+        except TypeError:
+            led = machine.Pin(25, machine.Pin.OUT)
 
         while True:
             led.value(1)

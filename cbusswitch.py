@@ -1,7 +1,9 @@
 # cbusswitch.py
 
-import machine
 import time
+
+import machine
+
 import logger
 
 
@@ -21,13 +23,9 @@ class cbusswitch:
         if self.state != self.previous_state:
             self.state_changed = True
             self.previous_state = self.state
-            self.previous_state_duration = (
-                time.ticks_ms() - self.previous_state_change_at
-            )
+            self.previous_state_duration = (time.ticks_ms() - self.previous_state_change_at)
             self.previous_state_change_at = time.ticks_ms()
-            self.logger.log(
-                f"switch state changed, state = {self.state}, last duration = {self.previous_state_duration}"
-            )
+            # self.logger.log(f"switch state changed, state = {self.state}, last duration = {self.previous_state_duration}")
         else:
             self.state_changed = False
 

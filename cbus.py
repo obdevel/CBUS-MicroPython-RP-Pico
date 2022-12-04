@@ -9,11 +9,11 @@ import canio
 import canmessage
 import cbusconfig
 import cbusdefs
-import cbushistory
+# import cbushistory
 import cbusled
 import cbuspubsub
 import cbusswitch
-import gcserver
+# import gcserver
 # import primitives
 import logger
 
@@ -60,6 +60,8 @@ class cbus:
             self.name = bytearray(7)
         else:
             self.name = name
+
+        self.poll = True
 
         self.event_handler = None
         self.opcodes = ()
@@ -139,7 +141,6 @@ class cbus:
         self.has_ui = True
 
     def set_name(self, name) -> None:
-        # self.logger.log(f"cbus: setting name to {name}")
         self.name = bytearray(name)
 
     def set_params(self, params) -> None:
@@ -148,24 +149,25 @@ class cbus:
     def set_event_handler(self, event_handler) -> None:
         self.event_handler = event_handler
 
-    def set_frame_handler(self, frame_handler, opcodes=[]) -> None:
+    def set_frame_handler(self, frame_handler, opcodes=()) -> None:
         self.frame_handler = frame_handler
         self.opcodes = opcodes
 
     def send_cbus_message(self, msg) -> None:
+        msg.canid = self.config.canid
         msg.make_header()
         self.send_cbus_message_no_header_update(msg)
 
     def send_cbus_message_no_header_update(self, msg) -> None:
-        self.can.send_message(msg)
+        self.can.send_message__(msg)
+        self.logger.log(f'cbus: sent msg = {msg}')
         self.has_ui and self.config.mode == MODE_FLIM and self.led_grn.pulse()
         self.sent_messages += 1
 
-        for h in self.histories:
-            h.add(msg)
-
         if self.consume_own_messages:
             self.can.rx_queue.enqueue(msg)
+            for h in self.histories:
+                h.add(msg)
 
     def set_can(self, can: canio.canio) -> None:
         self.can = can
@@ -199,10 +201,7 @@ class cbus:
                 self.led_ylw.run()
                 self.switch.run()
 
-                if (
-                        self.switch.is_pressed()
-                        and self.switch.current_state_duration() >= 6000
-                ):
+                if self.switch.is_pressed() and self.switch.current_state_duration() >= 6000:
                     # self.logger.log('cbus switch held for 6 seconds - blink')
                     self.indicate_mode(MODE_CHANGING)
 
@@ -227,6 +226,9 @@ class cbus:
                             self.logger.log("enumerate")
                             self.begin_enumeration()
 
+            if self.poll:
+                self.can.poll_for_messages()
+
             self.processed_msgs = 0
 
             while self.can.available() and self.processed_msgs < max_msgs:
@@ -247,7 +249,7 @@ class cbus:
                     self.led_grn.pulse()
 
                 if msg.get_canid() == self.config.canid and not self.enumerating:
-                    self.logger.log("canid clash")
+                    self.logger.log("can id clash")
                     self.enumeration_required = True
 
                 if self.frame_handler is not None:
@@ -266,14 +268,14 @@ class cbus:
                     try:
                         self.func_tab.get(msg.data[0])(msg)
                     except TypeError:
-                        self.logger.log(f"unhandled opcode = 0x{msg.data[0]:#x}")
+                        self.logger.log(f"unhandled opcode = {msg.data[0]:#x}")
 
                 else:
                     if msg.rtr and not self.enumerating:
-                        self.logger.log("enum response requested by another node")
+                        # self.logger.log("enum response requested by another node")
                         self.respond_to_enum_request()
                     elif self.enumerating:
-                        self.logger.log("got enum response")
+                        # self.logger.log("got enum response")
                         self.enum_responses[msg.get_canid()] = 1
                         self.num_enum_responses += 1
 
@@ -349,6 +351,7 @@ class cbus:
                 self.send_CMDERR(7)
             else:
                 self.config.set_canid(msg.data[3])
+                self.logger.log(f'cbus: set canid = {self.config.canid}')
 
     def handle_enum(self, msg) -> None:
         self.logger.log("ENUM")
@@ -401,12 +404,15 @@ class cbus:
         self.logger.log("RQEVN")
 
         if msg.get_node_number() == self.config.node_number:
+            num_events = self.config.count_events()
+            self.logger.log(f'responding with NUMEV = {num_events}')
             omsg = canmessage.canmessage(self.config.canid, 4)
             omsg.data[0] = cbusdefs.OPC_NUMEV
             omsg.data[1] = int(self.config.node_number / 256)
             omsg.data[2] = self.config.node_number & 0xFF
-            omsg.data[3] = self.config.count_events()
+            omsg.data[3] = num_events
             self.send_cbus_message(omsg)
+            self.logger.log('done')
 
     def handle_nerd(self, msg) -> None:
         self.logger.log("NERD")
@@ -414,8 +420,8 @@ class cbus:
         if msg.get_node_number() == self.config.node_number:
             omsg = canmessage.canmessage(self.config.canid, 8)
             omsg.data[0] = cbusdefs.OPC_ENRSP
-            omsg.data[1] = int(self.config.node_number / 256)
-            omsg.data[2] = self.config.node_number & 0xFF
+            omsg.data[1] = self.config.node_number >> 8
+            omsg.data[2] = self.config.node_number & 0xff
 
             for i in range(self.config.num_events):
                 event = self.config.read_event(i)
@@ -427,6 +433,7 @@ class cbus:
                 ):
                     pass
                 else:
+                    self.logger.log(f'ENRSP: sending idx = {i}')
                     omsg.data[3] = event[0]
                     omsg.data[4] = event[1]
                     omsg.data[5] = event[2]
@@ -434,6 +441,8 @@ class cbus:
                     omsg.data[7] = i
                     self.send_cbus_message(omsg)
                     time.sleep_ms(5)
+
+            self.logger.log('NERD: done')
 
     def handle_reval(self, msg) -> None:
         self.logger.log("REVAL")
@@ -631,7 +640,7 @@ class cbus:
     def set_long_message_handler(self, handler) -> None:
         self.long_message_handler = handler
 
-    def add_history(self, history: cbushistory.cbushistory) -> None:
+    def add_history(self, history) -> None:
         self.histories.append(history)
 
     def set_gcserver(self, server: gcserver.gcserver) -> None:
