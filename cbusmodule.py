@@ -19,17 +19,17 @@ class cbusmodule:
     def run(self):
         pass
 
-    def event_handler(self, msg, idx):
+    def event_handler(self, msg, idx: int) -> None:
         self.logger.log(f"-- user event handler: idx = {idx}")
         self.logger.log(msg)
 
-    def frame_handler(self, msg):
+    def frame_handler(self, msg) -> None:
         self.logger.log("-- user frame handler:")
         self.logger.log(msg)
 
-    def long_message_handler(self, message, streamid, status):
+    def long_message_handler(self, message: bytearray, streamid: int, status: int) -> None:
         self.logger.log("-- user long message handler:")
-        self.logger.log(f"status = {status}, streamid = {streamid}, msg = <{message}>")
+        self.logger.log(f"status = {status}, streamid = {streamid}, msg = <{message.decode()}>")
 
     async def mem_coro(self):
         import gc
@@ -37,5 +37,3 @@ class cbusmodule:
             gc.collect()
             gc.threshold(gc.mem_free() // 4 + gc.mem_alloc())
             await asyncio.sleep(5)
-
-

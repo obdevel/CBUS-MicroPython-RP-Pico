@@ -112,6 +112,11 @@ class mymodule(cbusmodule.cbusmodule):
     async def run(self):
         self.logger.log('run start')
 
+        # module has been reset - do one-time config here
+        if self.cbus.config.was_reset:
+            self.logger.log('module was reset')
+            self.cbus.config.set_reset_flag(False)
+
         self.tb = asyncio.create_task(self.blink_led_coro())
         self.tm = asyncio.create_task(self.module_main_loop_coro())
 

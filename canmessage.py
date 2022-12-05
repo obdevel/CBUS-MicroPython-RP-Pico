@@ -2,7 +2,6 @@
 
 from micropython import const
 
-# import cbus
 import cbusdefs
 import logger
 
@@ -63,8 +62,8 @@ class canmessage:
         self.make_header()
         self.dlc = dlc
         self.data = bytearray(data)
-        self.ext = ext
         self.rtr = rtr
+        self.ext = ext
 
     def __str__(self):
         rtr = "R" if self.rtr else ""
@@ -78,6 +77,16 @@ class canmessage:
                 + ext
         )
         return cstr
+
+    def __iter__(self):
+        if self.dlc > 0:
+            if self.is_event():
+                polarity = 0 if self.data[0] & 1 else 1
+                for x in polarity, self.get_node_number(), self.get_event_number():
+                    yield x
+            else:
+                for x in self.data[:self.dlc]:
+                    yield x
 
     def make_header(self, priority=0x0b) -> None:
         # (priority << 7) + (id & 0x7f)
@@ -98,16 +107,6 @@ class canmessage:
             code = "-n" if (self.data[0] & 1) else "+n"
         code += str(nn) + "e" + str(en)
         return code
-
-    def __iter__(self):
-        if self.dlc > 0:
-            if self.data[0] in event_opcodes:
-                polarity = 0 if self.data[0] & 1 else 1
-                for x in polarity, self.get_node_number(), self.get_event_number():
-                    yield x
-            else:
-                for x in self.data[:self.dlc]:
-                    yield x
 
     def get_node_number(self) -> int:
         return (self.data[1] * 256) + self.data[2]
@@ -176,6 +175,7 @@ class cbusevent(canmessage):
         self.nn = nn
         self.en = en
         self.polarity = polarity
+        self.sync_data(0)
 
         if send_now:
             self.send()
@@ -234,6 +234,7 @@ def event_from_tuple(cbus, t: tuple) -> cbusevent:
     evt.polarity = t[0]
     evt.nn = t[1]
     evt.en = t[2]
+    evt.sync_data(0)
     return evt
 
 

@@ -358,7 +358,7 @@ tsf = asyncio.ThreadSafeFlag()
 class mcp2515(canio.canio):
     """a canio derived class for use with an MCP2515 CAN controller device"""
 
-    def __init__(self, osc=16_000_000, cs_pin=5, int_pin=1, bus=None, rxq_size=64, txq_size=16):
+    def __init__(self, osc=16_000_000, cs_pin=5, interrupt_pin=1, bus=None, rxq_size=64, txq_size=8):
         super().__init__()
         self.logger = logger.logger()
         self.poll = False
@@ -374,9 +374,9 @@ class mcp2515(canio.canio):
         self.cs_pin = machine.Pin(cs_pin, machine.Pin.OUT)
         self.cs_pin.high()
 
-        self.int_pin = machine.Pin(int_pin, machine.Pin.IN, machine.Pin.PULL_UP)
+        self.interrupt_pin = machine.Pin(interrupt_pin, machine.Pin.IN, machine.Pin.PULL_UP)
 
-        # init SPI bus - default pin assignments for my shield designs
+        # init SPI bus - using pin assignments for my shield designs
         if bus is None:
             self.bus = machine.SPI(
                 0,
@@ -410,14 +410,44 @@ class mcp2515(canio.canio):
         self.bus.write(value_as_byte)
         return None
 
-    def isr(self):
-        tsf.set()
+    # def isr(self, p):
+    #     tsf.set()
 
     async def process_isr(self):
-        self.logger.log('handler is waiting for interrupts')
+        self.logger.log('irq handler is waiting for interrupts')
         while True:
             await tsf.wait()
-            self.logger.log('got interrupt')
+            # self.logger.log('got interrupt')
+            # i = self.get_interrupts()
+            # self.logger.log(f'irq: interrupts = {i}')
+            self.poll_for_messages()
+
+            #
+            # # class CANINTF:
+            # #     CANINTF_RX0IF = const(0x01)
+            # #     CANINTF_RX1IF = const(0x02)
+            # #     CANINTF_TX0IF = const(0x04)
+            # #     CANINTF_TX1IF = const(0x08)
+            # #     CANINTF_TX2IF = const(0x10)
+            # #     CANINTF_ERRIF = const(0x20)
+            # #     CANINTF_WAKIF = const(0x40)
+            # #     CANINTF_MERRF = const(0x80)
+            #
+
+            # if i & CANINTF.CANINTF_RX0IF or i & CANINTF.CANINTF_RX1IF:
+            #     self.poll_for_messages()
+            # elif i & CANINTF.CANINTF_TX0IF:
+            #     self.txb_free[0] = True
+            # elif i & CANINTF.CANINTF_TX1IF:
+            #     self.txb_free[1] = True
+            # elif i & CANINTF.CANINTF_TX2IF:
+            #     self.txb_free[2] = True
+            # elif i & CANINTF.CANINTF_ERRIF:
+            #     pass
+            # elif i & CANINTF.CANINTF_MERRF:
+            #     pass
+            # else:
+            #     pass
 
     def available(self) -> bool:
         return self.rx_queue.available()
@@ -426,9 +456,6 @@ class mcp2515(canio.canio):
         return self.rx_queue.dequeue()
 
     def begin(self) -> int:
-        # self.logger.log('mcp2515 begin')
-
-        # reset the device
         self.reset()
 
         # check device is present
@@ -463,6 +490,10 @@ class mcp2515(canio.canio):
         # disable all interrupt sources
         # self.set_register(REGISTER.MCP_CANINTF, 0)
 
+        # enable message transmit and receive interrupts
+        # self.set_register(REGISTER.MCP_CANINTE,
+        #                   CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF | CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF)
+
         # enable message receive interrupts
         self.set_register(REGISTER.MCP_CANINTE, CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF)
 
@@ -496,12 +527,12 @@ class mcp2515(canio.canio):
         #     if result != ERROR.ERROR_OK:
         #         return result
 
-        # set bit rate - fixed to 125kb/s at either 8 or 16 MHz crystal frequency
+        # set bit rate - fixed at 125kb/s, using either 8 or 16 MHz crystal frequency
         self.set_bit_rate()
 
-        # install ISR and run message processor
-        # self.int_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.isr)
-        # asyncio.create_task(self.process_isr())
+        # install interrupt handler and run message processor
+        self.interrupt_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=lambda t: tsf.set())
+        asyncio.create_task(self.process_isr())
 
         # set normal mode
         self.set_normal_mode()
@@ -730,11 +761,6 @@ class mcp2515(canio.canio):
             return ERROR.ERROR_FAILTX
 
         txbuf = TXB[txbn]
-
-        # ext = frame.dlc & CAN_EFF_FLAG
-        # rtr = frame.dlc & CAN_RTR_FLAG
-        # id_ = frame.dlc & (CAN_EFF_MASK if ext else CAN_SFF_MASK)
-
         id_ = frame.dlc & (CAN_EFF_MASK if frame.ext else CAN_SFF_MASK)
 
         if frame.rtr:
@@ -852,10 +878,10 @@ class mcp2515(canio.canio):
 
     # def clear_RXnOVR_flags(self) -> None:
     #     self.modify_register(REGISTER.MCP_EFLG, EFLG.EFLG_RX0OVR | EFLG.EFLG_RX1OVR, 0)
-    #
-    # def get_interrupts(self) -> int:
-    #     return self.read_register(REGISTER.MCP_CANINTF)
-    #
+
+    def get_interrupts(self) -> int:
+        return self.read_register(REGISTER.MCP_CANINTF)
+
     # def clear_interrupts(self) -> None:
     #     self.set_register(REGISTER.MCP_CANINTF, 0)
     #

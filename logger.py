@@ -1,12 +1,14 @@
 # simple logging facility
 
-import time
 import sys
+import time
 
-INFO = 0
-WARN = 1
-ERROR = 2
-DEBUG = 3
+from micropython import const
+
+INFO = const(0)
+WARN = const(1)
+ERROR = const(2)
+DEBUG = const(3)
 
 
 class logger:
@@ -19,8 +21,6 @@ class logger:
         pass
 
     def log(self, msg="", severity=DEBUG):
-        t = time.localtime()
-        # tstr = f"{t[3]:02}:{t[4]:02}:{t[5]:02}  {msg}"
         tstr = f"{time.ticks_ms():10} {msg}"
         sys.stdout.write(tstr)
         sys.stdout.write("\n")

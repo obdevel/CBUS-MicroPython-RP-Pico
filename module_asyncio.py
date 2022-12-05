@@ -174,7 +174,7 @@ class mymodule(cbusmodule.cbusmodule):
             self.rtc.datetime(tt)
             self.logger.log(f'NTP time = {tt}')
         except ImportError:
-            print('ntptime module not present')
+            self.logger.log('import failed; device is not Pico W')
             self.is_picow = False
 
     def run_gc_server(self) -> None:
@@ -223,7 +223,7 @@ class mymodule(cbusmodule.cbusmodule):
 
         while True:
             msg = await sub.wait()
-            self.logger.log(f'pubsub_test_coro: got subscribed item, msg = {msg.__str__()}')
+            self.logger.log(f'pubsub_test_coro: got subscribed item, msg = {msg}')
             if pevent:
                 pevent.set()
 
@@ -281,6 +281,11 @@ class mymodule(cbusmodule.cbusmodule):
         # loop = asyncio.get_event_loop()
         # loop.set_exception_handler(self._handle_exception)
 
+        # module has been reset - do one-time config here
+        if self.cbus.config.was_reset:
+            self.logger.log('module was reset')
+            self.cbus.config.set_reset_flag(False)
+
         # test co-routines
         t0 = asyncio.create_task(self.blink_led_coro())
         t1 = asyncio.create_task(self.history_test_coro())
@@ -299,7 +304,7 @@ class mymodule(cbusmodule.cbusmodule):
 
 def ttest():
     import cbusclocks
-    wc = cbusclocks.cbusclock(mod.cbus, cbusclocks.WALLCLOCK, 0, True, 'pool.ntp.org')
+    wc = cbusclocks.cbusclock(mod.cbus, cbusclocks.WALLCLOCK, 0, mod.is_picow, 'pool.ntp.org')
     fc = cbusclocks.cbusclock(mod.cbus, cbusclocks.FASTCLOCK, 0, False)
     fc.set_multiplier(4)
     fc.resume()
@@ -326,14 +331,15 @@ def enq() -> None:
     mod.cbus.send_cbus_message(msg3)
     mod.cbus.send_cbus_message(msg4)
 
+
 def enq3() -> None:
     # mod.cbus.send_cbus_message(msg3)
     mod.cbus.can.rx_queue.enqueue(msg3)
 
 
 def enq4() -> None:
-    # mod.cbus.can.rx_queue.enqueue(msg4)
-    mod.cbus.send_cbus_message(msg4)
+    # mod.cbus.send_cbus_message(msg4)
+    mod.cbus.can.rx_queue.enqueue(msg4)
 
 
 def out(n) -> None:
