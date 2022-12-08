@@ -120,7 +120,7 @@ class CANCTRL_REQOP_MODE:
 CANSTAT_OPMOD = const(0xE0)
 CANSTAT_ICOD = const(0x0E)
 
-CNF3_SOF = const(0x80)
+# CNF3_SOF = const(0x80)
 
 TXB_EXIDE_MASK = const(0x08)
 DLC_MASK = const(0x0F)
@@ -318,8 +318,8 @@ CAN_SFF_MASK = const(0x000007FF)  # standard frame format (SFF)
 CAN_EFF_MASK = const(0x1FFFFFFF)  # extended frame format (EFF)
 CAN_ERR_MASK = const(0x1FFFFFFF)  # omit EFF, RTR, ERR flags
 
-CAN_SFF_ID_BITS = const(11)
-CAN_EFF_ID_BITS = const(29)
+# CAN_SFF_ID_BITS = const(11)
+# CAN_EFF_ID_BITS = const(29)
 
 # CAN payload length and DLC definitions according to ISO 11898-1
 CAN_MAX_DLC = const(8)
@@ -409,9 +409,6 @@ class mcp2515(canio.canio):
             return int.from_bytes(output, sys.byteorder)
         self.bus.write(value_as_byte)
         return None
-
-    # def isr(self, p):
-    #     tsf.set()
 
     async def process_isr(self):
         self.logger.log('irq handler is waiting for interrupts')

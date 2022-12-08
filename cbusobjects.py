@@ -3,12 +3,12 @@
 import uasyncio as asyncio
 from micropython import const
 
-from primitives import WaitAny
 import canmessage
 import cbus
 import cbusdefs
 import cbuspubsub
 import logger
+from primitives import WaitAny
 
 WAIT_FOREVER = const(-1)
 
@@ -96,12 +96,12 @@ class timeout:
 
 
 class sensor:
-    def __init__(self, name, cbus: cbus.cbus, sensor_event: tuple, init_message: tuple, evt=None):
+    def __init__(self, name, cbus: cbus.cbus, sensor_event: tuple, query_message: tuple, evt=None):
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
         self.sensor_event = sensor_event
-        self.init_message = init_message
+        self.query_message = query_message
         self.evt = evt
         self.state = SENSOR_STATE_UNKNOWN
         self.sub = None
@@ -114,22 +114,22 @@ class sensor:
 
 
 class binarysensor(sensor):
-    def __init__(self, name, cbus: cbus.cbus, sensor_event: tuple, init_message: tuple, evt=None):
-        super().__init__(name, cbus, sensor_event, init_message, evt)
-        self.sync()
+    def __init__(self, name, cbus: cbus.cbus, sensor_event: tuple, query_message: tuple, evt=None):
+        super().__init__(name, cbus, sensor_event, query_message, evt)
+        self.sync_state()
         self.task = asyncio.create_task(self.run())
         self.sub = cbuspubsub.subscription(name + ':sub', self.cbus, self.sensor_event, canmessage.QUERY_ALL)
 
-    def sync(self):
-        if self.init_message:
-            self.sub = cbuspubsub.subscription(self.name + ':sub', self.cbus, (cbusdefs.OPC_ARON, cbusdefs.OPC_AROF),
-                                               canmessage.QUERY_OPCODES)
-            msg = canmessage.event_from_tuple(self.cbus, self.init_message)
+    def sync_state(self):
+        if self.query_message and len(self.query_message) == 2:
+            self.sub = cbuspubsub.subscription(self.name + ':sub', self.cbus, self.query_message[1],
+                                               canmessage.QUERY_TUPLES)
+            msg = canmessage.event_from_tuple(self.cbus, self.query_message[0])
             msg.send()
 
             msg = await self.sub.wait()
             self.state = msg.data[0] == cbusdefs.OPC_ARON
-            self.sub.unsubscribe(self.init_message)
+            self.sub.unsubscribe(self.query_message)
 
     async def run(self) -> None:
         while True:
@@ -179,10 +179,10 @@ class turnout:
         self.cbus = cbus
         self.name = name
         self.turnout_event = turnout_event
+        self.query_event = query_event
         self.state = initial_state
         self.has_sensor = has_sensor
         self.sensor_event = sensor_event
-        self.query_event = query_event
 
         self.sensor = None
         self.sensor_evt = None
@@ -217,11 +217,11 @@ class turnout:
         return await self.operate(TURNOUT_STATE_CLOSED)
 
     async def operate(self, target_state) -> bool:
-        if target_state == TURNOUT_STATE_CLOSED:
+        if target_state == TURNOUT_STATE_CLOSED and self.state != TURNOUT_STATE_CLOSED:
             ev = canmessage.event_from_tuple(self.cbus, self.turnout_event[0])
             ev.send_on()
             self.state = TURNOUT_STATE_UNKNOWN if self.has_sensor else TURNOUT_STATE_CLOSED
-        else:
+        elif target_state == TURNOUT_STATE_THROWN and self.state != TURNOUT_STATE_THROWN:
             ev = canmessage.event_from_tuple(self.cbus, self.turnout_event[1])
             ev.send_off()
             self.state = TURNOUT_STATE_UNKNOWN if self.has_sensor else TURNOUT_STATE_THROWN
@@ -314,24 +314,24 @@ class semaphore_signal:
             self.logger.log(f"signal sensor {self.sensor.name} triggered, state = {self.sensor.state}")
 
 
-# class colour_light_signal:
-#     def __init__(self, name, cbus, num_aspects, signal_events, initial_state, init=False):
-#         self.name = name
-#         self.cbus = cbus
-#         self.num_aspects = num_aspects
-#         self.signal_events = signal_events
-#         self.state = initial_state if init else SIGNAL_STATE_UNKNOWN
-#
-#     def set_aspect(self, aspect):
-#         if aspect < self.num_aspects:
-#             on = self.signal_events[aspect][0]
-#             nn = self.signal_events[aspect][1]
-#             en = self.signal_events[aspect][2]
-#             msg = canmessage.cbusevent(self.cbus, nn, en, on)
-#             msg.send_on() if on else msg.send_off()
-#             self.state = aspect
-#         else:
-#             raise ValueError('invalid state')
+class colour_light_signal:
+    def __init__(self, name, cbus, num_aspects, signal_events, initial_state, init=False):
+        self.name = name
+        self.cbus = cbus
+        self.num_aspects = num_aspects
+        self.signal_events = signal_events
+        self.state = initial_state if init else SIGNAL_STATE_UNKNOWN
+
+    def set_aspect(self, aspect):
+        if aspect < self.num_aspects:
+            on = self.signal_events[aspect][0]
+            nn = self.signal_events[aspect][1]
+            en = self.signal_events[aspect][2]
+            msg = canmessage.cbusevent(self.cbus, nn, en, on)
+            msg.send_on() if on else msg.send_off()
+            self.state = aspect
+        else:
+            raise ValueError('invalid state')
 
 
 class routeobject:
@@ -418,12 +418,14 @@ class route:
                     obj.close()
                 else:
                     obj.throw()
-                # TODO: if object has sensor, wait for feedback, with timeout
+                # TODO: if object has sensor and is sequential, wait for feedback, with timeout
             elif isinstance(obj, semaphore_signal):
                 if obj.state == SIGNAL_STATE_CLEAR:
                     obj.clear()
                 else:
                     obj.set()
-                # TODO: if object has sensor, wait for feedback, with timeout
+                # TODO: if object has sensor and is sequential, wait for feedback, with timeout
             elif isinstance(obj, colour_light_signal):
                 obj.set_aspect(obj.state)
+
+            await asyncio.sleep_ms(self.delay)

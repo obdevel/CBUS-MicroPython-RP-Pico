@@ -98,7 +98,7 @@ class mymodule(cbusmodule.cbusmodule):
             led.value(0)
             await asyncio.sleep_ms(980)
 
-    # *** user module application task
+    # *** user module application task - like Arduino loop()
     async def module_main_loop_coro(self):
         self.logger.log('main loop coroutine start')
 
@@ -106,7 +106,7 @@ class mymodule(cbusmodule.cbusmodule):
             await asyncio.sleep_ms(25)
 
     # ***
-    # *** module main entry point
+    # *** module main entry point - like Arduino setup()
     # ***
 
     async def run(self):
@@ -117,6 +117,7 @@ class mymodule(cbusmodule.cbusmodule):
             self.logger.log('module was reset')
             self.cbus.config.set_reset_flag(False)
 
+        # start coroutines
         self.tb = asyncio.create_task(self.blink_led_coro())
         self.tm = asyncio.create_task(self.module_main_loop_coro())
 

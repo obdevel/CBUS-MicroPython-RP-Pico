@@ -184,7 +184,7 @@ class mymodule(cbusmodule.cbusmodule):
             asyncio.create_task(
                 asyncio.start_server(self.gcserver.client_connected_cb, self.gcserver.host, self.gcserver.port))
         except ImportError:
-            self.logger.log('import failed; gcserver module not found')
+            self.logger.log('import failed; device is not Pico W')
 
     # ***
     # *** coroutines that run in parallel
@@ -304,7 +304,7 @@ class mymodule(cbusmodule.cbusmodule):
 
 def ttest():
     import cbusclocks
-    wc = cbusclocks.cbusclock(mod.cbus, cbusclocks.WALLCLOCK, 0, mod.is_picow, 'pool.ntp.org')
+    wc = cbusclocks.cbusclock(mod.cbus, cbusclocks.WALLCLOCK, 0, mod.is_picow, ntp_server)
     fc = cbusclocks.cbusclock(mod.cbus, cbusclocks.FASTCLOCK, 0, False)
     fc.set_multiplier(4)
     fc.resume()
@@ -378,7 +378,7 @@ t = cbusobjects.turnout('t1',
                         query_event=None,
                         initial_state=cbusobjects.TURNOUT_STATE_THROWN,
                         has_sensor=True,
-                        sensor_event=((0, 22, 23), (1, 22, 23)),
+                        sensor_event=((0, 22, 24), (1, 22, 24)),
                         init=False)
 
 s = cbusobjects.semaphore_signal('s1',

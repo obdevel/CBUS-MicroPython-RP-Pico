@@ -58,9 +58,10 @@ def time_today(hours: int, minutes: int, seconds: int) -> int:
 
 
 class time_subscription:
-    def __init__(self, sub_time: int, evt: asyncio.Event) -> None:
+    def __init__(self, sub_time: int, evt: asyncio.Event, repeat=False) -> None:
         self.sub_time = sub_time
         self.evt = evt
+        self.repeat = repeat
 
 
 class cbusclock:
@@ -180,7 +181,8 @@ class cbusclock:
                 for i, s in enumerate(self.subscriptions):
                     if s.sub_time <= self.current_time:
                         s.evt.set()
-                        del self.subscriptions[i]
+                        if not s.repeat:
+                            del self.subscriptions[i]
 
                 if self.send_events and time.ticks_diff(now, self.event_last_sent) > self.event_freq:
                     self.event_last_sent = now
