@@ -7,6 +7,7 @@ The code should, in principle, run on any hardware supported by MicroPython, alt
 board-specific changes may be required. The same applies if different pins are used for external connections,
 to e.g. the SPI bus, LEDs, switch, etc.
 
-Example application files are given in module_asyncio.py and module_loop.py.
+An example module application is given in module_example.py.
 
-Simply upload all the files to the root directory (/) of the Pico.
+Simply upload all the files to the root directory (/) of the Pico and then enter 'import module_example' at the REPL prompt.
+
