@@ -2,6 +2,7 @@
 # cbus application base class
 
 import uasyncio as asyncio
+
 import logger
 
 
@@ -33,6 +34,7 @@ class cbusmodule:
 
     async def mem_coro(self):
         import gc
+        gc.enable()
         while True:
             gc.collect()
             gc.threshold(gc.mem_free() // 4 + gc.mem_alloc())

@@ -412,8 +412,10 @@ class mcp2515(canio.canio):
 
     async def process_isr(self):
         self.logger.log('irq handler is waiting for interrupts')
+        self.num_interrupts = 0
         while True:
             await tsf.wait()
+            self.num_interrupts += 1
             # self.logger.log('got interrupt')
             # i = self.get_interrupts()
             # self.logger.log(f'irq: interrupts = {i}')

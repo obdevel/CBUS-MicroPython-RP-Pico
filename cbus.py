@@ -481,8 +481,8 @@ class cbus:
             omsg = canmessage.canmessage(self.config.canid, 8)
             omsg.data[0] = cbusdefs.OPC_NAME
 
-            for i in range(len(self.name)):
-                omsg.data[i + 1] = self.name[i]
+            for i, c in enumerate(self.name):
+                omsg.data[i + 1] = c
 
             self.send_cbus_message(omsg)
 
@@ -536,8 +536,7 @@ class cbus:
 
     def begin_enumeration(self) -> None:
         # self.logger.log("begin_enumeration")
-        omsg = canmessage.canmessage(self.config.canid, 0)
-        omsg.rtr = True
+        omsg = canmessage.canmessage(self.config.canid, 0, rtr=True)
         self.send_cbus_message(omsg)
 
         self.enum_responses = [0] * 128

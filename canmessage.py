@@ -5,6 +5,8 @@ from micropython import const
 import cbusdefs
 import logger
 
+NO_OPCODE = const(0)
+
 POLARITY_UNKNOWN = const(-1)
 POLARITY_OFF = const(0)
 POLARITY_ON = const(1)
@@ -234,7 +236,7 @@ def event_from_tuple(cbus, t: tuple) -> cbusevent:
     evt.polarity = t[0]
     evt.nn = t[1]
     evt.en = t[2]
-    evt.sync_data(0)
+    evt.sync_data(NO_OPCODE)
     return evt
 
 

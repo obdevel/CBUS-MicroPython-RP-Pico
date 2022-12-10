@@ -374,20 +374,20 @@ evt5 = canmessage.event_from_table(mod.cbus, 0)
 
 t = cbusobjects.turnout('t1',
                         mod.cbus,
-                        turnout_event=((0, 22, 23), (1, 22, 23)),
-                        query_event=None,
-                        initial_state=cbusobjects.TURNOUT_STATE_THROWN,
+                        turnout_events=((0, 22, 23), (1, 22, 23)),
+                        query_message=None,
+                        initial_state=cbusobjects.TURNOUT_STATE_UNKNOWN,
                         has_sensor=True,
-                        sensor_event=((0, 22, 24), (1, 22, 24)),
+                        sensor_events=((0, 22, 24), (1, 22, 24)),
                         init=False)
 
 s = cbusobjects.semaphore_signal('s1',
                                  mod.cbus,
-                                 signal_event=((0, 22, 23), (1, 22, 23)),
-                                 query_event=None,
-                                 initial_state=cbusobjects.SIGNAL_STATE_CLEAR,
+                                 signal_events=((0, 22, 23), (1, 22, 23)),
+                                 query_message=None,
+                                 initial_state=cbusobjects.SIGNAL_STATE_UNKNOWN,
                                  has_sensor=False,
-                                 sensor_event=None,
+                                 sensor_events=None,
                                  init=False)
 
 tobj = cbusobjects.routeobject(t, cbusobjects.STATE_ON, cbusobjects.WHEN_DONT_CARE)
