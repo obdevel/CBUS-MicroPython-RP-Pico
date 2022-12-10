@@ -7,12 +7,6 @@ import logger
 
 
 class simple_server:
-
-    #     def __new__(cls):
-    #         if not hasattr(cls, 'instance'):
-    #             cls.instance = super(gcserver, cls).__new__(cls)
-    #         return cls.instance
-
     def __init__(self, host='', port=5550):
         self.logger = logger.logger()
         self.host = host
@@ -44,18 +38,6 @@ class simple_server:
             if data:
                 data_decoded = data.decode()
                 self.logger.log(f'server: received |{data_decoded}| len = {len(data_decoded)}')
-
-                for ch in data_decoded:
-                    if not ch.upper() in 'XSNR0123456789ABCDEF;:':
-                        continue
-
-                    if ch == ':':
-                        msg = ''
-
-                    msg += ch
-
-                    if ch == ';':
-                        self.logger.log(f'server: complete message = {msg}')
             else:
                 self.logger.log(f'server: client idx = {idx} disconnected, closing stream')
                 break

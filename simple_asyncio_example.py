@@ -86,12 +86,12 @@ class mymodule():
         self.connect_wifi()
 
         # create server object
-        server = simple_server.simple_server(self.ip)
+        self.server = simple_server.simple_server(self.ip)
 
         # start coroutines
         self.tb = asyncio.create_task(self.blink_led_coro())
         self.tm = asyncio.create_task(self.module_main_loop_coro())
-        self.ts = asyncio.create_task(asyncio.start_server(server.client_connected_cb, self.ip, 5550))
+        self.ts = asyncio.create_task(asyncio.start_server(self.server.client_connected_cb, self.ip, 5550))
 
         self.logger.log('asyncio is now running the module main loop and co-routines')
 
