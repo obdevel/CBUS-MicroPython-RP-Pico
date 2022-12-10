@@ -12,12 +12,14 @@ import uasyncio as asyncio
 import aiorepl
 import logger
 import simple_server
+from primitives import Queue
 
 
 class mymodule():
     def __init__(self):
         self.logger = logger.logger()
         self.ip = None
+        self.q = Queue()
 
     def initialise(self):
         pass
@@ -53,7 +55,8 @@ class mymodule():
         self.logger.log('main loop coroutine start')
 
         while True:
-            await asyncio.sleep_ms(25)
+            val = await self.q.get()
+            self.logger.log(f'main loop: got from queue |{val}|')
 
     def connect_wifi(self) -> None:
         import network
@@ -86,7 +89,7 @@ class mymodule():
         self.connect_wifi()
 
         # create server object
-        self.server = simple_server.simple_server(self.ip)
+        self.server = simple_server.simple_server(self.q)
 
         # start coroutines
         self.tb = asyncio.create_task(self.blink_led_coro())

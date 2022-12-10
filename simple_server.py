@@ -4,13 +4,13 @@
 import uasyncio as asyncio
 
 import logger
+from primitives import Queue
 
 
 class simple_server:
-    def __init__(self, host='', port=5550):
+    def __init__(self, q: Queue = None):
         self.logger = logger.logger()
-        self.host = host
-        self.port = port
+        self.q = q
         self.ip = None
         self.server = None
         self.clients = []
@@ -38,6 +38,7 @@ class simple_server:
             if data:
                 data_decoded = data.decode()
                 self.logger.log(f'server: received |{data_decoded}| len = {len(data_decoded)}')
+                await self.q.put(data_decoded)
             else:
                 self.logger.log(f'server: client idx = {idx} disconnected, closing stream')
                 break
