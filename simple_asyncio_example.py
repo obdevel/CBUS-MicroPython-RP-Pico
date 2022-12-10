@@ -17,6 +17,7 @@ import simple_server
 class mymodule():
     def __init__(self):
         self.logger = logger.logger()
+        self.ip = None
 
     def initialise(self):
         pass
@@ -56,8 +57,6 @@ class mymodule():
 
     def connect_wifi(self) -> None:
         import network
-
-        self.ip = None
 
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
