@@ -25,13 +25,13 @@ MSGS_ALL = const(1)
 class cbus:
     def __init__(
             self,
-            can=None,
-            config=None,
-            switch=None,
-            led_grn=None,
-            led_ylw=None,
-            params=None,
-            name=None,
+            can: canio.canio = None,
+            config: cbusconfig.cbusconfig = None,
+            switch: cbusswitch.cbusswitch = None,
+            led_grn: cbusled.cbusled = None,
+            led_ylw: cbusled.cbusled = None,
+            params: list = None,
+            name: bytes = None,
     ):
 
         self.logger = logger.logger()

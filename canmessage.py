@@ -231,7 +231,7 @@ def message_from_tuple(t: tuple) -> canmessage:
 def event_from_tuple(cbus, t: tuple) -> cbusevent:
     msg = message_from_tuple(t)
     evt = event_from_message(cbus, msg)
-    evt.id = cbus.config.canid
+    evt.canid = cbus.config.canid
     evt.dlc = 5
     evt.polarity = t[0]
     evt.nn = t[1]
@@ -242,7 +242,7 @@ def event_from_tuple(cbus, t: tuple) -> cbusevent:
 
 def event_from_message(cbus, msg: canmessage) -> cbusevent:
     evt = cbusevent(cbus)
-    evt.id = cbus.config.canid if msg.canid == 0 else msg.canid
+    evt.canid = cbus.config.canid if msg.canid == 0 else msg.canid
     evt.dlc = 5
     evt.polarity = POLARITY_OFF if msg.data[0] & 1 else POLARITY_ON
     for i in range(evt.dlc):
@@ -254,7 +254,7 @@ def event_from_message(cbus, msg: canmessage) -> cbusevent:
 
 def event_from_table(cbus, idx) -> canmessage:
     evt = cbusevent(cbus)
-    evt.id = cbus.config.canid
+    evt.canid = cbus.config.canid
     evdata = cbus.config.read_event(idx)
     for i in range(4):
         evt.data[i + 1] = evdata[i]

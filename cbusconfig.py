@@ -170,25 +170,25 @@ class cbusconfig:
         self.load_module_info()
         self.was_reset = self.nvs[4]
 
-    def set_mode(self, mode) -> None:
+    def set_mode(self, mode: int) -> None:
         self.nvs[0] = mode
         self.backend.store_nvs(self.nvs)
         self.mode = mode
 
-    def set_canid(self, canid) -> None:
+    def set_canid(self, canid: int) -> None:
         self.nvs[1] = canid
         self.backend.store_nvs(self.nvs)
         self.canid = canid
 
-    def set_node_number(self, node_number) -> None:
+    def set_node_number(self, node_number: int) -> None:
         self.nvs[2] = int(node_number / 256)
         self.nvs[3] = node_number & 0xff
         self.backend.store_nvs(self.nvs)
         self.node_number = node_number
 
-    def find_existing_event(self, nn, en):
+    def find_existing_event(self, nn: int, en: int):
         for i in range(self.num_events):
-            offset = i * (self.event_size)
+            offset = i * self.event_size
 
             if ((self.events[offset] * 256) + self.events[offset + 1]) == nn and (
                     (self.events[offset + 2] * 256) + self.events[offset + 3]
@@ -197,7 +197,7 @@ class cbusconfig:
 
         return None
 
-    def find_event_by_ev(self, evnum, evval):
+    def find_event_by_ev(self, evnum: int, evval: int):
         for i in range(self.num_events):
             if self.read_event_ev(i, evnum) == evval:
                 return i
@@ -205,7 +205,7 @@ class cbusconfig:
 
     def find_event_space(self):
         for i in range(self.num_events):
-            offset = i * (self.event_size)
+            offset = i * self.event_size
 
             if (
                     self.events[offset] == 255
@@ -217,7 +217,7 @@ class cbusconfig:
 
         return None
 
-    def read_event(self, index) -> bytearray:
+    def read_event(self, index: int) -> bytearray:
         data = bytearray(self.event_size)
         offset = self.event_size * index
 
@@ -226,7 +226,7 @@ class cbusconfig:
 
         return data
 
-    def write_event(self, nn, en, evnum, evval) -> bool:
+    def write_event(self, nn: int, en: int, evnum: int, evval: int) -> bool:
         idx = self.find_existing_event(nn, en)
 
         if not idx:
@@ -244,16 +244,16 @@ class cbusconfig:
         self.backend.store_events(self.events)
         return True
 
-    def read_event_ev(self, idx, evnum) -> int:
+    def read_event_ev(self, idx: int, evnum: int) -> int:
         offset = (idx * self.event_size) + 4 + (evnum - 1)
         return self.events[offset]
 
-    def write_event_ev(self, idx, evnum, evval) -> None:
+    def write_event_ev(self, idx, evnum: int, evval: int) -> None:
         offset = (idx * self.event_size) + 4 + (evnum - 1)
         self.events[offset] = evval
         self.backend.store_events(self.events)
 
-    def clear_event(self, nn, en) -> bool:
+    def clear_event(self, nn: int, en: int) -> bool:
         idx = self.find_existing_event(nn, en)
 
         if not idx:
@@ -281,7 +281,7 @@ class cbusconfig:
         self.events = bytearray((self.num_evs + 4) * self.num_events)
         self.backend.store_events(self.events)
 
-    def read_nv(self, nvnum) -> int:
+    def read_nv(self, nvnum: int) -> int:
         return self.nvs[nvnum + 9]
 
     def write_nv(self, nvnum, value):
@@ -293,7 +293,7 @@ class cbusconfig:
         self.canid = self.nvs[1]
         self.node_number = (self.nvs[2] * 256) + self.nvs[3]
 
-    def print_events(self, print_all=True) -> None:
+    def print_events(self, print_all: bool = True) -> None:
         for i in range(self.num_events):
             if print_all or (self.events[i * self.event_size] < 0xff):
                 print(f"{i:3} = ", end="")
