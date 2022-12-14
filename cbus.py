@@ -163,8 +163,6 @@ class cbus:
 
         if self.consume_own_messages:
             self.can.rx_queue.enqueue(msg)
-            for h in self.histories:
-                h.add(msg)
 
     def set_can(self, can: canio.canio) -> None:
         self.can = can
@@ -404,7 +402,7 @@ class cbus:
         # self.logger.log("NERD")
 
         if msg.get_node_number() == self.config.node_number:
-            omsg = canmessage.canmessage(self.config.canid, 8)
+            omsg = canmessage.canmessage(canid=self.config.canid, dlc=8)
             omsg.data[0] = cbusdefs.OPC_ENRSP
             omsg.data[1] = self.config.node_number >> 8
             omsg.data[2] = self.config.node_number & 0xff
@@ -431,7 +429,7 @@ class cbus:
         # self.logger.log("REVAL")
 
         if msg.get_node_number() == self.config.node_number:
-            omsg = canmessage.canmessage(self.config.canid, 6)
+            omsg = canmessage.canmessage(canid=self.config.canid, dlc=6)
             omsg.data[0] = cbusdefs.OPC_NEVAL
             omsg.data[1] = int(self.config.node_number >> 8)
             omsg.data[2] = self.config.node_number & 0xff

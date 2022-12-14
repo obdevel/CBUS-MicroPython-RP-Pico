@@ -2,7 +2,7 @@
 
 import time
 
-import machine
+from machine import Pin
 
 import logger
 
@@ -10,7 +10,7 @@ import logger
 class cbusswitch:
     def __init__(self, pin):
         self.logger = logger.logger()
-        self.pin = machine.Pin(pin, machine.Pin.IN, machine.Pin.PULL_UP)
+        self.pin = Pin(pin, Pin.IN, Pin.PULL_UP)
         self.state = self.pin.value()
         self.previous_state = self.state
         self.previous_state_change_at = 0

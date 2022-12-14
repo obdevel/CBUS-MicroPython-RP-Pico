@@ -4,7 +4,7 @@
 
 import time
 
-import machine
+from machine import RTC, Pin
 import uasyncio as asyncio
 from micropython import const
 
@@ -170,7 +170,7 @@ class mymodule(cbusmodule.cbusmodule):
             nt = ntptime.time()
             lt = time.gmtime(nt)
             tt = (lt[0], lt[1], lt[2], 4, lt[3], lt[4], lt[5], lt[6])
-            self.rtc = machine.RTC()
+            self.rtc = RTC()
             self.rtc.datetime(tt)
             self.logger.log(f'NTP time = {tt}')
         except ImportError:
@@ -194,9 +194,9 @@ class mymodule(cbusmodule.cbusmodule):
         self.logger.log('blink_led_coro: start')
 
         try:
-            led = machine.Pin('LED', machine.Pin.OUT)
+            led = Pin('LED', Pin.OUT)
         except TypeError:
-            led = machine.Pin(25, machine.Pin.OUT)
+            led = Pin(25, Pin.OUT)
 
         while True:
             led.value(1)
@@ -254,6 +254,7 @@ class mymodule(cbusmodule.cbusmodule):
 
         while True:
             evw = await WaitAny((evt, evp, evs)).wait()
+            # evw = await cbusobjects.WaitAnyTimeout((evp, evs), 5_000).wait()
 
             if evw is evt:
                 self.logger.log('any_test_coro: timer expired')
@@ -265,6 +266,9 @@ class mymodule(cbusmodule.cbusmodule):
             elif evw is evs:
                 self.logger.log('any_test_coro: sensor_test_coro event was set')
                 evs.clear()
+            else:
+                self.logger.log('any_text_coro: unknown event')
+                evw.clear()
 
     #     def _handle_exception(self, loop, context):
     #         print('Global handler')

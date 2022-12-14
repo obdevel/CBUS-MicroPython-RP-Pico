@@ -2,7 +2,7 @@ import collections
 import sys
 import time
 
-import machine
+from machine import Pin, SPI
 import uasyncio as asyncio
 from micropython import const
 
@@ -304,7 +304,7 @@ SPI_TRANSFER_LEN = const(1)
 SPI_HOLD_US = const(50)
 
 # SPI_DEFAULT_BAUDRATE = 10000000  # 10MHz
-# SPI_DEFAULT_FIRSTBIT = machine.SPI.MSB
+# SPI_DEFAULT_FIRSTBIT = SPI.MSB
 # SPI_DEFAULT_POLARITY = 0
 # SPI_DEFAULT_PHASE = 0
 
@@ -371,23 +371,23 @@ class mcp2515(canio.canio):
         self.tx_queue = circularQueue.circularQueue(txq_size)
 
         # init chip select and interrupt pins
-        self.cs_pin = machine.Pin(cs_pin, machine.Pin.OUT)
+        self.cs_pin = Pin(cs_pin, Pin.OUT)
         self.cs_pin.high()
 
-        self.interrupt_pin = machine.Pin(interrupt_pin, machine.Pin.IN, machine.Pin.PULL_UP)
+        self.interrupt_pin = Pin(interrupt_pin, Pin.IN, Pin.PULL_UP)
 
         # init SPI bus - using pin assignments for my shield designs
         if bus is None:
-            self.bus = machine.SPI(
+            self.bus = SPI(
                 0,
                 baudrate=10_000_000,
                 polarity=0,
                 phase=0,
                 bits=8,
-                firstbit=machine.SPI.MSB,
-                sck=machine.Pin(2),
-                mosi=machine.Pin(3),
-                miso=machine.Pin(4),
+                firstbit=SPI.MSB,
+                sck=Pin(2),
+                mosi=Pin(3),
+                miso=Pin(4),
             )
         else:
             self.bus = bus
@@ -530,7 +530,7 @@ class mcp2515(canio.canio):
         self.set_bit_rate()
 
         # install interrupt handler and run message processor
-        self.interrupt_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=lambda t: tsf.set())
+        self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: tsf.set())
         asyncio.create_task(self.process_isr())
 
         # set normal mode
@@ -760,7 +760,7 @@ class mcp2515(canio.canio):
             return ERROR.ERROR_FAILTX
 
         txbuf = TXB[txbn]
-        id_ = frame.dlc & (CAN_EFF_MASK if frame.ext else CAN_SFF_MASK)
+        id_ = frame.canid & (CAN_EFF_MASK if frame.ext else CAN_SFF_MASK)
 
         if frame.rtr:
             id_ |= CAN_RTR_FLAG

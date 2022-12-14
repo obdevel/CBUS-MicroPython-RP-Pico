@@ -94,6 +94,15 @@ class timeout:
             self.event.clear()
 
 
+# class WaitAnyTimeout(WaitAny):
+#     def __init__(self, events, to):
+#         self.tevt = asyncio.Event()
+#         self.to = timeout(to, self.tevt).one_shot()
+#         self.events = list(events)
+#         self.events.append(self.tevt)
+#         super().__init__(self.events)
+
+
 class sensor:
     def __init__(self, name, cbus: cbus.cbus, sensor_event: tuple, query_message: tuple, evt=None):
         self.logger = logger.logger()
@@ -393,6 +402,8 @@ class route:
 
         self.lock = asyncio.Lock()
         self.locked_objects = []
+
+    ## TODO: auto timeout and release ?
 
     def acquire(self) -> bool:
         self.state = ROUTE_STATE_UNKNOWN

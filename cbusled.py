@@ -1,8 +1,10 @@
 # cbusled.py
 
-from micropython import const
-import machine
 import time
+
+from machine import Pin
+from micropython import const
+
 import logger
 
 BLINK_DURATION = const(500)
@@ -12,7 +14,7 @@ PULSE_DURATION = const(10)
 class cbusled:
     def __init__(self, pin):
         self.logger = logger.logger()
-        self.pin = machine.Pin(pin, machine.Pin.OUT)
+        self.pin = Pin(pin, Pin.OUT)
         self.state = 0
         self.blinking = False
         self.pulsing = False

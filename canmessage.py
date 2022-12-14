@@ -66,6 +66,7 @@ class canmessage:
         self.data = bytearray(data)
         self.rtr = rtr
         self.ext = ext
+        # self.logger.log(f'canmessage: new with canid = {canid}, dlc = {dlc}')
 
     def __str__(self):
         rtr = "R" if self.rtr else ""
@@ -91,7 +92,6 @@ class canmessage:
                     yield x
 
     def make_header(self, priority=0x0b) -> None:
-        # (priority << 7) + (id & 0x7f)
         self.canid = (priority << 7) + self.get_canid()
 
     def get_canid(self) -> int:

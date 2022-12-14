@@ -4,8 +4,8 @@
 # simplest example CBUS module main class using asyncio library
 #
 
-import machine
 import uasyncio as asyncio
+from machine import Pin
 
 import aiorepl
 import cbus
@@ -88,9 +88,9 @@ class mymodule(cbusmodule.cbusmodule):
     async def blink_led_coro(self):
         self.logger.log('blink_led_coro start')
         try:
-            led = machine.Pin('LED', machine.Pin.OUT)
+            led = Pin('LED', Pin.OUT)
         except TypeError:
-            led = machine.Pin(25, machine.Pin.OUT)
+            led = Pin(25, Pin.OUT)
 
         while True:
             led.value(1)
