@@ -21,16 +21,20 @@ class cbusmodule:
         pass
 
     def event_handler(self, msg, idx: int) -> None:
-        self.logger.log(f"-- user event handler: idx = {idx}")
+        self.logger.log(f'-- event handler: idx = {idx}')
         self.logger.log(msg)
 
-    def frame_handler(self, msg) -> None:
-        self.logger.log("-- user frame handler:")
+    def received_message_handler(self, msg) -> None:
+        self.logger.log('-- received message handler:')
+        self.logger.log(msg)
+
+    def sent_message_handler(self, msg) -> None:
+        self.logger.log('-- sent message handler:')
         self.logger.log(msg)
 
     def long_message_handler(self, message: bytearray, streamid: int, status: int) -> None:
-        self.logger.log("-- user long message handler:")
-        self.logger.log(f"status = {status}, streamid = {streamid}, msg = <{message.decode()}>")
+        self.logger.log('-- user long message handler:')
+        self.logger.log(f'status = {status}, streamid = {streamid}, msg = <{message.decode()}>')
 
     async def mem_coro(self):
         import gc

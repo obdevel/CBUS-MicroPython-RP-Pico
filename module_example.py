@@ -63,7 +63,8 @@ class mymodule(cbusmodule.cbusmodule):
         self.cbus.set_name(self.module_name)
         self.cbus.set_params(self.module_params)
         self.cbus.set_event_handler(self.event_handler)
-        self.cbus.set_frame_handler(self.frame_handler)
+        self.cbus.set_received_message_handler(self.received_message_handler)
+        self.cbus.set_sent_message_handler(self.sent_message_handler)
 
         self.cbus.begin()
 

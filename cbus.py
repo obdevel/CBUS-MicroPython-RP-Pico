@@ -62,7 +62,8 @@ class cbus:
 
         self.event_handler = None
         self.opcodes = ()
-        self.frame_handler = None
+        self.received_message_handler = None
+        self.sent_message_handler = None
         self.long_message_handler = None
 
         self.consume_own_messages = False
@@ -146,9 +147,12 @@ class cbus:
     def set_event_handler(self, event_handler) -> None:
         self.event_handler = event_handler
 
-    def set_frame_handler(self, frame_handler, opcodes=()) -> None:
-        self.frame_handler = frame_handler
+    def set_received_message_handler(self, received_message_handler, opcodes=()) -> None:
+        self.received_message_handler = received_message_handler
         self.opcodes = opcodes
+
+    def set_sent_message_handler(self, sent_message_handler) -> None:
+        self.sent_message_handler = sent_message_handler
 
     def send_cbus_message(self, msg) -> None:
         msg.canid = self.config.canid
@@ -157,9 +161,11 @@ class cbus:
 
     def send_cbus_message_no_header_update(self, msg) -> None:
         self.can.send_message__(msg)
-        self.logger.log(f'cbus: sent msg = {msg}')
         self.has_ui and self.config.mode == MODE_FLIM and self.led_grn.pulse()
         self.sent_messages += 1
+
+        if self.sent_message_handler is not None:
+            self.sent_message_handler(msg)
 
         if self.consume_own_messages:
             self.can.rx_queue.enqueue(msg)
@@ -243,12 +249,12 @@ class cbus:
                     self.logger.log("can id clash")
                     self.enumeration_required = True
 
-                if self.frame_handler is not None:
+                if self.set_received_message_handler is not None:
                     if self.opcodes is not None and msg.data[0] in self.opcodes:
-                        self.frame_handler(msg)
+                        self.received_message_handler(msg)
                         break
                     else:
-                        self.frame_handler(msg)
+                        self.received_message_handler(msg)
 
                 if msg.ext:
                     continue
@@ -396,7 +402,6 @@ class cbus:
             omsg.data[2] = self.config.node_number & 0xff
             omsg.data[3] = num_events
             self.send_cbus_message(omsg)
-            self.logger.log('done')
 
     def handle_nerd(self, msg) -> None:
         # self.logger.log("NERD")
@@ -423,7 +428,7 @@ class cbus:
                     omsg.data[6] = event[3]
                     omsg.data[7] = i
                     self.send_cbus_message(omsg)
-                    time.sleep_ms(5)
+                    time.sleep_ms(10)
 
     def handle_reval(self, msg) -> None:
         # self.logger.log("REVAL")

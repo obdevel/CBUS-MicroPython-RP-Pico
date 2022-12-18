@@ -137,7 +137,7 @@ class canmessage:
             print(
                 f"[{self.canid}] [{self.dlc}] "
                 + "[ "
-                + " ".join("{:02}".format(x) for x in self.data[:self.dlc])
+                + " ".join("{:03}".format(x) for x in self.data[:self.dlc])
                 + " ] "
                 + rtr
                 + ext,

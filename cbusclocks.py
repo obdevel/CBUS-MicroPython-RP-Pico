@@ -81,7 +81,7 @@ class cbusclock:
         self.last_ntp_update = 0
         self.tz_offset = 0
         self.dst_offset = 0
-        self.send_events = False
+        self.send_cbus_events = False
         self.event_freq = 0
         self.event_last_sent = 0
         self.has_temp_sensor = False
@@ -150,6 +150,10 @@ class cbusclock:
                 del self.subscriptions[i]
                 break
 
+    def send_events(self, send: bool = False, freq: int = 30000):
+        self.send_cbus_events = send
+        self.event_freq = freq
+
     def read_temperature(self) -> None:
         self.last_temp_reading = time.ticks_ms()
         if self.has_temp_sensor:
@@ -184,7 +188,7 @@ class cbusclock:
                         if not s.repeat:
                             del self.subscriptions[i]
 
-                if self.send_events and time.ticks_diff(now, self.event_last_sent) > self.event_freq:
+                if self.send_cbus_events and time.ticks_diff(now, self.event_last_sent) > self.event_freq:
                     self.event_last_sent = now
 
                 if self.has_temp_sensor and time.ticks_diff(now, self.last_temp_reading) > 10_000:

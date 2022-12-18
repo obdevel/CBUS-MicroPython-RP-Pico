@@ -16,7 +16,7 @@ ORDER_BEFORE = const(3)
 ORDER_AFTER = const(4)
 
 TIME_ANY = const(-1)
-TIMESPAN_ANY = const(-1)
+WINDOW_ANY = const(-1)
 
 WHICH_ANY = const(0)
 WHICH_EARLIEST = const(1)
@@ -171,7 +171,7 @@ class cbushistory:
 
         return latest_time
 
-    def time_diff(self, events: tuple, within=TIME_ANY, timespan=TIMESPAN_ANY, which=WHICH_ANY):
+    def time_diff(self, events: tuple, within=TIME_ANY, timespan=WINDOW_ANY, which=WHICH_ANY):
         atimes = []
 
         if len(events) != 2:
@@ -186,12 +186,12 @@ class cbushistory:
                 if within == TIME_ANY or (etime > time.ticks_ms() - within):
                     atimes.append(etime)
 
-        if timespan == TIMESPAN_ANY or abs(atimes[1] - atimes[0]) <= timespan:
+        if timespan == WINDOW_ANY or abs(atimes[1] - atimes[0]) <= timespan:
             return atimes[1] - atimes[0]
         else:
             return None
 
-    def sequence_received(self, events: tuple, order=ORDER_ANY, within=TIME_ANY, timespan=TIME_ANY,
+    def sequence_received(self, events: tuple, order=ORDER_ANY, within=TIME_ANY, window=TIME_ANY,
                           which=WHICH_ANY) -> bool:
         times = []
         ret = True
@@ -228,9 +228,9 @@ class cbushistory:
         else:
             ret = False
 
-        if ret and timespan != TIMESPAN_ANY:
+        if ret and window != WINDOW_ANY:
             times.sort()
-            if times[len(times) - 1] - times[0] > timespan:
+            if times[len(times) - 1] - times[0] > window:
                 ret = False
 
         return ret

@@ -4,8 +4,8 @@
 
 import time
 
-from machine import RTC, Pin
 import uasyncio as asyncio
+from machine import RTC, Pin
 from micropython import const
 
 import aiorepl
@@ -84,7 +84,8 @@ class mymodule(cbusmodule.cbusmodule):
         self.cbus.set_name(self.module_name)
         self.cbus.set_params(self.module_params)
         self.cbus.set_event_handler(self.event_handler)
-        self.cbus.set_frame_handler(self.frame_handler)
+        self.cbus.set_received_message_handler(self.received_message_handler)
+        self.cbus.set_sent_message_handler(self.sent_message_handler)
 
         self.cbus.begin(freq=20, max_msgs=1)
 
@@ -207,18 +208,23 @@ class mymodule(cbusmodule.cbusmodule):
     async def history_test_coro(self) -> None:
         self.logger.log('history_test_coro: start')
         evt = asyncio.Event()
-        self.history2 = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=10000, event=evt)
+        self.history2 = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=10000, match_events_only=True,
+                                                event=evt)
 
         while True:
             await evt.wait()
             evt.clear()
-            if self.history2.sequence_received(((0, 22, 23), (1, 22, 23),), order=cbushistory.ORDER_GIVEN, within=2000,
-                                               timespan=2000, which=cbushistory.WHICH_LATEST):
-                self.logger.log(f'history_test_coro: found sequence in history')
+            self.logger.log(f'history_test_coro: running query...')
+            if self.history2.sequence_received(((0, 22, 23), (1, 22, 23),), order=cbushistory.ORDER_GIVEN, within=3000,
+                                               window=2000, which=cbushistory.WHICH_LATEST):
+                self.logger.log('history_test_coro: sequence found in history')
+            else:
+                self.logger.log('history_test_coro: sequence not found in history')
 
-    async def pubsub_test_coro(self, pevent=None) -> None:
+    async def pubsub_test_coro(self, pevent: asyncio.Event) -> None:
         self.logger.log('pubsub_test_coro: start')
-        opcodes = (cbusdefs.OPC_ACON, cbusdefs.OPC_ACOF)
+        # opcodes = (cbusdefs.OPC_ACON, cbusdefs.OPC_ACOF)
+        opcodes = canmessage.event_opcodes
         sub = cbuspubsub.subscription('test sub', self.cbus, opcodes, canmessage.QUERY_OPCODES)
 
         while True:
@@ -227,7 +233,7 @@ class mymodule(cbusmodule.cbusmodule):
             if pevent:
                 pevent.set()
 
-    async def sensor_test_coro(self, pevent=None) -> None:
+    async def sensor_test_coro(self, pevent: asyncio.Event) -> None:
         event = asyncio.Event()
         self.sn1 = cbusobjects.binarysensor('sensor1', mod.cbus, ((0, 22, 23), (1, 22, 23)), (0, 22, 23), event)
         self.logger.log(
@@ -378,16 +384,16 @@ evt5 = canmessage.event_from_table(mod.cbus, 0)
 
 t = cbusobjects.turnout('t1',
                         mod.cbus,
-                        turnout_events=((0, 22, 23), (1, 22, 23)),
+                        turnout_events=((0, 22, 25), (1, 22, 25)),
                         query_message=None,
                         initial_state=cbusobjects.TURNOUT_STATE_UNKNOWN,
                         has_sensor=True,
-                        sensor_events=((0, 22, 24), (1, 22, 24)),
+                        sensor_events=((0, 22, 26), (1, 22, 26)),
                         init=False)
 
 s = cbusobjects.semaphore_signal('s1',
                                  mod.cbus,
-                                 signal_events=((0, 22, 23), (1, 22, 23)),
+                                 signal_events=((0, 22, 27), (1, 22, 27)),
                                  query_message=None,
                                  initial_state=cbusobjects.SIGNAL_STATE_UNKNOWN,
                                  has_sensor=False,
@@ -400,7 +406,7 @@ sobj = cbusobjects.routeobject(s, cbusobjects.STATE_OFF, cbusobjects.WHEN_AFTER)
 r = cbusobjects.route('r1', mod.cbus, (tobj, sobj,))
 r2 = cbusobjects.route('r2', mod.cbus, (tobj, sobj,))
 
-# *** start the scheduler and run the app class's main method
+# *** start the scheduler and run the app class main method
 asyncio.run(mod.run())
 
 # *** the asyncio scheduler is now in control
