@@ -248,6 +248,7 @@ class mymodule(cbusmodule.cbusmodule):
                 pevent.set()
 
     async def any_test_coro(self) -> None:
+        self.logger.log('any_test_coro: start')
         evt = asyncio.Event()
         evp = asyncio.Event()
         evs = asyncio.Event()
@@ -276,6 +277,11 @@ class mymodule(cbusmodule.cbusmodule):
                 self.logger.log('any_text_coro: unknown event')
                 evw.clear()
 
+    async def module_main_loop(self):
+        self.logger.log('module_main_loop: start')
+        while True:
+            await asyncio.sleep_ms(50)
+
     #     def _handle_exception(self, loop, context):
     #         print('Global handler')
     #         sys.print_exception(context['exception'])
@@ -300,6 +306,7 @@ class mymodule(cbusmodule.cbusmodule):
         t0 = asyncio.create_task(self.blink_led_coro())
         t1 = asyncio.create_task(self.history_test_coro())
         t2 = asyncio.create_task(self.any_test_coro())
+        t3 = asyncio.create_task(self.module_main_loop())
 
         self.logger.log('asyncio is now running the module main loop and co-routines')
 

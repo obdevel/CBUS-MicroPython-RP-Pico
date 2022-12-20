@@ -20,7 +20,9 @@ QUERY_REGEX = const(3)
 QUERY_CANID = const(4)
 QUERY_RTR = const(5)
 QUERY_EXT = const(6)
-QUERY_ALL = const(7)
+QUERY_EVENTS = const(7)
+QUERY_LONG_MESSAGES = const(8)
+QUERY_ALL = const(9)
 
 event_opcodes = (
     cbusdefs.OPC_ACON,
@@ -161,6 +163,10 @@ class canmessage:
             return self.rtr
         elif query_type == QUERY_EXT:
             return self.ext
+        elif query_type == QUERY_EVENTS:
+            return self.data[0] in event_opcodes
+        elif query_type == QUERY_LONG_MESSAGES:
+            return self.data[0] == cbusdefs.OPC_DTXC
         elif query_type == QUERY_ALL:
             return True
         else:

@@ -78,9 +78,8 @@ class cbus:
         self.enumerating = False
         self.enum_start_time = 0
         self.enumeration_required = False
-        self.enum_responses = [0] * 128
+        self.enum_responses = []
         self.timeout_timer = 0
-        self.num_enum_responses = 0
 
         self.received_messages = 0
         self.sent_messages = 0
@@ -193,8 +192,8 @@ class cbus:
 
             if self.enumerating and time.ticks_ms() - self.enum_start_time >= 100:
                 self.logger.log("end of enumeration cycle")
-                self.process_enumeration_responses()
                 self.enumerating = False
+                self.process_enumeration_responses()
                 self.logger.log(f"canid is now {self.config.canid}")
 
             if self.has_ui:
@@ -269,8 +268,7 @@ class cbus:
                     if msg.rtr and not self.enumerating:
                         self.respond_to_enum_request()
                     elif self.enumerating:
-                        self.enum_responses[msg.get_canid()] = 1
-                        self.num_enum_responses += 1
+                        self.enum_responses[msg.get_canid()] = True
 
                 processed_msgs += 1
 
@@ -342,7 +340,7 @@ class cbus:
                 self.send_CMDERR(7)
             else:
                 self.config.set_canid(msg.data[3])
-                self.logger.log(f'cbus: set canid = {self.config.canid}')
+                # self.logger.log(f'cbus: set canid = {self.config.canid}')
 
     def handle_enum(self, msg) -> None:
         # self.logger.log("ENUM")
@@ -528,37 +526,33 @@ class cbus:
         omsg.data[2] = self.config.node_number & 0xff
         self.send_cbus_message(omsg)
 
-    def send_CMDERR(self, err: int) -> None:
+    def send_CMDERR(self, errno: int) -> None:
         # self.logger.log("send_CMDERR")
         omsg = canmessage.canmessage(self.config.canid, 4)
         omsg.data[0] = cbusdefs.OPC_WRACK
         omsg.data[1] = int(self.config.node_number >> 8)
         omsg.data[2] = self.config.node_number & 0xff
-        omsg.data[3] = err & 0xff
+        omsg.data[3] = errno & 0xff
         self.send_cbus_message(omsg)
 
     def begin_enumeration(self) -> None:
-        # self.logger.log("begin_enumeration")
         omsg = canmessage.canmessage(self.config.canid, 0, rtr=True)
-        self.send_cbus_message(omsg)
-
-        self.enum_responses = [0] * 128
-        self.num_enum_responses = 0
+        self.enum_responses = [False] * 128
         self.enumerating = True
+        self.send_cbus_message(omsg)
         self.enum_start_time = time.ticks_ms()
 
     def process_enumeration_responses(self) -> None:
-        # self.logger.log("process_enumeration_responses")
         self.enum_start_time = 0
         self.enumerating = False
         new_id = -1
 
-        if self.num_enum_responses == 0:
+        if not True in self.enum_responses:
             self.logger.log("no enumeration responses received")
             return
 
-        for i in range(1, len(self.enum_responses)):
-            if self.enum_responses[i] == 0:
+        for i, r in enumerate(self.enum_responses, start=1):
+            if not r:
                 new_id = i
                 break
 
@@ -573,8 +567,11 @@ class cbus:
         else:
             self.send_CMDERR(7)
 
+    def respond_to_enum_request(self) -> None:
+        omsg = canmessage.canmessage(self.config.canid, 0)
+        self.send_cbus_message(omsg)
+
     def init_flim(self) -> None:
-        # self.logger.log("init_flim")
         self.indicate_mode(MODE_CHANGING)
         self.in_transition = True
         self.timeout_timer = time.ticks_ms()
@@ -586,7 +583,6 @@ class cbus:
         self.send_cbus_message(omsg)
 
     def revert_slim(self) -> None:
-        # self.logger.log("revert slim")
         omsg = canmessage.canmessage(self.config.canid, 3)
         omsg.data[0] = cbusdefs.OPC_NNREL
         omsg.data[1] = int(self.config.node_number >> 8)
@@ -598,11 +594,6 @@ class cbus:
         self.config.set_canid(0)
         self.config.set_node_number(0)
         self.indicate_mode(MODE_SLIM)
-
-    def respond_to_enum_request(self) -> None:
-        # self.logger.log("respond to enum request")
-        omsg = canmessage.canmessage(self.config.canid, 0)
-        self.send_cbus_message(omsg)
 
     def indicate_mode(self, mode: int) -> None:
 
@@ -616,8 +607,6 @@ class cbus:
             elif mode == MODE_CHANGING:
                 self.led_grn.off()
                 self.led_ylw.blink()
-            # else:
-            #     self.logger.log("unknown mode")
 
             self.led_grn.run()
             self.led_ylw.run()
