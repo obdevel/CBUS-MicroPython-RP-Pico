@@ -27,9 +27,9 @@ SENSOR_STATE_ON = const(1)
 SENSOR_STATE_VALID = const(2)
 
 sensor_states = {
-    SENSOR_STATE_UNKNOWN: "Unknown",
-    SENSOR_STATE_OFF: "Off",
-    SENSOR_STATE_ON: "On"
+    SENSOR_STATE_UNKNOWN: 'Unknown',
+    SENSOR_STATE_OFF: 'Off',
+    SENSOR_STATE_ON: 'On'
 }
 
 TURNOUT_STATE_UNKNOWN = const(-1)
@@ -37,9 +37,9 @@ TURNOUT_STATE_CLOSED = const(0)
 TURNOUT_STATE_THROWN = const(1)
 
 turnout_states = {
-    TURNOUT_STATE_UNKNOWN: "Unknown",
-    TURNOUT_STATE_CLOSED: "Closed",
-    TURNOUT_STATE_THROWN: "Thrown"
+    TURNOUT_STATE_UNKNOWN: 'Unknown',
+    TURNOUT_STATE_CLOSED: 'Closed',
+    TURNOUT_STATE_THROWN: 'Thrown'
 }
 
 SIGNAL_STATE_UNKNOWN = const(-1)
@@ -47,9 +47,9 @@ SIGNAL_STATE_CLEAR = const(0)
 SIGNAL_STATE_SET = const(1)
 
 signal_states = {
-    SIGNAL_STATE_UNKNOWN: "Unknown",
-    SIGNAL_STATE_CLEAR: "Clear",
-    SIGNAL_STATE_SET: "Danger"
+    SIGNAL_STATE_UNKNOWN: 'Unknown',
+    SIGNAL_STATE_CLEAR: 'Clear',
+    SIGNAL_STATE_SET: 'Danger'
 }
 
 SIGNAL_TYPE_UNKNOWN = const(-1)
@@ -57,9 +57,9 @@ SIGNAL_TYPE_STOP = const(0)
 SIGNAL_TYPE_DISTANT = const(1)
 
 signal_types = {
-    SIGNAL_TYPE_UNKNOWN: "Unknown",
-    SIGNAL_TYPE_STOP: "Stop",
-    SIGNAL_TYPE_DISTANT: "Distant"
+    SIGNAL_TYPE_UNKNOWN: 'Unknown',
+    SIGNAL_TYPE_STOP: 'Stop',
+    SIGNAL_TYPE_DISTANT: 'Distant'
 }
 
 SIGNAL_COLOUR_RED = const(0)
@@ -75,6 +75,7 @@ ROUTE_STATE_ACQUIRED = const(1)
 ROUTE_STATE_SET = const(2)
 
 MAX_TIMEOUT = const(2_147_483_647)
+OP_TIMEOUT = 2_000
 
 
 class timeout:
@@ -104,34 +105,37 @@ class timeout:
 
 
 class sensor:
-    def __init__(self, name, cbus: cbus.cbus, sensor_event: tuple, query_message: tuple, evt=None):
+    def __init__(self, name, cbus: cbus.cbus, sensor_events: tuple, query_message: tuple, evt=None):
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
-        self.sensor_event = sensor_event
+        self.sensor_events = sensor_events
         self.query_message = query_message
         self.evt = evt
         self.state = SENSOR_STATE_UNKNOWN
         self.sub = None
 
+        self.logger.log(f'sensor: name = {name}, sensor events = {self.sensor_events}')
+
         if isinstance(self.evt, asyncio.Event):
             self.evt.clear()
 
     def dispose(self):
-        self.sub.unsubscribe(self.sensor_event)
+        self.sub.unsubscribe(self.sensor_events)
 
 
 class binarysensor(sensor):
-    def __init__(self, name, cbus: cbus.cbus, sensor_event: tuple, query_message: tuple, evt=None):
-        super().__init__(name, cbus, sensor_event, query_message, evt)
+    def __init__(self, name, cbus: cbus.cbus, sensor_events: tuple, query_message: tuple, evt=None):
+        super().__init__(name, cbus, sensor_events, query_message, evt)
+        self.logger.log(f'binarysensor: name = {name}, sensor events = {self.sensor_events}')
         self.sync_state()
         self.task = asyncio.create_task(self.run())
-        self.sub = cbuspubsub.subscription(name + ':sub', self.cbus, self.sensor_event, canmessage.QUERY_ALL)
+        self.sub = cbuspubsub.subscription(name + ':sub', self.cbus, self.sensor_events, canmessage.QUERY_TUPLES)
 
     def sync_state(self):
         if self.query_message and len(self.query_message) == 2:
             self.sub = cbuspubsub.subscription(self.name + ':sub', self.cbus, self.query_message[1],
-                                               canmessage.QUERY_TUPLES)
+                                               canmessage.QUERY_ALL)
             msg = canmessage.event_from_tuple(self.cbus, self.query_message[0])
             msg.send()
 
@@ -142,12 +146,20 @@ class binarysensor(sensor):
     async def run(self) -> None:
         while True:
             msg = await self.sub.wait()
-            if msg.dlc > 0:
-                new_state = SENSOR_STATE_OFF if msg.data[0] & 1 else SENSOR_STATE_ON
-                if self.state != new_state:
-                    self.state = new_state
-                    if isinstance(self.evt, asyncio.Event):
-                        self.evt.set()
+            new_state = SENSOR_STATE_UNKNOWN
+            t = tuple(msg)
+
+            if t == self.sensor_events[0]:
+                new_state = SENSOR_STATE_OFF
+            elif t == self.sensor_events[1]:
+                new_state = SENSOR_STATE_ON
+            else:
+                self.logger.log(f'sensor:{self.name}, unexpected event = {t}')
+
+            if self.state != new_state:
+                self.state = new_state
+                if isinstance(self.evt, asyncio.Event):
+                    self.evt.set()
 
     def dispose(self):
         self.task.cancel()
@@ -155,8 +167,8 @@ class binarysensor(sensor):
 
 
 class valuesensor(sensor):
-    def __init__(self, name, cbus: cbus.cbus, sensor_event: tuple, query_message: tuple, evt=None):
-        super().__init__(name, cbus, sensor_event, query_message, evt)
+    def __init__(self, name, cbus: cbus.cbus, sensor_events: tuple, query_message: tuple, evt=None):
+        super().__init__(name, cbus, sensor_events, query_message, evt)
         self.value = -1
         self.state = SENSOR_STATE_UNKNOWN
         self.task = asyncio.create_task(self.run())
@@ -181,32 +193,38 @@ class valuesensor(sensor):
 
 
 class turnout:
-    def __init__(self, name, cbus: cbus.cbus, turnout_events, query_message, initial_state=TURNOUT_STATE_CLOSED,
+    def __init__(self, name, cbus: cbus.cbus, control_events: tuple, query_message: tuple = None,
+                 initial_state=TURNOUT_STATE_CLOSED,
                  has_sensor=False,
-                 sensor_events=None, init=False):
+                 sensor_events=None,
+                 init=False):
         self.logger = logger.logger()
         self.cbus = cbus
         self.name = name
-        self.turnout_events = turnout_events
+        self.control_events = control_events
         self.query_message = query_message
         self.state = initial_state
         self.has_sensor = has_sensor
         self.sensor_events = sensor_events
 
         self.sensor = None
+        self.sensor_name = None
         self.sensor_evt = None
         self.sensor_task = None
         self.lock = None
         self.timeout = None
         self.timeout_evt = None
 
+        self.logger.log(
+            f'turnout: name = {self.name}, control events = {self.control_events}, sensor events = {self.sensor_events}')
+
         if has_sensor and sensor_events and len(sensor_events) == 2:
             self.sensor_evt = asyncio.Event()
-            self.sensor = binarysensor(name + ':sensor', cbus, self.query_message, self.turnout_events,
-                                       self.sensor_evt)
+            self.sensor_name = self.name + ':turnout:sensor'
+            self.sensor = binarysensor(self.sensor_name, cbus, self.sensor_events, self.query_message, self.sensor_evt)
             self.sensor_task = asyncio.create_task(self.sensor_run())
             self.timeout_evt = asyncio.Event()
-            self.timeout = timeout(2000, self.timeout_evt)
+            self.timeout = timeout(OP_TIMEOUT, self.timeout_evt)
 
         if init:
             if initial_state == TURNOUT_STATE_CLOSED:
@@ -219,15 +237,15 @@ class turnout:
             self.sensor_task.cancel()
             self.sensor.dispose()
 
-    async def throw(self) -> bool:
-        return await self.operate(TURNOUT_STATE_THROWN)
+    async def throw(self, force: bool = False) -> bool:
+        return await self.operate(TURNOUT_STATE_THROWN, force)
 
-    async def close(self) -> bool:
-        return await self.operate(TURNOUT_STATE_CLOSED)
+    async def close(self, force: bool = False) -> bool:
+        return await self.operate(TURNOUT_STATE_CLOSED, force)
 
-    async def operate(self, target_state) -> bool:
-        if target_state != self.state:
-            ev = canmessage.event_from_tuple(self.cbus, self.turnout_events[target_state])
+    async def operate(self, target_state, force: bool = False) -> bool:
+        if (target_state != self.state) or force:
+            ev = canmessage.event_from_tuple(self.cbus, self.control_events[target_state])
             ev.send()
             self.state = target_state
 
@@ -238,11 +256,11 @@ class turnout:
                 evw = await WaitAny((self.timeout_evt, self.sensor.evt)).wait()
 
                 if evw is self.timeout_evt:
-                    # self.logger.log('timeout')
+                    self.logger.log(f'turnout: name = {self.name}, timeout')
                     return False
                 else:
                     self.state = self.sensor.state
-                    # self.logger.log(f'turnout state = {self.state}')
+                    self.logger.log(f'turnout: name = {self.name}, state = {self.state}')
 
         return True
 
@@ -251,22 +269,26 @@ class turnout:
             await self.sensor_evt.wait()
             self.sensor_evt.clear()
             self.state = self.sensor.state
-            self.logger.log(f"turnout sensor {self.sensor.name} triggered, state = {self.sensor.state}")
+            self.logger.log(f'turnout sensor {self.sensor.name} triggered, state = {self.sensor.state}')
 
 
 class semaphore_signal:
-    def __init__(self, name, cbus, signal_events, query_message, initial_state=SIGNAL_STATE_UNKNOWN,
-                 has_sensor=False, sensor_events=None, init=False):
+    def __init__(self, name, cbus, control_events: tuple, query_message: tuple = None,
+                 initial_state=SIGNAL_STATE_UNKNOWN,
+                 has_sensor=False,
+                 sensor_events=None,
+                 init=False):
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
-        self.signal_events = signal_events
+        self.control_events = control_events
         self.query_message = query_message
         self.has_sensor = has_sensor
         self.sensor_events = sensor_events
         self.state = SIGNAL_STATE_UNKNOWN
 
         self.sensor = None
+        self.sensor_name = None
         self.sensor_evt = None
         self.sensor_task = None
         self.lock = None
@@ -279,25 +301,31 @@ class semaphore_signal:
             else:
                 self.set()
 
+        self.logger.log(
+            f'signal: name = {self.name}, control events = {self.control_events}, sensor events = {self.sensor_events}')
+
         if has_sensor and query_message and len(query_message) == 2:
             self.sensor_evt = asyncio.Event()
-            self.sensor = binarysensor(name + ":sensor", self.cbus, self.sensor_events, self.query_message,
+            self.sensor_name = self.name + ':signal:sensor'
+            self.sensor = binarysensor(self.sensor_name, self.cbus, self.sensor_events, self.query_message,
                                        self.sensor_evt)
             self.sensor_task = asyncio.create_task(self.sensor_run())
+            self.timeout_evt = asyncio.Event()
+            self.timeout = timeout(OP_TIMEOUT, self.timeout_evt)
 
     def dispose(self):
         self.sensor_task.cancel()
         self.sensor.dispose()
 
-    async def clear(self) -> bool:
-        return await self.operate(SIGNAL_STATE_CLEAR)
+    async def clear(self, force: bool = False) -> bool:
+        return await self.operate(SIGNAL_STATE_CLEAR, force)
 
-    async def set(self) -> bool:
-        return await self.operate(SIGNAL_STATE_SET)
+    async def set(self, force: bool = False) -> bool:
+        return await self.operate(SIGNAL_STATE_SET, force)
 
-    async def operate(self, target_state) -> bool:
-        if target_state != self.state:
-            ev = canmessage.event_from_tuple(self.cbus, self.signal_events[target_state])
+    async def operate(self, target_state, force: bool = False) -> bool:
+        if (target_state != self.state) or force:
+            ev = canmessage.event_from_tuple(self.cbus, self.control_events[target_state])
             ev.send()
             self.state = target_state
 
@@ -308,11 +336,11 @@ class semaphore_signal:
                 evw = await WaitAny((self.timeout_evt, self.sensor.evt)).wait()
 
                 if evw is self.timeout_evt:
-                    # self.logger.log('timeout')
+                    self.logger.log(f'signal: name = {self.name}, timeout')
                     return False
                 else:
                     self.state = self.sensor.state
-                    # self.logger.log(f'turnout state = {self.state}')
+                    self.logger.log(f'signal: name = {self.name}, state = {self.state}')
 
         return True
 
@@ -321,7 +349,7 @@ class semaphore_signal:
             await self.sensor_evt.wait()
             self.sensor_evt.clear()
             self.state = self.sensor.state
-            self.logger.log(f"signal sensor {self.sensor.name} triggered, state = {self.sensor.state}")
+            self.logger.log(f'signal sensor {self.sensor.name} triggered, state = {self.sensor.state}')
 
 
 class semaphore_signal_group:
@@ -346,12 +374,12 @@ class semaphore_signal_group:
 
 
 class colour_light_signal:
-    def __init__(self, name: str, cbus: cbus.cbus, num_aspects: int, signal_events: tuple[tuple], initial_state: int,
+    def __init__(self, name: str, cbus: cbus.cbus, num_aspects: int, control_events: tuple[tuple], initial_state: int,
                  init=False):
         self.name = name
         self.cbus = cbus
         self.num_aspects = num_aspects
-        self.signal_events = signal_events
+        self.control_events = control_events
         self.state = initial_state if init else SIGNAL_STATE_UNKNOWN
 
         if init:
@@ -359,7 +387,7 @@ class colour_light_signal:
 
     def set_aspect(self, aspect):
         if aspect < self.num_aspects:
-            ev = canmessage.event_from_tuple(self.cbus, self.signal_events[aspect])
+            ev = canmessage.event_from_tuple(self.cbus, self.control_events[aspect])
             ev.send()
             self.state = aspect
         else:

@@ -29,7 +29,8 @@ class subscription:
     def unsubscribe(self, request) -> None:
         self.cbus.remove_subscription(request)
 
-    def publish(self, msg) -> None:
+    def publish(self, msg: canmessage.canmessage) -> None:
+        # self.logger.log(f'publish: query = {self.query}')
         if msg.matches(self.query, self.query_type):
             self.queue.put_nowait(msg)
 

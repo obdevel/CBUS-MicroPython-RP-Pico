@@ -181,7 +181,7 @@ class cbusconfig:
         self.canid = canid
 
     def set_node_number(self, node_number: int) -> None:
-        self.nvs[2] = int(node_number / 256)
+        self.nvs[2] = int(node_number << 8)
         self.nvs[3] = node_number & 0xff
         self.backend.store_nvs(self.nvs)
         self.node_number = node_number
@@ -190,8 +190,8 @@ class cbusconfig:
         for i in range(self.num_events):
             offset = i * self.event_size
 
-            if ((self.events[offset] * 256) + self.events[offset + 1]) == nn and (
-                    (self.events[offset + 2] * 256) + self.events[offset + 3]
+            if ((self.events[offset] >> 8) + self.events[offset + 1]) == nn and (
+                    (self.events[offset + 2] >> 8) + self.events[offset + 3]
             ) == en:
                 return i
 
@@ -208,10 +208,10 @@ class cbusconfig:
             offset = i * self.event_size
 
             if (
-                    self.events[offset] == 255
-                    and self.events[offset + 1] == 255
-                    and self.events[offset + 2] == 255
-                    and self.events[offset + 3] == 255
+                    self.events[offset] == 0xff
+                    and self.events[offset + 1] == 0xff
+                    and self.events[offset + 2] == 0xff
+                    and self.events[offset + 3] == 0xff
             ):
                 return i
 
@@ -237,9 +237,9 @@ class cbusconfig:
                 return False
 
         offset = idx * self.event_size
-        self.events[offset] = int(nn / 256)
+        self.events[offset] = int(nn >> 8)
         self.events[offset + 1] = nn & 0xff
-        self.events[offset + 2] = int(en / 256)
+        self.events[offset + 2] = int(en >> 8)
         self.events[offset + 3] = en & 0xff
         self.events[offset + 4 + (evnum - 1)] = evval
 
@@ -263,7 +263,7 @@ class cbusconfig:
             return False
 
         for i in range(self.event_size):
-            self.events[i + (idx * self.event_size)] = 255
+            self.events[i + (idx * self.event_size)] = 0xff
 
         self.backend.store_events(self.events)
         return True
@@ -273,7 +273,7 @@ class cbusconfig:
 
         for i in range(self.num_events):
             t = self.read_event(i)
-            if t[0] == 255 and t[1] == 255 and t[2] == 255 and t[3] == 255:
+            if t[0] == 0xff and t[1] == 0xff and t[2] == 0xff and t[3] == 0xff:
                 pass
             else:
                 count += 1
@@ -281,9 +281,9 @@ class cbusconfig:
         return count
 
     def clear_all_events(self) -> None:
-        # self.events = bytearray(255) * ((self.num_evs + 4) * self.num_events)
+        # self.events = bytearray(0xff) * ((self.num_evs + 4) * self.num_events)
         for x in range((self.num_evs + 4) * self.num_events):
-            self.events[x] = 255
+            self.events[x] = 0xff
         self.backend.store_events(self.events)
 
     def read_nv(self, nvnum: int) -> int:

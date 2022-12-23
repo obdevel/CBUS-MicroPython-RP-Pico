@@ -281,7 +281,7 @@ class cbus:
             node_number, event_number = msg.get_node_and_event_numbers()
             idx = self.config.find_existing_event(node_number, event_number)
 
-            if idx is not None:
+            if idx >= 0:
                 self.event_handler(msg, idx)
 
     def handle_rqnp(self, msg) -> None:
@@ -413,10 +413,10 @@ class cbus:
             for i in range(self.config.num_events):
                 event = self.config.read_event(i)
                 if (
-                        event[0] == 255
-                        and event[1] == 255
-                        and event[2] == 255
-                        and event[3] == 255
+                        event[0] == 0xff
+                        and event[1] == 0xff
+                        and event[2] == 0xff
+                        and event[3] == 0xff
                 ):
                     pass
                 else:

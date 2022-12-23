@@ -214,12 +214,13 @@ class mymodule(cbusmodule.cbusmodule):
         while True:
             await evt.wait()
             evt.clear()
-            self.logger.log(f'history_test_coro: running query...')
-            if self.history2.sequence_received(((0, 22, 23), (1, 22, 23),), order=cbushistory.ORDER_GIVEN, within=3000,
+            # self.logger.log(f'history_test_coro: running query...')
+            if self.history2.sequence_received(((0, 22, 23), (1, 22, 23)), order=cbushistory.ORDER_GIVEN, within=3000,
                                                window=2000, which=cbushistory.WHICH_LATEST):
                 self.logger.log('history_test_coro: sequence found in history')
             else:
-                self.logger.log('history_test_coro: sequence not found in history')
+                # self.logger.log('history_test_coro: sequence not found in history')
+                pass
 
     async def pubsub_test_coro(self, pevent: asyncio.Event) -> None:
         self.logger.log('pubsub_test_coro: start')
@@ -229,7 +230,7 @@ class mymodule(cbusmodule.cbusmodule):
 
         while True:
             msg = await sub.wait()
-            self.logger.log(f'pubsub_test_coro: got subscribed item, msg = {msg}')
+            self.logger.log(f'pubsub_test_coro: got subscribed event')
             if pevent:
                 pevent.set()
 
@@ -391,7 +392,7 @@ evt5 = canmessage.event_from_table(mod.cbus, 0)
 
 t = cbusobjects.turnout('t1',
                         mod.cbus,
-                        turnout_events=((0, 22, 25), (1, 22, 25)),
+                        control_events=((0, 22, 25), (1, 22, 25)),
                         query_message=None,
                         initial_state=cbusobjects.TURNOUT_STATE_UNKNOWN,
                         has_sensor=True,
@@ -400,7 +401,7 @@ t = cbusobjects.turnout('t1',
 
 s = cbusobjects.semaphore_signal('s1',
                                  mod.cbus,
-                                 signal_events=((0, 22, 27), (1, 22, 27)),
+                                 control_events=((0, 22, 27), (1, 22, 27)),
                                  query_message=None,
                                  initial_state=cbusobjects.SIGNAL_STATE_UNKNOWN,
                                  has_sensor=False,
