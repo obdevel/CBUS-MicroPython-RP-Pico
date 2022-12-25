@@ -15,6 +15,7 @@ ORDER_REVERSE = const(2)
 ORDER_BEFORE = const(3)
 ORDER_AFTER = const(4)
 
+TIME_NOT_FOUND = const(-1)
 TIME_ANY = const(-1)
 WINDOW_ANY = const(-1)
 
@@ -75,9 +76,9 @@ class cbushistory:
         self.history = []
 
     def display(self) -> None:
-        for i in range(len(self.history)):
-            sc = tuple(self.history[i].msg)
-            it = self.history[i].arrival_time
+        for i, h in enumerate(self.history):
+            sc = tuple(h.msg)
+            it = h.arrival_time
             ds = f"{i} {sc} {it}"
             self.logger.log(ds)
 
@@ -85,48 +86,46 @@ class cbushistory:
         return self.last_update
 
     def event_received(self, event: tuple, within=TIME_ANY) -> bool:
-        for i in range(len(self.history)):
-            if self.history[i].msg.get_node_number == event[1] and self.history[i].msg.get_event_number() == event[2]:
+        for h in self.history:
+            if h.msg.get_node_number == event[1] and h.msg.get_event_number() == event[2]:
                 if event[0] == canmessage.POLARITY_EITHER or (
-                        event[0] == canmessage.POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (
-                        event[0] == canmessage.POLARITY_OFF and (self.history[i].msg.data[0] & 1)):
-                    if within == TIME_ANY or self.history[i].arrival_time > (time.ticks_ms() - within):
+                        event[0] == canmessage.POLARITY_ON and not (h.msg.data[0] & 1)) or (
+                        event[0] == canmessage.POLARITY_OFF and (h.msg.data[0] & 1)):
+                    if within == TIME_ANY or h.arrival_time > (time.ticks_ms() - within):
                         return True
         return False
 
     def count_of_event(self, event: tuple, within=TIME_ANY) -> int:
         count = 0
-        for i in range(len(self.history)):
-            if self.history[i].msg.get_node_number() == event[1] and self.history[i].msg.get_event_number() == event[2]:
+        for h in self.history:
+            if h.msg.get_node_number() == event[1] and h.msg.get_event_number() == event[2]:
                 if event[0] == canmessage.POLARITY_EITHER or (
-                        event[0] == canmessage.POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (
-                        event[0] == canmessage.POLARITY_OFF and (self.history[i].msg.data[0] & 1)):
-                    if self.history[i].arrival_time > (time.ticks_ms() - within) or within == TIME_ANY:
+                        event[0] == canmessage.POLARITY_ON and not (h.msg.data[0] & 1)) or (
+                        event[0] == canmessage.POLARITY_OFF and (h.msg.data[0] & 1)):
+                    if h.arrival_time > (time.ticks_ms() - within) or within == TIME_ANY:
                         count += 1
         return count
 
     def time_received(self, event: tuple, which=WHICH_ANY) -> int:
         times = []
-        for i in range(len(self.history)):
-            if self.history[i].msg.get_node_number() == event[1] and self.history[i].msg.get_event_number() == event[2]:
+        for h in self.history:
+            if h.msg.get_node_number() == event[1] and h.msg.get_event_number() == event[2]:
                 if event[0] == canmessage.POLARITY_EITHER or (
-                        event[0] == canmessage.POLARITY_ON and not (self.history[i].msg.data[0] & 1)) or (
-                        event[0] == canmessage.POLARITY_OFF and (self.history[i].msg.data[0] & 1)):
+                        event[0] == canmessage.POLARITY_ON and not (h.msg.data[0] & 1)) or (
+                        event[0] == canmessage.POLARITY_OFF and (h.msg.data[0] & 1)):
                     if which == WHICH_ANY:
-                        return self.history[i].arrival_time
+                        return h.arrival_time
                     else:
-                        times.append(self.history[i].arrival_time)
+                        times.append(h.arrival_time)
 
         if len(times) > 0:
-            if which == WHICH_ANY:
-                return times[0]
             times.sort()
             if which == WHICH_EARLIEST:
                 return times[0]
             elif which == WHICH_LATEST:
                 return times[-1]
 
-        return -1
+        return TIME_NOT_FOUND
 
     def received_before(self, event1: tuple, event2: tuple) -> bool:
         return self.time_received(event1) < self.time_received(event2)
@@ -144,30 +143,30 @@ class cbushistory:
         state = canmessage.POLARITY_UNKNOWN
         earliest_time = 0
 
-        for i in range(len(self.history)):
-            if self.history[i].msg.get_node_number() == event[1] and self.history[i].msg.get_event_number() == event[2]:
-                if self.history[i].arrival_time > earliest_time:
-                    earliest_time = self.history[i].arrival_time
-                    state = (canmessage.POLARITY_OFF if (self.history[i].msg.data[0] & 1) else canmessage.POLARITY_ON)
+        for h in self.history:
+            if h.msg.get_node_number() == event[1] and h.msg.get_event_number() == event[2]:
+                if h.arrival_time > earliest_time:
+                    earliest_time = h.arrival_time
+                    state = (canmessage.POLARITY_OFF if (h.msg.data[0] & 1) else canmessage.POLARITY_ON)
 
         return state
 
     def time_of_last_message(self, polarity=canmessage.POLARITY_EITHER, match_events_only=True) -> int:
         latest_time = 0
 
-        for i in range(len(self.history)):
+        for h in self.history:
             match = False
 
-            if match_events_only and self.history[i].msg.is_event():
+            if match_events_only and h.msg.is_event():
                 if polarity == canmessage.POLARITY_EITHER or (
-                        polarity == canmessage.POLARITY_OFF and self.history[i].msg.data[0] & 1) or (
-                        polarity == canmessage.POLARITY_ON and not (self.history[i].msg.data[0] & 1)):
+                        polarity == canmessage.POLARITY_OFF and h.msg.data[0] & 1) or (
+                        polarity == canmessage.POLARITY_ON and not (h.msg.data[0] & 1)):
                     match = True
             elif not match_events_only:
                 match = True
 
-            if match and latest_time < self.history[i].arrival_time:
-                latest_time = self.history[i].arrival_time
+            if match and latest_time < h.arrival_time:
+                latest_time = h.arrival_time
 
         return latest_time
 
@@ -180,7 +179,7 @@ class cbushistory:
         for event in events:
             etime = self.time_received(event, which)
 
-            if etime == -1:
+            if etime == TIME_NOT_FOUND:
                 return None
             else:
                 if within == TIME_ANY or (etime > time.ticks_ms() - within):
@@ -194,20 +193,15 @@ class cbushistory:
     def sequence_received(self, events: tuple, order=ORDER_ANY, within=TIME_ANY, window=TIME_ANY,
                           which=WHICH_ANY) -> bool:
         times = []
-        ret = True
 
-        if self.count() < 1:
-            return False
-
-        if len(events) < 1:
+        if self.count() < 1 or len(events) < 1:
             return False
 
         for event in events:
             etime = self.time_received(event, which)
 
-            if etime == -1:
-                ret = False
-                break
+            if etime == TIME_NOT_FOUND:
+                return False
             else:
                 if within == TIME_ANY or (etime > time.ticks_ms() - within):
                     times.append(etime)
@@ -216,21 +210,17 @@ class cbushistory:
             if order == ORDER_GIVEN:
                 for i in range(len(times) - 1):
                     if times[i] > times[i + 1]:
-                        ret = False
-                        break
+                        return False
             elif order == ORDER_REVERSE:
                 for i in range(len(times) - 1):
                     if times[i] < times[i + 1]:
-                        ret = False
-                        break
-            elif order == ORDER_ANY:
-                ret = True
+                        return False
         else:
-            ret = False
+            return False
 
-        if ret and window != WINDOW_ANY:
+        if window != WINDOW_ANY:
             times.sort()
             if times[len(times) - 1] - times[0] > window:
-                ret = False
+                return False
 
-        return ret
+        return True

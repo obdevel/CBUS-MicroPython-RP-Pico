@@ -83,7 +83,7 @@ class merg_cab:
 
         tc.cancel()
         sc.cancel()
-        self.sub.unsubscribe(self.sub)
+        self.sub.unsubscribe()
         return ok
 
     async def wait_for_response(self, evt) -> None:

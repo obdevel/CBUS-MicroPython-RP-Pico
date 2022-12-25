@@ -205,7 +205,7 @@ class mymodule(cbusmodule.cbusmodule):
             led.value(0)
             await asyncio.sleep_ms(980)
 
-    async def history_test_coro(self) -> None:
+    async def history_test_coro(self, pevent: asyncio.Event) -> None:
         self.logger.log('history_test_coro: start')
         evt = asyncio.Event()
         self.history2 = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=10000, match_events_only=True,
@@ -218,21 +218,20 @@ class mymodule(cbusmodule.cbusmodule):
             if self.history2.sequence_received(((0, 22, 23), (1, 22, 23)), order=cbushistory.ORDER_GIVEN, within=3000,
                                                window=2000, which=cbushistory.WHICH_LATEST):
                 self.logger.log('history_test_coro: sequence found in history')
+                pevent.set()
             else:
                 # self.logger.log('history_test_coro: sequence not found in history')
                 pass
 
     async def pubsub_test_coro(self, pevent: asyncio.Event) -> None:
         self.logger.log('pubsub_test_coro: start')
-        # opcodes = (cbusdefs.OPC_ACON, cbusdefs.OPC_ACOF)
         opcodes = canmessage.event_opcodes
-        sub = cbuspubsub.subscription('test sub', self.cbus, opcodes, canmessage.QUERY_OPCODES)
+        sub = cbuspubsub.subscription('test', self.cbus, opcodes, canmessage.QUERY_OPCODES)
 
         while True:
             msg = await sub.wait()
             self.logger.log(f'pubsub_test_coro: got subscribed event')
-            if pevent:
-                pevent.set()
+            pevent.set()
 
     async def sensor_test_coro(self, pevent: asyncio.Event) -> None:
         event = asyncio.Event()
@@ -245,38 +244,39 @@ class mymodule(cbusmodule.cbusmodule):
             event.clear()
             self.logger.log(
                 f'sensor_test_coro: {self.sn1.name} changed state to {self.sn1.state} = {cbusobjects.sensor_states.get(self.sn1.state)}')
-            if pevent:
-                pevent.set()
+            pevent.set()
 
     async def any_test_coro(self) -> None:
         self.logger.log('any_test_coro: start')
+
         evt = asyncio.Event()
+        timer = cbusobjects.timeout(5_000, evt)
+
         evp = asyncio.Event()
         evs = asyncio.Event()
-
-        timer = cbusobjects.timeout(5_000, evt)
+        evh = asyncio.Event()
 
         tp = asyncio.create_task(self.pubsub_test_coro(evp))
         ts = asyncio.create_task(self.sensor_test_coro(evs))
+        th = asyncio.create_task(self.history_test_coro(evh))
         tt = asyncio.create_task(timer.one_shot())
 
         while True:
-            evw = await WaitAny((evt, evp, evs)).wait()
-            # evw = await cbusobjects.WaitAnyTimeout((evp, evs), 5_000).wait()
+            evw = await WaitAny((evt, evp, evs, evh)).wait()
 
             if evw is evt:
                 self.logger.log('any_test_coro: timer expired')
-                evt.clear()
                 tt.cancel()
             elif evw is evp:
                 self.logger.log('any_test_coro: pubsub_test_coro event was set')
-                evp.clear()
             elif evw is evs:
                 self.logger.log('any_test_coro: sensor_test_coro event was set')
-                evs.clear()
+            elif evw is evh:
+                self.logger.log('any_test_coro: history_test_coro event was set')
             else:
-                self.logger.log('any_text_coro: unknown event')
-                evw.clear()
+                self.logger.log('any_test_coro: unknown event')
+
+            evw.clear()
 
     async def module_main_loop(self):
         self.logger.log('module_main_loop: start')
@@ -305,9 +305,8 @@ class mymodule(cbusmodule.cbusmodule):
 
         # test co-routines
         t0 = asyncio.create_task(self.blink_led_coro())
-        t1 = asyncio.create_task(self.history_test_coro())
-        t2 = asyncio.create_task(self.any_test_coro())
-        t3 = asyncio.create_task(self.module_main_loop())
+        t1 = asyncio.create_task(self.any_test_coro())
+        t2 = asyncio.create_task(self.module_main_loop())
 
         self.logger.log('asyncio is now running the module main loop and co-routines')
 

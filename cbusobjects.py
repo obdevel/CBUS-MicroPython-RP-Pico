@@ -115,19 +115,19 @@ class sensor:
         self.state = SENSOR_STATE_UNKNOWN
         self.sub = None
 
-        self.logger.log(f'sensor: name = {name}, sensor events = {self.sensor_events}')
+        # self.logger.log(f'sensor: name = {name}, sensor events = {self.sensor_events}')
 
         if isinstance(self.evt, asyncio.Event):
             self.evt.clear()
 
     def dispose(self):
-        self.sub.unsubscribe(self.sensor_events)
+        self.sub.unsubscribe()
 
 
 class binarysensor(sensor):
     def __init__(self, name, cbus: cbus.cbus, sensor_events: tuple, query_message: tuple, evt=None):
         super().__init__(name, cbus, sensor_events, query_message, evt)
-        self.logger.log(f'binarysensor: name = {name}, sensor events = {self.sensor_events}')
+        # self.logger.log(f'binarysensor: name = {name}, sensor events = {self.sensor_events}')
         self.sync_state()
         self.task = asyncio.create_task(self.run())
         self.sub = cbuspubsub.subscription(name + ':sub', self.cbus, self.sensor_events, canmessage.QUERY_TUPLES)
@@ -141,7 +141,7 @@ class binarysensor(sensor):
 
             msg = await self.sub.wait()
             self.state = msg.data[0] == cbusdefs.OPC_ARON
-            self.sub.unsubscribe(self.query_message)
+            self.sub.unsubscribe()
 
     async def run(self) -> None:
         while True:
@@ -215,8 +215,8 @@ class turnout:
         self.timeout = None
         self.timeout_evt = None
 
-        self.logger.log(
-            f'turnout: name = {self.name}, control events = {self.control_events}, sensor events = {self.sensor_events}')
+        # self.logger.log(
+        #     f'turnout: name = {self.name}, control events = {self.control_events}, sensor events = {self.sensor_events}')
 
         if has_sensor and sensor_events and len(sensor_events) == 2:
             self.sensor_evt = asyncio.Event()
@@ -301,8 +301,8 @@ class semaphore_signal:
             else:
                 self.set()
 
-        self.logger.log(
-            f'signal: name = {self.name}, control events = {self.control_events}, sensor events = {self.sensor_events}')
+        # self.logger.log(
+        #     f'signal: name = {self.name}, control events = {self.control_events}, sensor events = {self.sensor_events}')
 
         if has_sensor and query_message and len(query_message) == 2:
             self.sensor_evt = asyncio.Event()
