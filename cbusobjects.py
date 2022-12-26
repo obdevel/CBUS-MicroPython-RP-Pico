@@ -215,12 +215,9 @@ class turnout:
         self.timeout = None
         self.timeout_evt = None
 
-        # self.logger.log(
-        #     f'turnout: name = {self.name}, control events = {self.control_events}, sensor events = {self.sensor_events}')
-
         if has_sensor and sensor_events and len(sensor_events) == 2:
             self.sensor_evt = asyncio.Event()
-            self.sensor_name = self.name + ':turnout:sensor'
+            self.sensor_name = 'turnout:' + self.name + ':sensor'
             self.sensor = binarysensor(self.sensor_name, cbus, self.sensor_events, self.query_message, self.sensor_evt)
             self.sensor_task = asyncio.create_task(self.sensor_run())
             self.timeout_evt = asyncio.Event()
@@ -301,12 +298,9 @@ class semaphore_signal:
             else:
                 self.set()
 
-        # self.logger.log(
-        #     f'signal: name = {self.name}, control events = {self.control_events}, sensor events = {self.sensor_events}')
-
         if has_sensor and query_message and len(query_message) == 2:
             self.sensor_evt = asyncio.Event()
-            self.sensor_name = self.name + ':signal:sensor'
+            self.sensor_name = 'signal:' + self.name + ':sensor'
             self.sensor = binarysensor(self.sensor_name, self.cbus, self.sensor_events, self.query_message,
                                        self.sensor_evt)
             self.sensor_task = asyncio.create_task(self.sensor_run())

@@ -31,8 +31,7 @@ class cbusservo:
         self._close_limit = close_limit
         self._open_limit = open_limit
 
-        if self._open_limit < self._close_limit:
-            raise ValueError('servo open limit must be greater than close limit')
+        assert self._open_limit > self._close_limit, 'servo open limit must be greater than close limit'
 
         self.midpoint = int(self._close_limit + ((self._open_limit - self._close_limit) / 2))
 
@@ -43,6 +42,7 @@ class cbusservo:
         self.run_freq = 100
         self.stride = 50
         self.midpoint_processed = True
+
         self.consumer_events = None
         self.producer_events = None
         self.sub = None
@@ -56,33 +56,33 @@ class cbusservo:
             self.operate(initial_state)
 
     @property
-    def close_limit(self):
+    def close_limit(self) -> int:
         return self._close_limit
 
     @close_limit.setter
-    def close_limit(self, value):
+    def close_limit(self, value: int) -> None:
         self._close_limit = value
         self.midpoint = int(self._close_limit + ((self._open_limit - self._close_limit) / 2))
         self.position_to(self.midpoint)
 
     @property
-    def open_limit(self):
+    def open_limit(self) -> int:
         return self._open_limit
 
     @open_limit.setter
-    def open_limit(self, value):
+    def open_limit(self, value: int) -> None:
         self._open_limit = value
         self.midpoint = int(self._close_limit + ((self._open_limit - self._close_limit) / 2))
         self.position_to(self.midpoint)
 
-    def dispose(self):
+    def dispose(self) -> None:
         self.task.cancel()
 
         if self.listener_task is not None:
             self.sub.unsubscribe()
             self.listener_task.cancel()
 
-    def position_to(self, pos):
+    def position_to(self, pos: int) -> None:
         self.pwm.duty_u16(pos)
 
     def operate(self, operation: int) -> None:
@@ -113,9 +113,8 @@ class cbusservo:
     def set_producer_events(self, cbus, events: tuple = None) -> None:
         self.cbus = cbus
 
-        if events is not None:
-            if len(events) != 3:
-                raise ValueError('expected three pairs of producer events')
+        if events is not None and len(events) != 3:
+            raise ValueError('expected three pairs of producer events')
 
         self.producer_events = events
 
@@ -128,6 +127,10 @@ class cbusservo:
                     msg.send()
             except IndexError:
                 self.logger.log('producer event tuple improperly formed')
+
+    def bounce(self):
+        # TODO
+        pass
 
     async def run(self) -> None:
         while True:
@@ -149,17 +152,15 @@ class cbusservo:
                     self.midpoint_processed = True
 
                 if self.pos == self._close_limit or self.pos == self._open_limit:
+                    self.bounce()
                     self.send_producer_event(HAPPENING_COMPLETE, self.state)
                     self.state = STATE_IDLE
 
     async def listener(self) -> None:
-        self.sub = cbuspubsub.subscription('servo:' + self.name + ':sub', self.cbus, self.consumer_events,
+        self.sub = cbuspubsub.subscription('servo:' + self.name + ':listener', self.cbus, self.consumer_events,
                                            canmessage.QUERY_TUPLES)
-
         while True:
             msg = await self.sub.wait()
-            self.logger.log(f'servo {self.name}: got subscribed event, opcode = 0x{msg.data[0]:02x}')
-
             if tuple(msg) == self.consumer_events[0]:
                 self.close()
             else:

@@ -1,13 +1,9 @@
 # gcserver.py
 # GridConnect TCP/IP server for the Pico W
 
-import time
-
-import network
 import uasyncio as asyncio
 
 import canmessage
-import cbus
 import circularQueue
 import logger
 
@@ -35,14 +31,9 @@ class gcserver:
         self.clients = []
         self.output_queue = circularQueue.circularQueue(16)
         self.peer_queue = circularQueue.circularQueue(4)
-
-        if isinstance(bus, cbus.cbus):
-            self.bus = bus
-        else:
-            raise TypeError('error: gcserver: cbus is not an instance of class cbus')
-
+        self.bus = bus
         self.tq = asyncio.create_task(self.queue_manager())
-        bus.set_gcserver(self)
+        self.bus.set_gcserver(self)
 
     async def client_connected_cb(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer = writer.get_extra_info('peername')
@@ -81,8 +72,10 @@ class gcserver:
                         m = self.GCtoCAN(currgc)
                         self.logger.log(f'gcserver: converted GC msg to {m.__str__()}')
                         self.bus.send_cbus_message_no_header_update(m)
-                        # self.bus.can.rx_queue.enqueue(m)
                         self.peer_queue.enqueue(qmsg(cport, currgc))
+                        if self.bus.consume_own_messages:
+                            self.bus.can.rx_queue.enqueue(m)
+
                         await asyncio.sleep_ms(1)
             else:
                 self.logger.log(f'gcserver: client idx = {idx} disconnected, closing stream')
@@ -97,7 +90,6 @@ class gcserver:
         del self.clients[i]
 
     async def queue_manager(self) -> None:
-
         while True:
             while self.output_queue.available():
                 self.logger.log('gcserver: message(s) available to send')
@@ -127,13 +119,12 @@ class gcserver:
         self.logger.log(f'gcserver: sent message to {count} client(s)')
 
     def print_clients(self) -> None:
-        for idx in range(len(self.clients)):
-            if self.clients[idx] is not None:
-                self.logger.log(f'[{idx}] {self.clients[idx].get_extra_info("peername")}')
+        for i, c in enumerate(self.clients):
+            if c is not None:
+                self.logger.log(f'[{i} {c.get_extra_info("peername")}')
 
     def CANtoGC(self, msg: canmessage.canmessage) -> str:
-
-        tid = msg.id << 5
+        tid = msg.canid << 5
 
         gc = ':'
         gc += f'X{tid:04X}' if msg.ext else f'S{tid:04X}'
@@ -146,7 +137,6 @@ class gcserver:
         return gc
 
     def GCtoCAN(self, gc: str) -> canmessage.canmessage:
-
         msg = canmessage.canmessage()
         msg.ext = True if (gc[1] == 'X') else False
         pos = gc.find('N')
@@ -158,7 +148,7 @@ class gcserver:
             msg.rtr = False
 
         id = '0X' + gc[2:pos]
-        msg.id = int(id) >> 5
+        msg.canid = int(id) >> 5
 
         data = gc[pos + 1: -1]
         msg.dlc = int(len(data) / 2)
