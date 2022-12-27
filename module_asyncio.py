@@ -283,12 +283,6 @@ class mymodule(cbusmodule.cbusmodule):
         while True:
             await asyncio.sleep_ms(50)
 
-    #     def _handle_exception(self, loop, context):
-    #         print('Global handler')
-    #         sys.print_exception(context['exception'])
-    #         #loop.stop()
-    #         sys.exit()  # Drastic - loop.stop() does not work when used this way
-
     # ***
     # *** module main entry point
     # ***
@@ -319,12 +313,33 @@ class mymodule(cbusmodule.cbusmodule):
     # ***
 
 
+def _handle_exception(self, loop, context):
+    import sys
+    print('Global handler')
+    sys.print_exception(context['exception'])
+
+
+#         #loop.stop()
+#         sys.exit()  # Drastic - loop.stop() does not work when used this way
+
 def ttest():
     import cbusclocks
     wc = cbusclocks.cbusclock(mod.cbus, cbusclocks.WALLCLOCK, 0, mod.is_picow, ntp_server)
     fc = cbusclocks.cbusclock(mod.cbus, cbusclocks.FASTCLOCK, 0, False)
     fc.set_multiplier(4)
     fc.resume()
+
+
+sv = None
+
+
+def servo_test():
+    import cbusservo
+    global sv
+    sv = cbusservo.cbusservo('sv', 10, 0, 255)
+    sv.set_consumer_events(mod.cbus, ((0, 22, 28), (1, 22, 28)))
+    sv.set_producer_events(mod.cbus,
+                           (((0, 22, 30), (1, 22, 30)), ((0, 22, 31), (1, 22, 31)), ((0, 22, 32), (1, 22, 32))))
 
 
 # some test messages
