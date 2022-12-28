@@ -30,32 +30,38 @@ class cbusservo:
         self.logger = logger.logger()
         self.name = name
 
+        self.midpoint = 0
+        self.stride = 0
+        self.run_freq = RUN_FREQ
+        self._operate_time = 5000
+
         self._close_limit = close_limit
         self._open_limit = open_limit
 
         if self.open_limit <= self.close_limit:
             raise ValueError('servo open limit must be greater than close limit')
 
-        self.midpoint = int(self._close_limit + ((self._open_limit - self._close_limit) / 2))
-
         self.cbus = None
         self.state = STATE_IDLE
 
-        self.pos = self.midpoint
-        self.run_freq = RUN_FREQ
-        self.stride = 5
         self.midpoint_processed = True
         self.always_move = False
         self.do_bounce = False
-        self.completion_event = None
+        self.bounce_values = [-10, 5, -2, 1, -1]
 
         self.consumer_events = None
         self.producer_events = None
         self.sub = None
         self.listener_task = None
 
+        self.calc_stride()
+        self.calc_midpoint()
+        self.pos = self.midpoint
+
         self.pwm = PWM(Pin(pin))
         self.pwm.freq(PWM_FREQ)
+
+        self.completion_event = None
         self.run_task = asyncio.create_task(self.run())
 
         if initial_state != STATE_IDLE:
@@ -68,7 +74,8 @@ class cbusservo:
     @close_limit.setter
     def close_limit(self, value: int) -> None:
         self._close_limit = value
-        self.midpoint = int(self._close_limit + ((self._open_limit - self._close_limit) / 2))
+        self.calc_midpoint()
+        self.calc_stride()
         self.position_to(self.midpoint)
 
     @property
@@ -78,8 +85,24 @@ class cbusservo:
     @open_limit.setter
     def open_limit(self, value: int) -> None:
         self._open_limit = value
-        self.midpoint = int(self._close_limit + ((self._open_limit - self._close_limit) / 2))
+        self.calc_midpoint()
+        self.calc_stride()
         self.position_to(self.midpoint)
+
+    @property
+    def operate_time(self) -> int:
+        return self._operate_time
+
+    @operate_time.setter
+    def operate_time(self, otime: int) -> None:
+        self._operate_time = otime
+        self.calc_stride()
+
+    def calc_midpoint(self):
+        self.midpoint = int(self._close_limit + ((self._open_limit - self._close_limit) / 2))
+
+    def calc_stride(self):
+        self.stride = max(1, int((self._open_limit - self._close_limit) / (self._operate_time / self.run_freq)))
 
     def dispose(self) -> None:
         self.run_task.cancel()
@@ -139,9 +162,16 @@ class cbusservo:
                 self.logger.log('producer events tuple improperly formed')
 
     def bounce(self):
-        # TODO
         if self.do_bounce:
-            pass
+            # t1 = time.ticks_us()
+            pos_orig = self.pos
+            for x in self.bounce_values:
+                new_pos = pos_orig + x
+                new_pos = min(self.open_limit, max(self.close_limit, new_pos))
+                self.position_to(new_pos)
+            self.position_to(pos_orig)
+            # t2 = time.ticks_us()
+            # self.logger.log(f'bounce took {time.ticks_diff(t2, t1)}')
 
     async def run(self) -> None:
         while True:

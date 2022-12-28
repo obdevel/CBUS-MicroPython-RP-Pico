@@ -310,9 +310,15 @@ class cbusconfig:
         for i in range(self.num_nvs + 10):
             print(f'{i:2} - {self.nvs[i]}')
 
-    def reboot(self) -> None:
+    @staticmethod
+    def reboot() -> None:
         import machine
         machine.soft_reset()
+
+    @staticmethod
+    def free_memory() -> int:
+        gc.collect()
+        return gc.mem_free()
 
     def reset_module(self) -> None:
         self.logger.log('reset_module')
@@ -326,7 +332,3 @@ class cbusconfig:
     def set_reset_flag(self, set: bool) -> None:
         self.nvs[4] = set
         self.backend.store_nvs(self.nvs)
-
-    def free_memory(self) -> int:
-        gc.collect()
-        return gc.mem_free()

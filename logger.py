@@ -17,10 +17,7 @@ class logger:
             cls.instance = super(logger, cls).__new__(cls)
         return cls.instance
 
-    def __init__(self):
-        pass
-
     def log(self, msg="", severity=DEBUG):
         tstr = f"{time.ticks_ms():10} {msg}"
         sys.stdout.write(tstr)
-        sys.stdout.write("\n")
+        sys.stdout.write(b'\n')

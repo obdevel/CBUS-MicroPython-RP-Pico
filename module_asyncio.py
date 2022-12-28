@@ -148,7 +148,7 @@ class mymodule(cbusmodule.cbusmodule):
             self.logger.log('waiting for wifi...')
             tt = time.ticks_ms()
 
-            while not self.wlan.isconnected() and time.ticks_ms() - tt < 5000:
+            while not self.wlan.isconnected() and time.ticks_diff(time.ticks_ms(), tt) < 5000:
                 time.sleep_ms(500)
 
             if self.wlan.isconnected():

@@ -113,7 +113,7 @@ class cbuslongmessage:
             self.crc16(self.transmit_contexts[j].buffer) if self.using_crc else 0
         )
 
-        msg = canmessage.canmessage(self.bus.config.can_id, 8)
+        msg = canmessage.canmessage(self.bus.config.canid, 8)
 
         msg.data[0] = cbusdefs.OPC_DTXC
         msg.data[1] = stream_id
@@ -139,7 +139,7 @@ class cbuslongmessage:
             for j in range(len(self.receive_contexts)):
                 if (
                         self.receive_contexts[j].in_use
-                        and time.ticks_ms() - self.receive_contexts[j].last_fragment_received_at
+                        and time.ticks_diff(time.ticks_ms(), self.receive_contexts[j].last_fragment_received_at)
                         > self.receive_timeout
                 ):
                     self.logger.log(f"error: receive context {j} timed out")
@@ -150,16 +150,17 @@ class cbuslongmessage:
                     )
                     self.receive_contexts[j].in_use = False
 
-            if (self.transmit_contexts[self.current_context].in_use and time.ticks_ms() - self.transmit_contexts[
-                self.current_context].last_fragment_sent > TRANSMIT_DELAY):
-                msg = canmessage.canmessage(self.bus.config.can_id, 8)
+            if (self.transmit_contexts[self.current_context].in_use and
+                    time.ticks_diff(time.ticks_ms(), self.transmit_contexts[self.current_context].last_fragment_sent)
+                    > TRANSMIT_DELAY):
+                msg = canmessage.canmessage(self.bus.config.canid, 8)
                 msg.data[0] = cbusdefs.OPC_DTXC
                 msg.data[1] = self.transmit_contexts[j].stream_id
                 msg.data[2] = self.transmit_contexts[j].sequence_num
 
                 for c in range(5):
                     if self.transmit_contexts[self.current_context].index >= self.transmit_contexts[
-                        self.current_context].message_size:
+                            self.current_context].message_size:
                         self.transmit_contexts[self.current_context].in_use = False
                         break
 
@@ -208,6 +209,7 @@ class cbuslongmessage:
         else:
             found_matching_context = False
             message_receive_complete = False
+            i = 0
 
             for i in range(len(self.receive_contexts)):
                 if self.receive_contexts[i].in_use and self.receive_contexts[i].stream_id == msg.data[1] and \
@@ -264,7 +266,8 @@ class cbuslongmessage:
     def use_crc(self, crc) -> None:
         self.using_crc = crc
 
-    def crc16(self, data: bytes, poly=0x8408) -> int:
+    @staticmethod
+    def crc16(data: bytes, poly=0x8408) -> int:
         data = bytearray(data)
         crc = 0xFFFF
 

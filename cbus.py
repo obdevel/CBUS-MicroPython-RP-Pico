@@ -76,10 +76,10 @@ class cbus:
         self.in_transition = False
         self.in_learn_mode = False
         self.enumerating = False
-        self.enum_start_time = 0
+        self.enum_start_time = time.ticks_ms()
         self.enumeration_required = False
         self.enum_responses = []
-        self.timeout_timer = 0
+        self.timeout_timer = time.ticks_ms()
 
         self.received_messages = 0
         self.sent_messages = 0
@@ -179,28 +179,24 @@ class cbus:
         while True:
             await asyncio.sleep_ms(freq)
 
-            if self.in_transition and time.ticks_ms() - self.timeout_timer >= 30000:
+            if self.in_transition and time.ticks_diff(time.ticks_ms(), self.timeout_timer) >= 30000:
                 self.logger.log("mode change timeout")
                 self.in_transition = False
                 self.indicate_mode(self.config.mode)
-                self.timeout_timer = 0
+                self.timeout_timer = time.ticks_ms()
 
             if self.enumeration_required:
                 self.logger.log("enumeration required")
                 self.enumeration_required = False
                 self.begin_enumeration()
 
-            if self.enumerating and time.ticks_ms() - self.enum_start_time >= 100:
+            if self.enumerating and time.ticks_diff(time.ticks_ms(), self.enum_start_time) >= 100:
                 self.logger.log("end of enumeration cycle")
                 self.enumerating = False
                 self.process_enumeration_responses()
                 self.logger.log(f"canid is now {self.config.canid}")
 
             if self.has_ui:
-                # self.led_grn.run()
-                # self.led_ylw.run()
-                # self.switch.run()
-
                 if self.switch.is_pressed() and self.switch.current_state_duration() >= 6000:
                     self.indicate_mode(MODE_CHANGING)
 
@@ -596,7 +592,6 @@ class cbus:
         self.indicate_mode(MODE_SLIM)
 
     def indicate_mode(self, mode: int) -> None:
-
         if self.has_ui:
             if mode == MODE_SLIM:
                 self.led_grn.on()
@@ -607,9 +602,6 @@ class cbus:
             elif mode == MODE_CHANGING:
                 self.led_grn.off()
                 self.led_ylw.blink()
-
-            # self.led_grn.run()
-            # self.led_ylw.run()
 
     def set_long_message_handler(self, handler) -> None:
         self.long_message_handler = handler
