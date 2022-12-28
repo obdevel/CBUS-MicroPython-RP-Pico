@@ -69,7 +69,6 @@ class canmessage:
         self.data = bytearray(data)
         self.rtr = rtr
         self.ext = ext
-        # self.logger.log(f'canmessage: new with canid = {canid}, dlc = {dlc}')
 
     def __str__(self):
         rtr = "R" if self.rtr else ""
@@ -87,8 +86,8 @@ class canmessage:
     def __iter__(self):
         if self.dlc > 0:
             if self.is_event():
-                polarity = 0 if self.data[0] & 1 else 1
-                for x in polarity, self.get_node_number(), self.get_event_number():
+                self.polarity = 0 if self.data[0] & 1 else 1
+                for x in self.polarity, self.get_node_number(), self.get_event_number():
                     yield x
             else:
                 for x in self.data[:self.dlc]:
@@ -180,11 +179,8 @@ class canmessage:
 
 class cbusevent(canmessage):
     def __init__(self, cbus, polarity=POLARITY_OFF, nn=0, en=0, send_now=False):
-        super().__init__()
+        super().__init__(dlc=5)
         self.cbus = cbus
-        self.canid = cbus.config.canid
-        self.make_header()
-        self.dlc = 5
         self.nn = nn
         self.en = en
         self.polarity = polarity

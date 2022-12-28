@@ -14,7 +14,7 @@ class subscription:
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
-        self.id = random.randint(0, 65535)
+        self.id = random.randint(0, 65535)      # TODO: check unique
         self.query = query
         self.query_type = query_type
         self.regex = None

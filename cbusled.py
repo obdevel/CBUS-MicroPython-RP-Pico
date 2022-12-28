@@ -2,13 +2,14 @@
 
 import time
 
+import uasyncio as asyncio
 from machine import Pin
 from micropython import const
 
 import logger
 
 BLINK_DURATION = const(500)
-PULSE_DURATION = const(10)
+PULSE_DURATION = const(20)
 
 
 class cbusled:
@@ -21,16 +22,21 @@ class cbusled:
         self.last_change_time = 0
         self.pin.value(self.state)
 
-    def run(self):
-        if self.blinking and time.ticks_ms() - self.last_change_time >= BLINK_DURATION:
-            self.state = not self.state
-            self.pin.value(self.state)
-            self.last_change_time = time.ticks_ms()
+        asyncio.create_task(self.run())
 
-        if self.pulsing and time.ticks_ms() - self.last_change_time >= PULSE_DURATION:
-            self.state = 0
-            self.pin.value(self.state)
-            self.pulsing = 0
+    async def run(self):
+        while True:
+            await asyncio.sleep_ms(PULSE_DURATION)
+
+            if self.blinking and time.ticks_diff(time.ticks_ms(), self.last_change_time) >= BLINK_DURATION:
+                self.state = not self.state
+                self.pin.value(self.state)
+                self.last_change_time = time.ticks_ms()
+
+            if self.pulsing and time.ticks_diff(time.ticks_ms(), self.last_change_time) >= PULSE_DURATION:
+                self.state = 0
+                self.pin.value(self.state)
+                self.pulsing = 0
 
     def on(self):
         self.blinking = False

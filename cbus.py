@@ -197,9 +197,9 @@ class cbus:
                 self.logger.log(f"canid is now {self.config.canid}")
 
             if self.has_ui:
-                self.led_grn.run()
-                self.led_ylw.run()
-                self.switch.run()
+                # self.led_grn.run()
+                # self.led_ylw.run()
+                # self.switch.run()
 
                 if self.switch.is_pressed() and self.switch.current_state_duration() >= 6000:
                     self.indicate_mode(MODE_CHANGING)
@@ -608,8 +608,8 @@ class cbus:
                 self.led_grn.off()
                 self.led_ylw.blink()
 
-            self.led_grn.run()
-            self.led_ylw.run()
+            # self.led_grn.run()
+            # self.led_ylw.run()
 
     def set_long_message_handler(self, handler) -> None:
         self.long_message_handler = handler

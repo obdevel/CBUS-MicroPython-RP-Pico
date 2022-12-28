@@ -19,6 +19,7 @@ HAPPENING_MIDPOINT = const(1)
 HAPPENING_COMPLETE = const(2)
 
 PWM_FREQ = const(50)
+RUN_FREQ = const(100)
 
 a = (((0, 22, 30), (1, 22, 30)), ((0, 22, 31), (1, 22, 31)), ((0, 22, 32), (1, 22, 32)))
 
@@ -41,10 +42,12 @@ class cbusservo:
         self.state = STATE_IDLE
 
         self.pos = self.midpoint
-        self.run_freq = 100
-        self.stride = 1
+        self.run_freq = RUN_FREQ
+        self.stride = 5
         self.midpoint_processed = True
         self.always_move = False
+        self.do_bounce = False
+        self.completion_event = None
 
         self.consumer_events = None
         self.producer_events = None
@@ -56,7 +59,7 @@ class cbusservo:
         self.run_task = asyncio.create_task(self.run())
 
         if initial_state != STATE_IDLE:
-            self.operate(initial_state)
+            asyncio.create_task(self.operate(initial_state))
 
     @property
     def close_limit(self) -> int:
@@ -84,22 +87,27 @@ class cbusservo:
             self.listener_task.cancel()
 
     def position_to(self, pos: int) -> None:
-        dc = map_duty_cycle(pos, 0, 255, 0, 65535)
+        dc = self.map_duty_cycle(pos, 0, 255, 0, 65535)
         self.pwm.duty_u16(dc)
         self.pos = pos
 
-    def operate(self, operation: int) -> None:
+    async def operate(self, operation: int, wait_for_completion: bool = False) -> None:
         self.state = STATE_OPENING if operation == SERVO_OPEN else STATE_CLOSING
         self.send_producer_event(HAPPENING_BEGIN, self.state)
         self.midpoint_processed = False
 
-    def open(self) -> None:
-        if self.pos < self.open_limit or self.always_move:
-            self.operate(SERVO_OPEN)
+        if wait_for_completion:
+            self.logger.log('waiting for completion')
+            await self.wait()
+            self.logger.log('movement complete')
 
-    def close(self) -> None:
+    async def open(self, wait_for_completion: bool = False) -> None:
+        if self.pos < self.open_limit or self.always_move:
+            await self.operate(SERVO_OPEN, wait_for_completion)
+
+    async def close(self, wait_for_completion: bool = False) -> None:
         if self.pos > self.close_limit or self.always_move:
-            self.operate(SERVO_CLOSE)
+            await self.operate(SERVO_CLOSE, wait_for_completion)
 
     def set_consumer_events(self, cbus, events: tuple = None) -> None:
         self.cbus = cbus
@@ -132,7 +140,8 @@ class cbusservo:
 
     def bounce(self):
         # TODO
-        pass
+        if self.do_bounce:
+            pass
 
     async def run(self) -> None:
         while True:
@@ -158,6 +167,9 @@ class cbusservo:
                     self.send_producer_event(HAPPENING_COMPLETE, self.state)
                     self.state = STATE_IDLE
 
+                    if self.completion_event:
+                        self.completion_event.set()
+
     async def listener(self) -> None:
         self.sub = cbuspubsub.subscription('servo:' + self.name + ':listener', self.cbus, self.consumer_events,
                                            canmessage.QUERY_TUPLES)
@@ -165,19 +177,29 @@ class cbusservo:
             while True:
                 msg = await self.sub.wait()
                 if tuple(msg) == self.consumer_events[0]:
-                    self.close()
+                    await self.close()
                 else:
-                    self.open()
+                    await self.open()
         except Exception as e:
             self.logger.log(f'listener task cancelled, exception = {e}')
         finally:
             self.sub.unsubscribe()
 
+    async def wait(self):
+        if not self.completion_event:
+            self.completion_event = asyncio.Event()
 
-def map_duty_cycle(x: int, in_min: int, in_max: int, out_min: int, out_max: int) -> int:
-    try:
-        v = int((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min)
-    except ZeroDivisionError:
+        self.logger.log('waiting...')
+        await self.completion_event.wait()
+        self.completion_event.clear()
+        self.logger.log('...done')
+
+    @staticmethod
+    def map_duty_cycle(x: int, in_min: int, in_max: int, out_min: int, out_max: int) -> int:
         v = 0
-    finally:
-        return v
+        try:
+            v = int((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min)
+        except ZeroDivisionError:
+            v = 0
+        finally:
+            return v
