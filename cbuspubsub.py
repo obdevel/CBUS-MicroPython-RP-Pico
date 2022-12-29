@@ -10,7 +10,7 @@ from primitives import Queue
 
 
 class subscription:
-    def __init__(self, name, cbus, query, query_type):
+    def __init__(self, name: str, cbus, query, query_type: int):
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
@@ -30,7 +30,7 @@ class subscription:
         self.cbus.remove_subscription(self)
 
     def publish(self, msg: canmessage.canmessage) -> None:
-        if msg.matches(self.query, self.query_type):
+        if msg.matches(self.query_type, self.query):
             self.queue.put_nowait(msg)
 
     async def wait(self):

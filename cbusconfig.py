@@ -155,14 +155,14 @@ class cbusconfig:
     def begin(self) -> None:
         data = self.backend.load_events(len(self.events))
 
-        if data is None:
+        if not data:
             self.backend.init_events(self.events)
             data = self.backend.load_events(self.num_events)
 
         self.events = data
         data = self.backend.load_nvs(self.num_nvs + 10)
 
-        if data is None:
+        if not data:
             self.backend.init_nvs(self.nvs)
             data = self.backend.load_nvs(self.num_nvs + 10)
 
@@ -218,13 +218,8 @@ class cbusconfig:
         return -1
 
     def read_event(self, index: int) -> bytearray:
-        data = bytearray(self.event_size)
         offset = self.event_size * index
-
-        for i in range(self.event_size):
-            data[i] = self.events[offset + i]
-
-        return data
+        return self.events[offset: offset + self.event_size]
 
     def write_event(self, nn: int, en: int, evnum: int, evval: int) -> bool:
         idx = self.find_existing_event(nn, en)
@@ -308,7 +303,9 @@ class cbusconfig:
 
     def print_nvs(self) -> None:
         for i in range(self.num_nvs + 10):
-            print(f'{i:2} - {self.nvs[i]}')
+            if i == 10:
+                print('---------------')
+            print(f'{i:3} = {self.nvs[i]:03} 0x{self.nvs[i]:02x}')
 
     @staticmethod
     def reboot() -> None:

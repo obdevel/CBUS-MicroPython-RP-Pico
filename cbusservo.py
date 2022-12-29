@@ -21,8 +21,6 @@ HAPPENING_COMPLETE = const(2)
 PWM_FREQ = const(50)
 RUN_FREQ = const(100)
 
-a = (((0, 22, 30), (1, 22, 30)), ((0, 22, 31), (1, 22, 31)), ((0, 22, 32), (1, 22, 32)))
-
 
 class cbusservo:
     def __init__(self, name: str, pin: int, close_limit: int = 0, open_limit: int = 0,
@@ -142,6 +140,9 @@ class cbusservo:
 
         if self.consumer_events is not None:
             self.listener_task = asyncio.create_task(self.listener())
+        else:
+            if self.listener_task:
+                self.listener_task.cancel()
 
     def set_producer_events(self, cbus, events: tuple = None) -> None:
         self.cbus = cbus

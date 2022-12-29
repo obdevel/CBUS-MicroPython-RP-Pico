@@ -23,7 +23,8 @@ QUERY_EXT = const(6)
 QUERY_EVENTS = const(7)
 QUERY_ALL_EVENTS = const(8)
 QUERY_LONG_MESSAGES = const(9)
-QUERY_ALL = const(10)
+QUERY_UDF = const(10)
+QUERY_ALL = const(11)
 
 event_opcodes = (
     cbusdefs.OPC_ACON,
@@ -148,7 +149,7 @@ class canmessage:
 
         print()
 
-    def matches(self, query, query_type: int = QUERY_ALL) -> bool:
+    def matches(self, query_type: int = QUERY_ALL, query=None) -> bool:
         # self.logger.log(f'matches: query = {query}, type = {query_type}')
 
         if query_type == QUERY_TUPLES:
@@ -171,6 +172,8 @@ class canmessage:
             return self.data[0] in event_opcodes
         elif query_type == QUERY_LONG_MESSAGES:
             return self.data[0] == cbusdefs.OPC_DTXC
+        elif query_type == QUERY_UDF:
+            return query(self.data[0])
         elif query_type == QUERY_ALL:
             return True
         else:

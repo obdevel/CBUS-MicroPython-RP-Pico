@@ -84,7 +84,7 @@ class cbus:
         self.received_messages = 0
         self.sent_messages = 0
 
-        self.func_tab = {
+        self.func_dict = {
             cbusdefs.OPC_ACON: self.handle_accessory_event,
             cbusdefs.OPC_ACOF: self.handle_accessory_event,
             cbusdefs.OPC_ASON: self.handle_accessory_event,
@@ -120,6 +120,7 @@ class cbus:
             cbusdefs.OPC_EVLRN: self.handle_evlrn,
             cbusdefs.OPC_EVULN: self.handle_evuln,
             cbusdefs.OPC_DTXC: self.handle_dtxc,
+            cbusdefs.OPC_RSTAT: self.handle_rstat,
         }
 
     def begin(self, freq=20, max_msgs=1) -> None:
@@ -244,10 +245,9 @@ class cbus:
                     self.logger.log("can id clash")
                     self.enumeration_required = True
 
-                if self.set_received_message_handler is not None:
-                    if self.opcodes is not None and msg.data[0] in self.opcodes:
+                if self.received_message_handler is not None:
+                    if self.opcodes is not None and len(self.opcodes) > 0 and msg.data[0] in self.opcodes:
                         self.received_message_handler(msg)
-                        break
                     else:
                         self.received_message_handler(msg)
 
@@ -256,7 +256,7 @@ class cbus:
 
                 if msg.dlc > 0:
                     try:
-                        self.func_tab.get(msg.data[0])(msg)
+                        self.func_dict.get(msg.data[0])(msg)
                     except TypeError:
                         self.logger.log(f"cbus: unhandled opcode = {msg.data[0]:#x}")
 
@@ -317,11 +317,7 @@ class cbus:
 
         if self.in_transition:
             self.config.set_node_number(msg.get_node_number())
-            omsg = canmessage.canmessage(self.config.canid, 3)
-            omsg.data[0] = cbusdefs.OPC_NNACK
-            omsg.data[1] = int(self.config.node_number >> 8)
-            omsg.data[2] = self.config.node_number & 0xff
-            self.send_cbus_message(omsg)
+            self.send_nn_ack()
 
             self.in_transition = False
             self.config.set_mode(MODE_FLIM)
@@ -336,6 +332,7 @@ class cbus:
                 self.send_CMDERR(7)
             else:
                 self.config.set_canid(msg.data[3])
+                self.send_nn_ack()
                 # self.logger.log(f'cbus: set canid = {self.config.canid}')
 
     def handle_enum(self, msg) -> None:
@@ -514,6 +511,16 @@ class cbus:
         if self.long_message_handler is not None:
             self.long_message_handler.handle_long_message_fragment(msg)
 
+    def handle_rstat(self, msg) -> None:
+        self.logger.log('cbus: no action for OPC_RSTAT')
+
+    def send_nn_ack(self) -> None:
+        omsg = canmessage.canmessage(self.config.canid, 3)
+        omsg.data[0] = cbusdefs.OPC_NNACK
+        omsg.data[1] = int(self.config.node_number >> 8)
+        omsg.data[2] = self.config.node_number & 0xff
+        self.send_cbus_message(omsg)
+
     def send_WRACK(self) -> None:
         # self.logger.log("send_WRACK")
         omsg = canmessage.canmessage(self.config.canid, 3)
@@ -545,7 +552,6 @@ class cbus:
 
         if not True in self.enum_responses:
             self.logger.log("no enumeration responses received")
-            return
 
         for i, r in enumerate(self.enum_responses, start=1):
             if not r:
@@ -555,11 +561,7 @@ class cbus:
         if new_id > 0:
             self.logger.log(f"took unused can id = {new_id}")
             self.config.set_canid(new_id)
-            omsg = canmessage.canmessage(self.config.canid, 3)
-            omsg.data[0] = cbusdefs.OPC_NNACK
-            omsg.data[1] = int(self.config.node_number >> 8)
-            omsg.data[2] = self.config.node_number & 0xff
-            self.send_cbus_message(omsg)
+            self.send_nn_ack()
         else:
             self.send_CMDERR(7)
 

@@ -235,7 +235,7 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def sensor_test_coro(self, pevent: asyncio.Event) -> None:
         event = asyncio.Event()
-        self.sn1 = cbusobjects.binarysensor('sensor1', mod.cbus, ((0, 22, 23), (1, 22, 23)), (0, 22, 23), event)
+        self.sn1 = cbusobjects.binary_sensor('sensor1', mod.cbus, ((0, 22, 23), (1, 22, 23)), (0, 22, 23), event)
         self.logger.log(
             f'sensor_test_coro: start, {self.sn1.name} state = {cbusobjects.sensor_states.get(self.sn1.state)}')
 
