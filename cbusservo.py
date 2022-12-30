@@ -202,8 +202,8 @@ class cbusservo:
                         self.completion_event.set()
 
     async def listener(self) -> None:
-        self.sub = cbuspubsub.subscription('servo:' + self.name + ':listener', self.cbus, self.consumer_events,
-                                           canmessage.QUERY_TUPLES)
+        self.sub = cbuspubsub.subscription('servo:' + self.name + ':listener', self.cbus, canmessage.QUERY_TUPLES,
+                                           self.consumer_events)
         try:
             while True:
                 msg = await self.sub.wait()

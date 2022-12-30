@@ -10,7 +10,7 @@ from primitives import Queue
 
 
 class subscription:
-    def __init__(self, name: str, cbus, query, query_type: int):
+    def __init__(self, name: str, cbus, query_type: int, query):
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus

@@ -135,12 +135,12 @@ class binary_sensor(sensor):
         # self.logger.log(f'binary_sensor: name = {name}, sensor events = {self.sensor_events}')
         self.sync_state()
         self.task = asyncio.create_task(self.run())
-        self.sub = cbuspubsub.subscription(name + ':sub', self.cbus, self.sensor_events, canmessage.QUERY_TUPLES)
+        self.sub = cbuspubsub.subscription(name + ':sub', self.cbus, canmessage.QUERY_TUPLES, self.sensor_events)
 
     def sync_state(self):
         if self.query_message and len(self.query_message) == 2:
-            self.sub = cbuspubsub.subscription(self.name + ':sub', self.cbus, self.query_message[1],
-                                               canmessage.QUERY_ALL)
+            self.sub = cbuspubsub.subscription(self.name + ':sub', self.cbus, canmessage.QUERY_ALL,
+                                               self.query_message[1])
             msg = canmessage.event_from_tuple(self.cbus, self.query_message[0])
             msg.send()
 

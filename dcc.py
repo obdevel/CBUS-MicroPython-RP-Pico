@@ -49,7 +49,7 @@ class merg_cab:
     def acquire(self, loco) -> bool:
         self.logger.log("merg_cab: requesting session ...")
         self.query = (cbusdefs.OPC_PLOC, cbusdefs.OPC_ERR)
-        self.sub = cbuspubsub.subscription('cab:sub', self.cbus, self.query, canmessage.QUERY_OPCODES)
+        self.sub = cbuspubsub.subscription('cab:sub', self.cbus, canmessage.QUERY_OPCODES, self.query)
         self.msg = canmessage.canmessage()
         ok = False
 

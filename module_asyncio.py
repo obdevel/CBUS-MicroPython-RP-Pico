@@ -207,27 +207,23 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def history_test_coro(self, pevent: asyncio.Event) -> None:
         self.logger.log('history_test_coro: start')
-        evt = asyncio.Event()
-        self.history2 = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=10000, match_events_only=True,
-                                                event=evt)
-
+        events = ((0, 22, 23), (1, 22, 23))
+        hist = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=5_000, query_type=canmessage.QUERY_TUPLES,
+                                       query=events)
         while True:
-            await evt.wait()
-            evt.clear()
-            # self.logger.log(f'history_test_coro: running query...')
-            if self.history2.sequence_received(((0, 22, 23), (1, 22, 23)), order=cbushistory.ORDER_GIVEN, within=3000,
-                                               window=2000, which=cbushistory.WHICH_LATEST):
-                self.logger.log('history_test_coro: sequence found in history')
+            await hist.wait()
+            if hist.sequence_received(events, order=cbushistory.ORDER_GIVEN, within=3_000, window=2_000,
+                                      which=cbushistory.WHICH_LATEST):
+                diff = hist.time_diff(events)
+                self.logger.log(f'history_test_coro: sequence found, time diff = {diff}')
                 pevent.set()
             else:
-                # self.logger.log('history_test_coro: sequence not found in history')
                 pass
 
     async def pubsub_test_coro(self, pevent: asyncio.Event) -> None:
         self.logger.log('pubsub_test_coro: start')
-        opcodes = canmessage.event_opcodes
-        sub = cbuspubsub.subscription('test', self.cbus, opcodes, canmessage.QUERY_OPCODES)
-
+        sub = cbuspubsub.subscription('pubsub_test', self.cbus, query_type=canmessage.QUERY_OPCODES,
+                                      query=canmessage.event_opcodes)
         while True:
             msg = await sub.wait()
             self.logger.log(f'pubsub_test_coro: got subscribed event')
@@ -322,8 +318,13 @@ def _handle_exception(self, loop, context):
 #         #loop.stop()
 #         sys.exit()  # Drastic - loop.stop() does not work when used this way
 
+wc = None
+fc = None
+
+
 def ttest():
     import cbusclocks
+    global wc, fc
     wc = cbusclocks.cbusclock(mod.cbus, cbusclocks.WALLCLOCK, 0, mod.is_picow, ntp_server)
     fc = cbusclocks.cbusclock(mod.cbus, cbusclocks.FASTCLOCK, 0, False)
     fc.set_multiplier(4)

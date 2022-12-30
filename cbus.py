@@ -609,6 +609,7 @@ class cbus:
         self.long_message_handler = handler
 
     def add_history(self, history) -> None:
+        self.logger.log(f'cbus: add history, query type = {history.query_type}, query = {history.query}')
         self.histories.append(history)
 
     def set_gcserver(self, server: gcserver.gcserver) -> None:

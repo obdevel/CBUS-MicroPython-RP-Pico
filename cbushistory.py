@@ -35,14 +35,16 @@ class historyitem:
 class cbushistory:
     """CBUS message history"""
 
-    def __init__(self, bus, max_size=-1, time_to_live=10000, match_events_only=True, event=None):
+    def __init__(self, bus, max_size: int = -1, time_to_live: int = 10000, query_type: int = canmessage.QUERY_ALL,
+                 query=None) -> None:
         self.logger = logger.logger()
         self.history = []
         self.max_size = max_size
         self.time_to_live = time_to_live
-        self.match_events_only = match_events_only
+        self.query_type = query_type
+        self.query = query
         self.bus = bus
-        self.event = event
+        self.pevent = asyncio.Event()
         self.last_update = 0
         self.bus.add_history(self)
 
@@ -51,17 +53,20 @@ class cbushistory:
     def set_ttl(self, time_to_live) -> None:
         self.time_to_live = time_to_live
 
-    def add(self, msg) -> None:
-        if msg.dlc == 0 or (self.match_events_only and not msg.data[0] in canmessage.event_opcodes):
-            return
+    def add(self, msg: canmessage.canmessage) -> None:
+        if not (self.max_size == -1 or len(self.history) < self.max_size):
+            del self.history[0]
 
-        if self.max_size == -1 or len(self.history) < self.max_size:
+        if msg.matches(self.query_type, self.query):
             self.history.append(historyitem(msg))
             self.last_update = time.ticks_ms()
-            if isinstance(self.event, asyncio.Event):
-                self.event.set()
+            self.pevent.set()
 
-    async def reaper(self, freq=500) -> None:
+    async def wait(self):
+        await self.pevent.wait()
+        self.pevent.clear()
+
+    async def reaper(self, freq: int = 500) -> None:
         while True:
             tnow = time.ticks_ms()
             for i in range(len(self.history) - 1, -1, -1):
@@ -85,7 +90,7 @@ class cbushistory:
     def last_update_time(self) -> int:
         return self.last_update
 
-    def event_received(self, event: tuple, within=TIME_ANY) -> bool:
+    def event_received(self, event: tuple, within: int = TIME_ANY) -> bool:
         for h in self.history:
             if h.msg.get_node_number == event[1] and h.msg.get_event_number() == event[2]:
                 if event[0] == canmessage.POLARITY_EITHER or (
@@ -95,7 +100,7 @@ class cbushistory:
                         return True
         return False
 
-    def count_of_event(self, event: tuple, within=TIME_ANY) -> int:
+    def count_of_event(self, event: tuple, within: int = TIME_ANY) -> int:
         count = 0
         for h in self.history:
             if h.msg.get_node_number() == event[1] and h.msg.get_event_number() == event[2]:
@@ -106,7 +111,7 @@ class cbushistory:
                         count += 1
         return count
 
-    def time_received(self, event: tuple, which=WHICH_ANY) -> int:
+    def time_received(self, event: tuple, which: int = WHICH_ANY) -> int:
         times = []
         for h in self.history:
             if h.msg.get_node_number() == event[1] and h.msg.get_event_number() == event[2]:
@@ -133,7 +138,7 @@ class cbushistory:
     def received_after(self, event1: tuple, event2: tuple) -> bool:
         return self.time_received(event1) > self.time_received(event2)
 
-    def received_in_order(self, event1: tuple, event2: tuple, order=ORDER_BEFORE) -> bool:
+    def received_in_order(self, event1: tuple, event2: tuple, order: int = ORDER_BEFORE) -> bool:
         if order == ORDER_BEFORE:
             return self.received_before(event1, event2)
         else:
@@ -151,7 +156,7 @@ class cbushistory:
 
         return state
 
-    def time_of_last_message(self, polarity=canmessage.POLARITY_EITHER, match_events_only=True) -> int:
+    def time_of_last_message(self, polarity: int = canmessage.POLARITY_EITHER, match_events_only: bool = True) -> int:
         latest_time = 0
 
         for h in self.history:
@@ -170,10 +175,11 @@ class cbushistory:
 
         return latest_time
 
-    def time_diff(self, events: tuple, within=TIME_ANY, timespan=WINDOW_ANY, which=WHICH_ANY):
+    def time_diff(self, events: tuple, within: int = TIME_ANY, timespan: int = WINDOW_ANY,
+                  which: int = WHICH_ANY) -> int | None:
         atimes = []
 
-        if len(events) != 2:
+        if len(events) < 2:
             return None
 
         for event in events:
@@ -185,13 +191,13 @@ class cbushistory:
                 if within == TIME_ANY or (etime > time.ticks_ms() - within):
                     atimes.append(etime)
 
-        if timespan == WINDOW_ANY or abs(atimes[1] - atimes[0]) <= timespan:
-            return atimes[1] - atimes[0]
+        if timespan == WINDOW_ANY or abs(atimes[-1] - atimes[0]) <= timespan:
+            return atimes[-1] - atimes[0]
         else:
             return None
 
-    def sequence_received(self, events: tuple, order=ORDER_ANY, within=TIME_ANY, window=TIME_ANY,
-                          which=WHICH_ANY) -> bool:
+    def sequence_received(self, events: tuple, order: int = ORDER_ANY, within: int = TIME_ANY, window: int = TIME_ANY,
+                          which: int = WHICH_ANY) -> bool:
         times = []
 
         if self.count() < 1 or len(events) < 1:

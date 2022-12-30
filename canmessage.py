@@ -150,8 +150,6 @@ class canmessage:
         print()
 
     def matches(self, query_type: int = QUERY_ALL, query=None) -> bool:
-        # self.logger.log(f'matches: query = {query}, type = {query_type}')
-
         if query_type == QUERY_TUPLES:
             return tuple(self) in query
         elif query_type == QUERY_SHORTCODES:

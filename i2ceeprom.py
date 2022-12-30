@@ -4,7 +4,9 @@
 # SDA = pin 16, SCL = pin 17
 
 import time
+
 from machine import Pin, I2C
+
 import logger
 
 
@@ -27,8 +29,8 @@ class i2ceeprom:
         self.size = size
 
     def read(self, addr):
-        self._addrbuf[0] = (addr >> 8) & 0xFF
-        self._addrbuf[1] = addr & 0xFF
+        self._addrbuf[0] = (addr >> 8) & 0xff
+        self._addrbuf[1] = addr & 0xff
 
         self.bus.writeto(self.i2caddr, self._addrbuf)
         data = self.bus.readfrom(self.i2caddr, 1)
@@ -36,13 +38,13 @@ class i2ceeprom:
 
     def write(self, addr, data):
         t = bytearray(3)
-        t[0] = (addr >> 8) & 0xFF
-        t[1] = addr & 0xFF
-        t[2] = data & 0xFF
+        t[0] = (addr >> 8) & 0xff
+        t[1] = addr & 0xff
+        t[2] = data & 0xff
 
         self.bus.writeto(self.i2caddr, t)
         time.sleep_ms(5)
 
     def erase(self):
         for x in range(0, self.size - 1):
-            self.write(x, 255)
+            self.write(x, 0xff)
