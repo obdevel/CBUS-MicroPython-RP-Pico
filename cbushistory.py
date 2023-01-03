@@ -46,6 +46,7 @@ class cbushistory:
         self.bus = bus
         self.pevent = asyncio.Event()
         self.last_update = 0
+        self.last_item_received = None
         self.bus.add_history(self)
 
         asyncio.create_task(self.reaper())
@@ -58,7 +59,9 @@ class cbushistory:
             del self.history[0]
 
         if msg.matches(self.query_type, self.query):
-            self.history.append(historyitem(msg))
+            h = historyitem(msg)
+            self.history.append(h)
+            self.last_item_received = h
             self.last_update = time.ticks_ms()
             self.pevent.set()
 

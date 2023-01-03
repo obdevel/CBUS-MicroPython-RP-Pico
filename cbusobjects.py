@@ -3,7 +3,6 @@ from micropython import const
 
 import canmessage
 import cbus
-import cbushistory
 import cbuspubsub
 import logger
 from primitives import WaitAny
@@ -74,17 +73,12 @@ SIGNAL_COLOUR_GREEN = const(1)
 SIGNAL_COLOUR_YELLOW = const(2)
 SIGNAL_COLOUR_DOUBLE_YELLOW = const(3)
 
-ROUTE_STATE_UNKNOWN = const(0)
-ROUTE_STATE_ACQUIRED = const(1)
-ROUTE_STATE_SET = const(2)
-
 ROTATE_FASTEST = const(0)
 ROTATE_CLOCKWISE = const(1)
 ROTATE_ANTICLOCKWISE = const(2)
 
 MAX_TIMEOUT = const(2_147_483_647)
 OP_TIMEOUT = 2_000
-ROUTE_RELEASE_TIMEOUT = 60_000
 
 
 class timeout:
@@ -362,184 +356,6 @@ class colour_light_signal_group:
 
     def dispose(self):
         pass
-
-
-class routeobject:
-    def __init__(self, robject: base_cbus_layout_object, target_state: int, when: int = WHEN_DONT_CARE):
-        self.robject = robject
-        self.target_state = target_state
-        self.when = when
-
-
-class route:
-    def __init__(self, name, cbus: cbus.cbus, robjects: tuple[routeobject, ...], acquire_event: tuple = None,
-                 set_event: tuple = None, release_event: tuple = None, sequential: bool = False, delay: int = 0):
-        self.logger = logger.logger()
-        self.name = name
-        self.cbus = cbus
-        self.robjects = robjects
-        self.acquire_event = acquire_event
-        self.set_event = set_event
-        self.release_event = release_event
-        self.sequential = sequential
-        self.delay = delay
-        self.state = ROUTE_STATE_UNKNOWN
-        self.release_timeout_task_handle = None
-
-        self.lock = asyncio.Lock()
-        self.locked_objects = []
-
-    def __call__(self):
-        return self.state
-
-    async def acquire(self) -> bool:
-        self.state = ROUTE_STATE_UNKNOWN
-        all_objects_locked = True
-
-        if self.lock.locked():
-            all_objects_locked = False
-        else:
-            await self.lock.acquire()
-
-            for obj in self.robjects:
-                if isinstance(obj.robject.lock, asyncio.Lock):
-                    if obj.robject.lock.locked():
-                        all_objects_locked = False
-                        break
-                    else:
-                        await obj.robject.lock.acquire()
-                        self.locked_objects.append(obj)
-                else:
-                    obj.robject.lock = asyncio.Lock()
-                    await obj.robject.lock.acquire()
-                    self.locked_objects.append(obj)
-
-            if not all_objects_locked:
-                for obj in self.locked_objects:
-                    obj.robject.lock.release()
-                self.lock.release()
-
-        if self.acquire_event:
-            msg = canmessage.event_from_tuple(self.cbus, self.acquire_event)
-            if all_objects_locked:
-                msg.send_on()
-            else:
-                msg.send_off()
-
-        if all_objects_locked:
-            self.state = ROUTE_STATE_ACQUIRED
-            self.release_timeout_task_handle = asyncio.create_task(self.release_timeout_task())
-        else:
-            self.state = ROUTE_STATE_UNKNOWN
-
-        return all_objects_locked
-
-    async def set_route_objects(self, route_objects: list[routeobject]) -> None:
-        if route_objects is None or len(route_objects) < 1:
-            raise RuntimeError('set_route_objects: list is empty')
-
-        for robj in route_objects:
-            self.logger.log(
-                f'set_route_object: object = {robj.robject.name}, state = {robj.target_state}, when = {robj.when}')
-
-            if isinstance(robj.robject, turnout):
-                if robj.target_state == TURNOUT_STATE_CLOSED:
-                    await robj.robject.close()
-                else:
-                    await robj.robject.throw()
-            elif isinstance(robj.robject, semaphore_signal):
-                if robj.target_state == SIGNAL_STATE_CLEAR:
-                    await robj.robject.clear()
-                else:
-                    await robj.robject.set()
-            elif isinstance(robj.robject, colour_light_signal):
-                robj.robject.set_aspect(robj.target_state)
-
-            if self.sequential and robj.robject.has_sensor:
-                await robj.robject.sensor.wait()
-            else:
-                await asyncio.sleep_ms(self.delay)
-
-    async def set(self) -> None:
-        if not self.lock.locked():
-            raise RuntimeError('route not acquired')
-
-        for w in (WHEN_BEFORE, WHEN_DONT_CARE, WHEN_AFTER):
-            rlist = [obj for obj in self.robjects if obj.when == w]
-
-            if len(rlist) > 0:
-                await self.set_route_objects(rlist)
-
-        self.state = ROUTE_STATE_SET
-
-        if self.set_event:
-            msg = canmessage.event_from_tuple(self.cbus, self.set_event)
-            msg.send()
-
-    def release(self) -> None:
-        for obj in self.locked_objects:
-            if obj.robject.lock.locked():
-                obj.robject.lock.release()
-
-        self.locked_objects = []
-        self.lock.release()
-        self.state = ROUTE_STATE_UNKNOWN
-
-        if self.release_event:
-            msg = canmessage.event_from_tuple(self.cbus, self.release_event)
-            msg.send()
-
-    def release_timeout_task(self):
-        await asyncio.sleep_ms(ROUTE_RELEASE_TIMEOUT)
-        if self.state != ROUTE_STATE_UNKNOWN:
-            self.logger.log('route release timeout')
-            self.release()
-
-
-class entry_exit:
-    def __init__(self, name: str, cbus: cbus.cbus, switch_events: tuple, nxroute: route, feedback_events: tuple):
-        self.logger = logger.logger()
-        self.name = name
-        self.cbus = cbus
-        self.switch_events = switch_events
-        self.nxroute = nxroute
-        self.feedback_events = feedback_events
-        self.history = cbushistory.cbushistory(self.cbus, time_to_live=5_000, query_type=canmessage.QUERY_UDF,
-                                               query=self.udf)
-        self.run_task = asyncio.create_task(self.run())
-
-    def udf(self, msg):
-        if tuple(msg) in self.switch_events:
-            return True
-
-    async def run(self):
-        while True:
-            await self.history.wait()
-
-            if self.nxroute.state == ROUTE_STATE_UNKNOWN:
-                if self.history.sequence_received(self.switch_events, order=cbushistory.ORDER_ANY, within=3_000,
-                                                  window=3_000, which=cbushistory.WHICH_ANY):
-                    self.logger.log(f'nxroute:{self.name}: got sequence')
-                    b = await self.nxroute.acquire()
-                    self.logger.log(f'nxroute:{self.name}: acquire returns {b}')
-                    await self.nxroute.set()
-                    self.logger.log(f'nxroute:{self.name}: route set')
-                    if len(self.feedback_events) > 0 and len(self.feedback_events[0] == 3):
-                        msg = canmessage.event_from_tuple(self.cbus, self.feedback_events[0])
-                        msg.send()
-                else:
-                    self.logger.log(f'nxroute:{self.name}: sequence failed')
-                    if len(self.feedback_events) > 1 and len(self.feedback_events[1] == 3):
-                        msg = canmessage.event_from_tuple(self.cbus, self.feedback_events[1])
-                        msg.send()
-            else:
-                if self.history.any_received(self.switch_events):
-                    self.logger.log(f'nxroute:{self.name}: releasing route')
-                    self.nxroute.release()
-                    self.nxroute.release_timeout_task_handle.cancel()
-                    if len(self.feedback_events) > 2 and len(self.feedback_events[2] == 3):
-                        msg = canmessage.event_from_tuple(self.cbus, self.feedback_events[2])
-                        msg.send()
 
 
 class turntable:

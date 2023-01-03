@@ -18,6 +18,7 @@ import cbushistory
 import cbusmodule
 import cbusobjects
 import cbuspubsub
+import cbusroutes
 import logger
 import mcp2515
 from primitives import WaitAny
@@ -423,12 +424,20 @@ s2 = cbusobjects.semaphore_signal('s2',
                                   control_events=((0, 22, 28), (1, 22, 28)),
                                   initial_state=cbusobjects.SIGNAL_STATE_UNKNOWN)
 
-tobj1 = cbusobjects.routeobject(t1, cbusobjects.TURNOUT_STATE_CLOSED)
-sobj1 = cbusobjects.routeobject(s1, cbusobjects.SIGNAL_STATE_SET, cbusobjects.WHEN_BEFORE)
-sobj2 = cbusobjects.routeobject(s2, cbusobjects.SIGNAL_STATE_CLEAR, cbusobjects.WHEN_AFTER)
+tobj1 = cbusroutes.routeobject(t1, cbusobjects.TURNOUT_STATE_CLOSED)
+sobj1 = cbusroutes.routeobject(s1, cbusobjects.SIGNAL_STATE_SET, cbusobjects.WHEN_BEFORE)
+sobj2 = cbusroutes.routeobject(s2, cbusobjects.SIGNAL_STATE_CLEAR, cbusobjects.WHEN_AFTER)
 
-r = cbusobjects.route('r1', mod.cbus, (tobj1, sobj1, sobj2,))
-r2 = cbusobjects.route('r2', mod.cbus, (tobj1, sobj1, sobj2,))
+r = cbusroutes.route('r1', mod.cbus, (tobj1, sobj1, sobj2,))
+r2 = cbusroutes.route('r2', mod.cbus, (tobj1, sobj1, sobj2,))
+
+nx = None
+
+
+def nxtest():
+    global nx
+    nx = cbusroutes.entry_exit('nx', mod.cbus, r, ((0, 22, 50), (0, 22, 51)), ())
+
 
 # *** start the scheduler and run the app class main method
 asyncio.run(mod.run())
