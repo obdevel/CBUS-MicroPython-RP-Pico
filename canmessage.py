@@ -42,7 +42,23 @@ event_opcodes = (
     cbusdefs.OPC_ACON3,
     cbusdefs.OPC_ACOF3,
     cbusdefs.OPC_ASON3,
-    cbusdefs.OPC_ASOF3
+    cbusdefs.OPC_ASOF3,
+    cbusdefs.OPC_ARON,
+    cbusdefs.OPC_AROF,
+    cbusdefs.OPC_ARSON,
+    cbusdefs.OPC_ARSOF,
+    cbusdefs.OPC_ARON1,
+    cbusdefs.OPC_AROF1,
+    cbusdefs.OPC_ARSON1,
+    cbusdefs.OPC_ARSOF1,
+    cbusdefs.OPC_ARON2,
+    cbusdefs.OPC_AROF2,
+    cbusdefs.OPC_ARSON2,
+    cbusdefs.OPC_ARSOF2,
+    cbusdefs.OPC_ARON3,
+    cbusdefs.OPC_AROF3,
+    cbusdefs.OPC_ARSON3,
+    cbusdefs.OPC_ARSOF3
 )
 
 polarity_lookup = {
@@ -150,6 +166,8 @@ class canmessage:
         print()
 
     def matches(self, query_type: int = QUERY_ALL, query=None) -> bool:
+        # self.logger.log(f'matches: query_type = {query_type}, query = {query}')
+
         if query_type == QUERY_TUPLES:
             return tuple(self) in query
         elif query_type == QUERY_SHORTCODES:
@@ -171,7 +189,7 @@ class canmessage:
         elif query_type == QUERY_LONG_MESSAGES:
             return self.data[0] == cbusdefs.OPC_DTXC
         elif query_type == QUERY_UDF:
-            return query(self.data[0])
+            return query(self)
         elif query_type == QUERY_ALL:
             return True
         else:

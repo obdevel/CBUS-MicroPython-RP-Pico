@@ -609,19 +609,19 @@ class cbus:
         self.long_message_handler = handler
 
     def add_history(self, history) -> None:
-        self.logger.log(f'cbus: add history, query type = {history.query_type}, query = {history.query}')
+        # self.logger.log(f'cbus: add history, query type = {history.query_type}, query = {history.query}')
         self.histories.append(history)
 
     def set_gcserver(self, server: gcserver.gcserver) -> None:
         self.gridconnect_server = server
 
     def add_subscription(self, sub: cbuspubsub.subscription) -> None:
-        self.logger.log(
-            f"cbus: add subscription, name = {sub.name}, id = {sub.id}, query type = {sub.query_type}, query = {sub.query}")
+        # self.logger.log( f"cbus: add subscription, name = {sub.name}, id = {sub.id}, query type = {sub.query_type},
+        # query = {sub.query}")
         self.subscriptions.append(sub)
 
     def remove_subscription(self, sub: cbuspubsub.subscription) -> None:
-        self.logger.log(f"cbus: remove subscription, id = {sub.id}")
+        # self.logger.log(f"cbus: remove subscription, id = {sub.id}")
         for i in range(len(self.subscriptions)):
             if self.subscriptions[i].id == sub.id:
                 del self.subscriptions[i]

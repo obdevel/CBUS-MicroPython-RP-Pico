@@ -215,7 +215,7 @@ class mymodule(cbusmodule.cbusmodule):
             if hist.sequence_received(events, order=cbushistory.ORDER_GIVEN, within=3_000, window=2_000,
                                       which=cbushistory.WHICH_LATEST):
                 diff = hist.time_diff(events)
-                self.logger.log(f'history_test_coro: sequence found, time diff = {diff}')
+                self.logger.log(f'history_test_coro: sequence {events} found, time diff = {diff}')
                 pevent.set()
             else:
                 pass
@@ -226,12 +226,12 @@ class mymodule(cbusmodule.cbusmodule):
                                       query=canmessage.event_opcodes)
         while True:
             msg = await sub.wait()
-            self.logger.log(f'pubsub_test_coro: got subscribed event')
+            self.logger.log(f'pubsub_test_coro: got subscribed event = {tuple(msg)}')
             pevent.set()
 
     async def sensor_test_coro(self, pevent: asyncio.Event) -> None:
         event = asyncio.Event()
-        self.sn1 = cbusobjects.binary_sensor('sensor1', mod.cbus, ((0, 22, 23), (1, 22, 23)), (0, 22, 23), event)
+        self.sn1 = cbusobjects.binary_sensor('sensor1', mod.cbus, ((0, 22, 32), (1, 22, 23)), (0, 22, 32))
         self.logger.log(
             f'sensor_test_coro: start, {self.sn1.name} state = {cbusobjects.sensor_states.get(self.sn1.state)}')
 
@@ -332,15 +332,17 @@ def ttest():
 
 
 sv = None
+sg = None
 
 
 def servo_test():
     import cbusservo
-    global sv
+    global sv, sg
     sv = cbusservo.cbusservo('sv', 10, 0, 255)
     sv.set_consumer_events(mod.cbus, ((0, 22, 28), (1, 22, 28)))
     sv.set_producer_events(mod.cbus,
                            (((0, 22, 30), (1, 22, 30)), ((0, 22, 31), (1, 22, 31)), ((0, 22, 32), (1, 22, 32))))
+    sg = cbusservo.cbusservogroup('sg', (sv, sv), (0, 1))
 
 
 # some test messages
@@ -405,29 +407,28 @@ evt3 = canmessage.event_from_message(mod.cbus, msg3)
 evt4 = canmessage.event_from_tuple(mod.cbus, tuple(msg3))
 evt5 = canmessage.event_from_table(mod.cbus, 0)
 
-t = cbusobjects.turnout('t1',
-                        mod.cbus,
-                        control_events=((0, 22, 25), (1, 22, 25)),
-                        query_message=None,
-                        initial_state=cbusobjects.TURNOUT_STATE_UNKNOWN,
-                        has_sensor=True,
-                        sensor_events=((0, 22, 26), (1, 22, 26)),
-                        init=False)
+t1 = cbusobjects.turnout('t1',
+                         mod.cbus,
+                         control_events=((0, 22, 25), (1, 22, 25)),
+                         initial_state=cbusobjects.TURNOUT_STATE_UNKNOWN,
+                         sensor_events=((0, 22, 26), (1, 22, 26)))
 
-s = cbusobjects.semaphore_signal('s1',
-                                 mod.cbus,
-                                 control_events=((0, 22, 27), (1, 22, 27)),
-                                 query_message=None,
-                                 initial_state=cbusobjects.SIGNAL_STATE_UNKNOWN,
-                                 has_sensor=False,
-                                 sensor_events=None,
-                                 init=False)
+s1 = cbusobjects.semaphore_signal('s1',
+                                  mod.cbus,
+                                  control_events=((0, 22, 27), (1, 22, 27)),
+                                  initial_state=cbusobjects.SIGNAL_STATE_UNKNOWN)
 
-tobj = cbusobjects.routeobject(t, cbusobjects.STATE_ON, cbusobjects.WHEN_DONT_CARE)
-sobj = cbusobjects.routeobject(s, cbusobjects.STATE_OFF, cbusobjects.WHEN_AFTER)
+s2 = cbusobjects.semaphore_signal('s2',
+                                  mod.cbus,
+                                  control_events=((0, 22, 28), (1, 22, 28)),
+                                  initial_state=cbusobjects.SIGNAL_STATE_UNKNOWN)
 
-r = cbusobjects.route('r1', mod.cbus, (tobj, sobj,))
-r2 = cbusobjects.route('r2', mod.cbus, (tobj, sobj,))
+tobj1 = cbusobjects.routeobject(t1, cbusobjects.TURNOUT_STATE_CLOSED)
+sobj1 = cbusobjects.routeobject(s1, cbusobjects.SIGNAL_STATE_SET, cbusobjects.WHEN_BEFORE)
+sobj2 = cbusobjects.routeobject(s2, cbusobjects.SIGNAL_STATE_CLEAR, cbusobjects.WHEN_AFTER)
+
+r = cbusobjects.route('r1', mod.cbus, (tobj1, sobj1, sobj2,))
+r2 = cbusobjects.route('r2', mod.cbus, (tobj1, sobj1, sobj2,))
 
 # *** start the scheduler and run the app class main method
 asyncio.run(mod.run())

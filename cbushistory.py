@@ -107,9 +107,12 @@ class cbushistory:
                 if event[0] == canmessage.POLARITY_EITHER or (
                         event[0] == canmessage.POLARITY_ON and not (h.msg.data[0] & 1)) or (
                         event[0] == canmessage.POLARITY_OFF and (h.msg.data[0] & 1)):
-                    if h.arrival_time > (time.ticks_ms() - within) or within == TIME_ANY:
+                    if within == TIME_ANY or h.arrival_time > (time.ticks_ms() - within):
                         count += 1
         return count
+
+    def event_exists(self, event: tuple, within: int = TIME_ANY) -> bool:
+        return self.count_of_event(event, within) > 0
 
     def time_received(self, event: tuple, which: int = WHICH_ANY) -> int:
         times = []
@@ -230,3 +233,11 @@ class cbushistory:
                 return False
 
         return True
+
+    def any_received(self, events: tuple, within: int = TIME_ANY) -> bool:
+        ok = False
+        for ev in events:
+            if self.event_exists(ev, within):
+                ok = True
+                break
+        return ok
