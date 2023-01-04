@@ -18,7 +18,7 @@ class logger:
         return cls.instance
 
     @staticmethod
-    def log(msg=''):
+    def log(msg: str = '') -> None:
         tstr = f'{time.ticks_ms():10} {msg}'
         sys.stdout.write(tstr)
         sys.stdout.write(b'\n')

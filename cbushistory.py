@@ -44,7 +44,7 @@ class cbushistory:
         self.query_type = query_type
         self.query = query
         self.bus = bus
-        self.pevent = asyncio.Event()
+        self.add_evt = asyncio.Event()
         self.last_update = 0
         self.last_item_received = None
         self.bus.add_history(self)
@@ -63,11 +63,11 @@ class cbushistory:
             self.history.append(h)
             self.last_item_received = h
             self.last_update = time.ticks_ms()
-            self.pevent.set()
+            self.add_evt.set()
 
     async def wait(self):
-        await self.pevent.wait()
-        self.pevent.clear()
+        await self.add_evt.wait()
+        self.add_evt.clear()
 
     async def reaper(self, freq: int = 500) -> None:
         while True:
@@ -238,9 +238,7 @@ class cbushistory:
         return True
 
     def any_received(self, events: tuple, within: int = TIME_ANY) -> bool:
-        ok = False
         for ev in events:
             if self.event_exists(ev, within):
-                ok = True
-                break
-        return ok
+                return True
+        return False

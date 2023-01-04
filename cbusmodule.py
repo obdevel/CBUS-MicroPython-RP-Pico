@@ -21,16 +21,13 @@ class cbusmodule:
         pass
 
     def event_handler(self, msg, idx: int) -> None:
-        self.logger.log(f'-- event handler: idx = {idx}')
-        self.logger.log(msg)
+        self.logger.log(f'-- event handler: idx = {idx}: {msg}')
 
     def received_message_handler(self, msg) -> None:
-        self.logger.log('-- received message handler:')
-        self.logger.log(msg)
+        self.logger.log(f'-- received message handler: {msg}')
 
     def sent_message_handler(self, msg) -> None:
-        self.logger.log('-- sent message handler:')
-        self.logger.log(msg)
+        self.logger.log(f'-- sent message handler: {msg}')
 
     def long_message_handler(self, message: bytearray, streamid: int, status: int) -> None:
         self.logger.log('-- user long message handler:')

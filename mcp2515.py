@@ -2,8 +2,8 @@ import collections
 import sys
 import time
 
-from machine import Pin, SPI
 import uasyncio as asyncio
+from machine import Pin, SPI
 from micropython import const
 
 import canio
@@ -358,7 +358,8 @@ tsf = asyncio.ThreadSafeFlag()
 class mcp2515(canio.canio):
     """a canio derived class for use with an MCP2515 CAN controller device"""
 
-    def __init__(self, osc=16_000_000, cs_pin=5, interrupt_pin=1, bus=None, rxq_size=64, txq_size=8):
+    def __init__(self, osc: int = 16_000_000, cs_pin: int = 5, interrupt_pin: int = 1, bus=None, rxq_size: int = 64,
+                 txq_size: int = 8):
         super().__init__()
         self.logger = logger.logger()
         self.poll = False

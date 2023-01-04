@@ -41,7 +41,7 @@ class mymodule(cbusmodule.cbusmodule):
         self.module_params = None
         self.logger = logger.logger()
 
-    def initialise(self, is_picow=False, start_gc_server=False) -> None:
+    def initialise(self, is_picow: bool = False, start_gc_server: bool = False) -> None:
 
         # ***
         # *** bare minimum module init
@@ -323,7 +323,7 @@ wc = None
 fc = None
 
 
-def ttest():
+def ttest() -> None:
     import cbusclocks
     global wc, fc
     wc = cbusclocks.cbusclock(mod.cbus, cbusclocks.WALLCLOCK, 0, mod.is_picow, ntp_server)
@@ -336,7 +336,7 @@ sv = None
 sg = None
 
 
-def servo_test():
+def servo_test() -> None:
     import cbusservo
     global sv, sg
     sv = cbusservo.cbusservo('sv', 10, 0, 255)
@@ -428,13 +428,13 @@ tobj1 = cbusroutes.routeobject(t1, cbusobjects.TURNOUT_STATE_CLOSED)
 sobj1 = cbusroutes.routeobject(s1, cbusobjects.SIGNAL_STATE_SET, cbusobjects.WHEN_BEFORE)
 sobj2 = cbusroutes.routeobject(s2, cbusobjects.SIGNAL_STATE_CLEAR, cbusobjects.WHEN_AFTER)
 
-r = cbusroutes.route('r1', mod.cbus, (tobj1, sobj1, sobj2,))
-r2 = cbusroutes.route('r2', mod.cbus, (tobj1, sobj1, sobj2,))
+r = cbusroutes.route('r1', mod.cbus, (tobj1, sobj1, sobj2,), None, None, False, 0)
+r2 = cbusroutes.route('r2', mod.cbus, (tobj1, sobj1, sobj2,), None, None, False, 0)
 
 nx = None
 
 
-def nxtest():
+def nxtest() -> None:
     global nx
     nx = cbusroutes.entry_exit('nx', mod.cbus, r, ((0, 22, 50), (0, 22, 51)), ())
 

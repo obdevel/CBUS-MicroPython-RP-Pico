@@ -2,7 +2,7 @@
 
 
 class circularQueue:
-    def __init__(self, capacity):
+    def __init__(self, capacity: int):
         self.capacity = capacity
         self.queue = [None] * capacity
         self.tail = -1
@@ -18,7 +18,6 @@ class circularQueue:
 
     def enqueue(self, item):
         if self.size == self.capacity:
-            # print("error: queue is full")
             self.dropped = self.dropped + 1
         else:
             self.tail = (self.tail + 1) % self.capacity
@@ -29,7 +28,6 @@ class circularQueue:
 
     def dequeue(self):
         if self.size == 0:
-            # print("error: queue is empty")
             return None
         else:
             tmp = self.queue[self.head]

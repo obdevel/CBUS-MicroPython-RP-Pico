@@ -2,6 +2,7 @@
 
 from micropython import const
 
+import cbus
 import cbusdefs
 import logger
 
@@ -78,7 +79,7 @@ def shortcode_to_tuple(code) -> tuple:
 
 
 class canmessage:
-    def __init__(self, canid=0, dlc=0, data=bytearray(8), rtr=False, ext=False):
+    def __init__(self, canid: int = 0, dlc: int = 0, data=bytearray(8), rtr: bool = False, ext: bool = False):
         self.logger = logger.logger()
         self.canid = canid
         self.make_header()
@@ -197,7 +198,7 @@ class canmessage:
 
 
 class cbusevent(canmessage):
-    def __init__(self, cbus, polarity=POLARITY_OFF, nn=0, en=0, send_now=False):
+    def __init__(self, cbus: cbus.cbus, polarity: int = POLARITY_OFF, nn: int = 0, en: int = 0, send_now: bool = False):
         super().__init__(dlc=5)
         self.cbus = cbus
         self.nn = nn
@@ -208,7 +209,7 @@ class cbusevent(canmessage):
         if send_now:
             self.send()
 
-    def sync_data(self, opcode) -> None:
+    def sync_data(self, opcode: int) -> None:
         self.data = bytearray([opcode, self.nn >> 8, self.nn & 0xff, self.en >> 8, self.en & 0xff])
 
     def send(self) -> None:
@@ -254,7 +255,7 @@ def message_from_tuple(t: tuple) -> canmessage:
     return msg
 
 
-def event_from_tuple(cbus, t: tuple) -> cbusevent:
+def event_from_tuple(cbus: cbus.cbus, t: tuple) -> cbusevent:
     msg = message_from_tuple(t)
     evt = event_from_message(cbus, msg)
     evt.canid = cbus.config.canid
@@ -266,7 +267,7 @@ def event_from_tuple(cbus, t: tuple) -> cbusevent:
     return evt
 
 
-def event_from_message(cbus, msg: canmessage) -> cbusevent:
+def event_from_message(cbus: cbus.cbus, msg: canmessage) -> cbusevent:
     evt = cbusevent(cbus)
     evt.canid = cbus.config.canid if msg.canid == 0 else msg.canid
     evt.dlc = 5
@@ -278,7 +279,7 @@ def event_from_message(cbus, msg: canmessage) -> cbusevent:
     return evt
 
 
-def event_from_table(cbus, idx) -> canmessage:
+def event_from_table(cbus: cbus.cbus, idx: int) -> canmessage:
     evt = cbusevent(cbus)
     evt.canid = cbus.config.canid
     evdata = cbus.config.read_event(idx)

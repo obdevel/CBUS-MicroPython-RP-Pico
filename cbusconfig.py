@@ -203,6 +203,19 @@ class cbusconfig:
                 return i
         return -1
 
+    # mod.cbus.config.find_event_by_evs(((1, 3), (2, 6), (3, 9), (4, 12),))
+
+    def find_event_by_evs(self, query: tuple[tuple[int, int], ...]) -> int:
+        for i in range(self.num_events):
+            found = True
+            for j in range(len(query)):
+                if self.read_event_ev(i, query[j][0]) != query[j][1]:
+                    found = False
+                    break
+            if found:
+                return i
+        return -1
+
     def find_event_space(self) -> int:
         for i in range(self.num_events):
             offset = i * self.event_size

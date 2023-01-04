@@ -24,7 +24,7 @@ class cbusled:
 
         asyncio.create_task(self.run())
 
-    async def run(self):
+    async def run(self) -> None:
         while True:
             await asyncio.sleep_ms(PULSE_DURATION)
 
@@ -38,28 +38,28 @@ class cbusled:
                 self.pin.value(self.state)
                 self.pulsing = 0
 
-    def on(self):
+    def on(self) -> None:
         self.blinking = False
         self.pulsing = False
         self.state = 1
         self.pin.value(self.state)
         pass
 
-    def off(self):
+    def off(self) -> None:
         self.blinking = False
         self.pulsing = False
         self.state = 0
         self.pin.value(self.state)
         pass
 
-    def blink(self):
+    def blink(self) -> None:
         if not self.blinking:
             self.blinking = True
             self.pulsing = False
             self.last_change_time = time.ticks_ms()
             self.state = 0
 
-    def pulse(self):
+    def pulse(self) -> None:
         if not self.pulsing:
             self.pulsing = True
             self.blinking = False

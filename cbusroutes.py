@@ -23,20 +23,19 @@ class routeobject:
 
 
 class route:
-    def __init__(self, name, cbus: cbus.cbus, robjects: tuple[routeobject, ...], acquire_event: tuple = None,
-                 set_event: tuple = None, release_event: tuple = None, occupancy_events: tuple = None,
-                 sequential: bool = False, delay: int = 0):
+    def __init__(self, name, cbus: cbus.cbus, robjects: tuple[routeobject, ...], occupancy_events: tuple = None,
+                 feedback_events: tuple = None, sequential: bool = False, delay: int = 0):
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
         self.robjects = robjects
-        self.acquire_event = acquire_event
-        self.set_event = set_event
-        self.release_event = release_event
         self.sequential = sequential
         self.delay = delay
         self.state = ROUTE_STATE_UNSET
         self.release_timeout_task_handle = None
+
+        # acquire, set, release
+        self.feedback_events = feedback_events
 
         self.occupancy_events = occupancy_events
         self.occupied = False
@@ -50,7 +49,7 @@ class route:
                                                                  query_type=canmessage.QUERY_UDF,
                                                                  query=self.udf)
                 self.occupied_evt = asyncio.Event()
-                self.run_task = asyncio.create_task(self.occupancy_run())
+                self.nx_run_task = asyncio.create_task(self.occupancy_task())
 
         self.lock = asyncio.Lock()
         self.locked_objects = []
@@ -65,7 +64,7 @@ class route:
                 return True
         return False
 
-    async def occupancy_run(self):
+    async def occupancy_task(self):
         while True:
             await self.occupancy_history.wait()
             self.logger.log(f'route:{self.name}: got occupancy event')
@@ -115,12 +114,10 @@ class route:
                     obj.robject.lock.release()
                 self.lock.release()
 
-        if self.acquire_event:
-            msg = canmessage.event_from_tuple(self.cbus, self.acquire_event)
-            if all_objects_locked:
-                msg.send_on()
-            else:
-                msg.send_off()
+        if self.feedback_events and len(self.feedback_events) > 0:
+            msg = canmessage.event_from_tuple(self.cbus, self.feedback_events[0])
+            msg.polarity = all_objects_locked
+            msg.send()
 
         if all_objects_locked:
             self.state = ROUTE_STATE_ACQUIRED
@@ -131,9 +128,6 @@ class route:
         return all_objects_locked
 
     async def set_route_objects(self, route_objects: list[routeobject]) -> None:
-        if route_objects is None or len(route_objects) < 1:
-            raise RuntimeError('set_route_objects: list is empty')
-
         for robj in route_objects:
             self.logger.log(
                 f'set_route_object: object = {robj.robject.name}, state = {robj.target_state}, when = {robj.when}')
@@ -168,8 +162,13 @@ class route:
 
         self.state = ROUTE_STATE_SET
 
-        if self.set_event:
-            msg = canmessage.event_from_tuple(self.cbus, self.set_event)
+        state_ok = False
+        for s in self.robjects:
+            state_ok = s.robject.state > ROUTE_STATE_UNSET
+
+        if self.feedback_events and len(self.feedback_events) > 1:
+            msg = canmessage.event_from_tuple(self.cbus, self.feedback_events[1])
+            msg.polarity = state_ok
             msg.send()
 
     def release(self) -> None:
@@ -181,8 +180,8 @@ class route:
         self.lock.release()
         self.state = ROUTE_STATE_UNSET
 
-        if self.release_event:
-            msg = canmessage.event_from_tuple(self.cbus, self.release_event)
+        if self.feedback_events and len(self.feedback_events) > 2:
+            msg = canmessage.event_from_tuple(self.cbus, self.feedback_events[2])
             msg.send()
 
     def release_timeout_task(self):
@@ -193,8 +192,7 @@ class route:
 
 
 class entry_exit:
-    def __init__(self, name: str, cbus: cbus.cbus, nxroute: route, switch_events: tuple,
-                 feedback_events: tuple):
+    def __init__(self, name: str, cbus: cbus.cbus, nxroute: route, switch_events: tuple, feedback_events: tuple):
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
@@ -204,19 +202,19 @@ class entry_exit:
 
         self.switch_history = cbushistory.cbushistory(self.cbus, time_to_live=5_000, query_type=canmessage.QUERY_UDF,
                                                       query=self.udf)
-        self.run_task = asyncio.create_task(self.nx_run())
+        self.nx_run_task_handle = asyncio.create_task(self.nx_run_task())
 
     def udf(self, msg):
         if tuple(msg) in self.switch_events:
             return True
 
-    async def nx_run(self):
+    async def nx_run_task(self):
         while True:
-            await self.switch_history.wait()
+            await self.switch_history.add_evt.wait()
+            self.switch_history.add_evt.clear()
 
             if self.nxroute.state == ROUTE_STATE_UNSET:
-                if self.switch_history.sequence_received(self.switch_events, order=cbushistory.ORDER_ANY, within=3_000,
-                                                         window=3_000, which=cbushistory.WHICH_ANY):
+                if self.switch_history.sequence_received(self.switch_events):
                     self.logger.log(f'nxroute:{self.name}: received sequence')
                     b = await self.nxroute.acquire()
                     self.logger.log(f'nxroute:{self.name}: acquire returns {b}')

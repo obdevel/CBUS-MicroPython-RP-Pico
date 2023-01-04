@@ -86,7 +86,7 @@ class mymodule(cbusmodule.cbusmodule):
     # ***
 
     # *** task to blink the onboard LED
-    async def blink_led_coro(self):
+    async def blink_led_coro(self) -> None:
         self.logger.log('blink_led_coro start')
         try:
             led = Pin('LED', Pin.OUT)
@@ -100,7 +100,7 @@ class mymodule(cbusmodule.cbusmodule):
             await asyncio.sleep_ms(980)
 
     # *** user module application task - like Arduino loop()
-    async def module_main_loop_coro(self):
+    async def module_main_loop_coro(self) -> None:
         self.logger.log('main loop coroutine start')
 
         while True:
@@ -110,7 +110,7 @@ class mymodule(cbusmodule.cbusmodule):
     # *** module main entry point - like Arduino setup()
     # ***
 
-    async def run(self):
+    async def run(self) -> None:
         self.logger.log('run start')
 
         # module has been reset - do one-time config here

@@ -12,7 +12,7 @@ INTERRUPT_GUARD_TIME = const(20)
 
 
 class cbusswitch:
-    def __init__(self, pin_number):
+    def __init__(self, pin_number: int):
         self.logger = logger.logger()
         self.pin = Pin(pin_number, Pin.IN, Pin.PULL_UP)
         self.state = self.pin.value()
@@ -27,9 +27,9 @@ class cbusswitch:
         self.pin.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda x: self.tsf.set())
         asyncio.create_task(self.run())
 
-    def run(self):
+    def run(self) -> None:
         self.last_interrupt_time = time.ticks_ms()
-
+        
         while True:
             await self.tsf.wait()
 
@@ -48,13 +48,13 @@ class cbusswitch:
                     self.state_changed = False
                 self.logger.log('switch: spurious interrupt?')
 
-    def is_pressed(self):
+    def is_pressed(self) -> bool:
         return self.state == 0
 
-    def current_state_duration(self):
+    def current_state_duration(self) -> int:
         return time.ticks_diff(time.ticks_ms(), self.previous_state_change_at)
 
-    def reset(self):
+    def reset(self) -> None:
         self.state = 1
         self.previous_state_change_at = 0
         self.previous_state_duration = 0

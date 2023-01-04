@@ -12,20 +12,20 @@ class canio:
         self.rx_queue = None
         self.tx_queue = None
 
-    def begin(self):
+    def begin(self) -> None:
         pass
 
     def send_message(self, msg) -> int:
         pass
 
-    def get_next_message(self):
+    def get_next_message(self) -> None:
         pass
 
-    def poll_for_messages(self):
+    def poll_for_messages(self) -> None:
         pass
-    
+
     def available(self) -> bool:
         pass
 
-    def reset(self):
+    def reset(self) -> None:
         pass
