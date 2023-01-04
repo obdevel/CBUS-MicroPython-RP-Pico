@@ -92,26 +92,23 @@ class route:
         all_objects_locked = True
 
         if self.lock.locked():
+            self.logger.log(f'route {self.name}: route is locked')
             all_objects_locked = False
         else:
             await self.lock.acquire()
 
             for obj in self.robjects:
-                if isinstance(obj.robject.lock, asyncio.Lock):
-                    if obj.robject.lock.locked():
-                        all_objects_locked = False
-                        break
-                    else:
-                        await obj.robject.lock.acquire()
-                        self.locked_objects.append(obj)
+                if obj.robject.lock.locked():
+                    self.logger.log(f'route {self.name}: object {obj.robject.name} is locked')
+                    all_objects_locked = False
+                    break
                 else:
-                    obj.robject.lock = asyncio.Lock()
-                    await obj.robject.lock.acquire()
+                    await obj.robject.acquire()
                     self.locked_objects.append(obj)
 
             if not all_objects_locked:
                 for obj in self.locked_objects:
-                    obj.robject.lock.release()
+                    obj.robject.release()
                 self.lock.release()
 
         if self.feedback_events and len(self.feedback_events) > 0:
@@ -174,7 +171,7 @@ class route:
     def release(self) -> None:
         for obj in self.locked_objects:
             if obj.robject.lock.locked():
-                obj.robject.lock.release()
+                obj.robject.release()
 
         self.locked_objects = []
         self.lock.release()

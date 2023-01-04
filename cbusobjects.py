@@ -216,7 +216,7 @@ class base_cbus_layout_object:
         self.sensor = None
         self.sensor_name = None
         self.sensor_task_handle = None
-        self.lock = None
+        self.lock = asyncio.Lock()
         self.timeout = None
         self.timeout_evt = None
 
@@ -237,6 +237,17 @@ class base_cbus_layout_object:
 
     def __call__(self):
         return self.state
+
+    async def acquire(self) -> bool:
+        if self.lock.locked():
+            return False
+        else:
+            await self.lock.acquire()
+            return True
+
+    def release(self) -> None:
+        if self.lock.locked():
+            self.lock.release()
 
     async def operate(self, target_state, force: bool = False) -> bool:
         if (target_state != self.state) or force:
