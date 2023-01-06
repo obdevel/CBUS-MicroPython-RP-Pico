@@ -432,11 +432,28 @@ r = cbusroutes.route('r1', mod.cbus, (tobj1, sobj1, sobj2,), None, None, False, 
 r2 = cbusroutes.route('r2', mod.cbus, (tobj1, sobj1, sobj2,), None, None, False, 0)
 
 nx = None
+load_data = []
 
 
 def nxtest() -> None:
     global nx
     nx = cbusroutes.entry_exit('nx', mod.cbus, r, ((0, 22, 50), (0, 22, 51)), ())
+
+
+def load(num: int) -> None:
+    global load_data
+    load_data = []
+    for x in range(num):
+        # load_data.append(cbusobjects.turnout(f't{x}', mod.cbus, ((0, 22, x), (1, 22, x)), -1, ((0, 23, x), (1, 23, x))))
+        load_data.append(cbusobjects.turnout(f't{x}', mod.cbus, ((0, 22, x), (1, 22, x)), -1, ))
+
+
+def op(which):
+    for t in load_data:
+        if which:
+            await t.throw()
+        else:
+            await t.close()
 
 
 # *** start the scheduler and run the app class main method
