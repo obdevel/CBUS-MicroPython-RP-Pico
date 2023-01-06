@@ -1,3 +1,5 @@
+import time
+
 import uasyncio as asyncio
 from micropython import const
 
@@ -11,7 +13,13 @@ ROUTE_STATE_UNSET = const(0)
 ROUTE_STATE_ACQUIRED = const(1)
 ROUTE_STATE_SET = const(2)
 
-ROUTE_RELEASE_TIMEOUT = 60_000
+ROUTE_RELEASE_TIMEOUT = 30_000
+
+MOBJ_TURNOUT = const(0)
+MOBJ_SIGNAL = const(1)
+MOBJ_ROUTE = const(2)
+MOBJ_LOCO = const(3)
+MOBJ_SENSOR = const(4)
 
 
 class routeobject:
@@ -53,6 +61,7 @@ class route:
 
         self.lock = asyncio.Lock()
         self.locked_objects = []
+        self.set_time = None
 
     def __call__(self):
         return self.state
@@ -118,6 +127,7 @@ class route:
 
         if all_objects_locked:
             self.state = ROUTE_STATE_ACQUIRED
+            self.set_time = time.ticks_ms()
             self.release_timeout_task_handle = asyncio.create_task(self.release_timeout_task())
         else:
             self.state = ROUTE_STATE_UNSET
@@ -181,8 +191,17 @@ class route:
             msg = canmessage.event_from_tuple(self.cbus, self.feedback_events[2])
             msg.send()
 
+    def keepalive(self, delta: int = 60_000):
+        self.set_time += delta
+
     def release_timeout_task(self):
-        await asyncio.sleep_ms(ROUTE_RELEASE_TIMEOUT)
+        while True:
+            await asyncio.sleep_ms(ROUTE_RELEASE_TIMEOUT)
+            if time.ticks_diff(time.ticks_ms(), self.set_time) >= ROUTE_RELEASE_TIMEOUT:
+                break
+            else:
+                self.logger.log('release_timeout_task: timeout was extended')
+
         if self.state != ROUTE_STATE_UNSET:
             self.logger.log('route release timeout')
             self.release()
@@ -235,3 +254,25 @@ class entry_exit:
                     if len(self.feedback_events) > 2 and len(self.feedback_events[2] == 3):
                         msg = canmessage.event_from_tuple(self.cbus, self.feedback_events[2])
                         msg.send()
+
+
+class mobject:
+    def __init__(self, object, type, desired_state):
+        self.object = object
+        self.type = type
+        self.desired_state = desired_state
+
+
+class movement:
+    def __init__(self, name: str, cbus: cbus.cbus, objects: tuple[mobject, ...], cab=None, loco: int = 0):
+        self.name = name
+        self.cbus = cbus
+        self.objects = objects
+        self.cab = cab
+        self.loco = loco
+
+    def begin(self):
+        pass
+
+    def stop(self):
+        pass

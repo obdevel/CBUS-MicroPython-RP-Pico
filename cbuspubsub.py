@@ -1,8 +1,9 @@
 # cbuspubsub.py
 # publish/subscribe implementation of the observer pattern
-
 import random
 import re
+
+import uasyncio as asyncio
 
 import canmessage
 import logger
@@ -14,10 +15,11 @@ class subscription:
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
-        self.id = random.randint(0, 65535)      # TODO: check unique
+        self.id = random.randint(0, 65535)  # TODO: check unique
         self.query = query
         self.query_type = query_type
         self.regex = None
+        self.evt = asyncio.Event()
         self.queue = Queue()
         if type == canmessage.QUERY_REGEX:
             self.regex = re.compile(query)
@@ -34,4 +36,7 @@ class subscription:
             self.queue.put_nowait(msg)
 
     async def wait(self):
-        return await self.queue.get()
+        self.evt.clear()
+        item = await self.queue.get()
+        self.evt.set()
+        return item

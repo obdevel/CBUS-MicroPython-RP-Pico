@@ -84,23 +84,28 @@ OP_TIMEOUT = 2_000
 
 
 class timeout:
-    def __init__(self, ms: int, evt: asyncio.Event):
+    def __init__(self, ms: int, evt: asyncio.Event = None):
         self.ms = ms if ms >= 0 else MAX_TIMEOUT
         self.event = evt
 
     async def one_shot(self) -> None:
-        await asyncio.sleep_ms(self.ms)
-        self.event.set()
         self.event.clear()
-
-    async def recurrent(self) -> None:
-        while True:
-            await asyncio.sleep_ms(self.ms)
+        await asyncio.sleep_ms(self.ms)
+        if self.event:
             self.event.set()
             self.event.clear()
 
+    async def recurrent(self) -> None:
+        self.event.clear()
+        while True:
+            await asyncio.sleep_ms(self.ms)
+            if self.event:
+                self.event.set()
+                self.event.clear()
+
     async def wait(self) -> None:
-        await self.event.wait()
+        if self.event:
+            await self.event.wait()
 
 
 class sensor:
