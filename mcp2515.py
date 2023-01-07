@@ -376,6 +376,7 @@ class mcp2515(canio.canio):
         self.cs_pin.high()
 
         self.interrupt_pin = Pin(interrupt_pin, Pin.IN, Pin.PULL_UP)
+        self.num_interrupts = 0
 
         # init SPI bus - using pin assignments for my shield designs
         if bus is None:
@@ -413,41 +414,33 @@ class mcp2515(canio.canio):
 
     async def process_isr(self):
         self.logger.log('irq handler is waiting for interrupts')
-        self.num_interrupts = 0
         while True:
             await tsf.wait()
             self.num_interrupts += 1
-            # self.logger.log('got interrupt')
-            # i = self.get_interrupts()
-            # self.logger.log(f'irq: interrupts = {i}')
             self.poll_for_messages()
 
-            #
-            # # class CANINTF:
-            # #     CANINTF_RX0IF = const(0x01)
-            # #     CANINTF_RX1IF = const(0x02)
-            # #     CANINTF_TX0IF = const(0x04)
-            # #     CANINTF_TX1IF = const(0x08)
-            # #     CANINTF_TX2IF = const(0x10)
-            # #     CANINTF_ERRIF = const(0x20)
-            # #     CANINTF_WAKIF = const(0x40)
-            # #     CANINTF_MERRF = const(0x80)
-            #
+    def process_interrupts(self):
+        i = self.get_interrupts()
 
-            # if i & CANINTF.CANINTF_RX0IF or i & CANINTF.CANINTF_RX1IF:
-            #     self.poll_for_messages()
-            # elif i & CANINTF.CANINTF_TX0IF:
-            #     self.txb_free[0] = True
-            # elif i & CANINTF.CANINTF_TX1IF:
-            #     self.txb_free[1] = True
-            # elif i & CANINTF.CANINTF_TX2IF:
-            #     self.txb_free[2] = True
-            # elif i & CANINTF.CANINTF_ERRIF:
-            #     pass
-            # elif i & CANINTF.CANINTF_MERRF:
-            #     pass
-            # else:
-            #     pass
+        # if i & CANINTF.CANINTF_RX0IF:
+        #     self.poll_for_messages(0)
+        # elif i & CANINTF.CANINTF_RX1IF:
+        #     self.poll_for_messages(1)
+
+        if i & CANINTF.CANINTF_RX0IF or i & CANINTF.CANINTF_RX1IF:
+            self.poll_for_messages()
+        elif i & CANINTF.CANINTF_TX0IF:
+            self.clear_txb_interrupt(0)
+        elif i & CANINTF.CANINTF_TX1IF:
+            self.clear_txb_interrupt(1)
+        elif i & CANINTF.CANINTF_TX2IF:
+            self.clear_txb_interrupt(2)
+        elif i & CANINTF.CANINTF_ERRIF:
+            pass
+        elif i & CANINTF.CANINTF_MERRF:
+            pass
+        else:
+            pass
 
     def available(self) -> bool:
         return self.rx_queue.available()
@@ -495,7 +488,9 @@ class mcp2515(canio.canio):
         #                   CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF | CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF)
 
         # enable message receive interrupts
-        self.set_register(REGISTER.MCP_CANINTE, CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF)
+        # self.set_register(REGISTER.MCP_CANINTE, CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF)
+        self.set_register(REGISTER.MCP_CANINTE, CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF |
+                          CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF)
 
         # Receives all valid messages with either Standard or Extended Identifiers that
         # meet filter criteria. RXF0 is applied for RXB0, RXF1 is applied for RXB1
@@ -531,8 +526,10 @@ class mcp2515(canio.canio):
         self.set_bit_rate()
 
         # install interrupt handler and run message processor
-        self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: tsf.set())
-        asyncio.create_task(self.process_isr())
+        # self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: tsf.set())
+        # self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: self.poll_for_messages())
+        self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: self.process_interrupts())
+        # asyncio.create_task(self.process_isr())
 
         # set normal mode
         self.set_normal_mode()
@@ -789,13 +786,13 @@ class mcp2515(canio.canio):
         if frame.dlc > CAN_MAX_DLEN:
             return ERROR.ERROR_FAILTX
 
-        txBuffers = (TXBn.TXB0, TXBn.TXB1, TXBn.TXB2)
+        tx_buffers = (TXBn.TXB0, TXBn.TXB1, TXBn.TXB2)
 
         for i in range(N_TXBUFFERS):
-            txbuf = TXB[txBuffers[i]]
+            txbuf = TXB[tx_buffers[i]]
             ctrlval = self.read_register(txbuf.CTRL)
             if (ctrlval & TXBnCTRL.TXB_TXREQ) == 0:
-                return self.send_message_(frame, txBuffers[i])
+                return self.send_message_(frame, tx_buffers[i])
 
         return ERROR.ERROR_ALLTXBUSY
 
@@ -804,7 +801,6 @@ class mcp2515(canio.canio):
             return self.read_message_()
 
         rxb = RXB[rxbn]
-
         tbufdata = self.read_registers(rxb.SIDH, 1 + CAN_IDLEN)
 
         id_ = (tbufdata[MCP_SIDH] << 3) + (tbufdata[MCP_SIDL] >> 5)
@@ -844,12 +840,15 @@ class mcp2515(canio.canio):
 
         return rc
 
-    def poll_for_messages(self):
+    def poll_for_messages(self, rxbn: int = None):
         while self.check_receive():
             # self.logger.log('mcp2515 has message')
-            r, msg = self.read_message()
+            # us = time.ticks_us()
+            self.num_interrupts += 1
+            r, msg = self.read_message(rxbn)
             if r == ERROR.ERROR_OK:
                 self.rx_queue.enqueue(msg)
+                # self.logger.log(f'message processing took {time.ticks_diff(time.ticks_us(), us)} us')
                 # self.logger.log('message queued')
             else:
                 self.logger.log(f'mcp2515: no message, err = {r}')
@@ -876,38 +875,51 @@ class mcp2515(canio.canio):
     def transmit_error_count(self):
         return self.read_register(REGISTER.MCP_TEC)
 
-    # def clear_RXnOVR_flags(self) -> None:
-    #     self.modify_register(REGISTER.MCP_EFLG, EFLG.EFLG_RX0OVR | EFLG.EFLG_RX1OVR, 0)
-
     def get_interrupts(self) -> int:
         return self.read_register(REGISTER.MCP_CANINTF)
 
-    # def clear_interrupts(self) -> None:
-    #     self.set_register(REGISTER.MCP_CANINTF, 0)
-    #
-    # def get_interrupt_mask(self) -> int:
-    #     return self.read_register(REGISTER.MCP_CANINTE)
-    #
-    # def clear_TX_interrupts(self) -> None:
-    #     self.modify_register(
-    #         REGISTER.MCP_CANINTF,
-    #         CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF,
-    #         0,
-    #     )
-    #
-    # def clear_RXnOVR(self) -> None:
-    #     eflg = self.check_error_flags()
-    #     if eflg != 0:
-    #         self.clear_RXnOVR_flags()
-    #         self.clear_interrupts()
-    #         # modify_register(REGISTER.MCP_CANINTF, CANINTF.CANINTF_ERRIF, 0)
-    #
-    # def clear_MERR(self) -> None:
-    #     # self.modify_register(REGISTER.MCP_EFLG, EFLG.EFLG_RX0OVR | EFLG.EFLG_RX1OVR, 0)
-    #     # self.clear_interrupts()
-    #     self.modify_register(REGISTER.MCP_CANINTF, CANINTF.CANINTF_MERRF, 0)
-    #
-    # def clear_ERRIF(self) -> None:
-    #     # self.modify_register(REGISTER.MCP_EFLG, EFLG.EFLG_RX0OVR | EFLG.EFLG_RX1OVR, 0)
-    #     # self.clear_interrupts()
-    #     self.modify_register(REGISTER.MCP_CANINTF, CANINTF.CANINTF_ERRIF, 0)
+    def clear_txb_interrupt(self, txb_num: int):
+        # self.logger.log(f'clear_txb_interrupt: txb{txb_num} is now free')
+        self.txb_free[txb_num] = True
+
+        if txb_num == 0:
+            reg = CANINTF.CANINTF_TX0IF
+        elif txb_num == 1:
+            reg = CANINTF.CANINTF_TX1IF
+        else:
+            reg = CANINTF.CANINTF_TX2IF
+
+        self.modify_register(REGISTER.MCP_CANINTF, reg, 0)
+
+# def clear_RXnOVR_flags(self) -> None:
+#     self.modify_register(REGISTER.MCP_EFLG, EFLG.EFLG_RX0OVR | EFLG.EFLG_RX1OVR, 0)
+
+# def clear_interrupts(self) -> None:
+#     self.set_register(REGISTER.MCP_CANINTF, 0)
+#
+# def get_interrupt_mask(self) -> int:
+#     return self.read_register(REGISTER.MCP_CANINTE)
+#
+# def clear_TX_interrupts(self) -> None:
+#     self.modify_register(
+#         REGISTER.MCP_CANINTF,
+#         CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF,
+#         0,
+#     )
+#
+# def clear_RXnOVR(self) -> None:
+#     eflg = self.check_error_flags()
+#     if eflg != 0:
+#         self.clear_RXnOVR_flags()
+#         self.clear_interrupts()
+#         # modify_register(REGISTER.MCP_CANINTF, CANINTF.CANINTF_ERRIF, 0)
+#
+# def clear_MERR(self) -> None:
+#     # self.modify_register(REGISTER.MCP_EFLG, EFLG.EFLG_RX0OVR | EFLG.EFLG_RX1OVR, 0)
+#     # self.clear_interrupts()
+#     self.modify_register(REGISTER.MCP_CANINTF, CANINTF.CANINTF_MERRF, 0)
+#
+# def clear_ERRIF(self) -> None:
+#     # self.modify_register(REGISTER.MCP_EFLG, EFLG.EFLG_RX0OVR | EFLG.EFLG_RX1OVR, 0)
+#     # self.clear_interrupts()
+#     self.modify_register(REGISTER.MCP_CANINTF, CANINTF.CANINTF_ERRIF, 0)

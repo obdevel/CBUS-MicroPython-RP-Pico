@@ -19,7 +19,9 @@ MOBJ_TURNOUT = const(0)
 MOBJ_SIGNAL = const(1)
 MOBJ_ROUTE = const(2)
 MOBJ_LOCO = const(3)
-MOBJ_SENSOR = const(4)
+MOBJ_SPEED = const(4)
+MOBJ_FUNC = const(5)
+MOBJ_SENSOR = const(6)
 
 
 class routeobject:
@@ -264,15 +266,21 @@ class mobject:
 
 
 class movement:
-    def __init__(self, name: str, cbus: cbus.cbus, objects: tuple[mobject, ...], cab=None, loco: int = 0):
+    def __init__(self, name: str, cbus: cbus.cbus, objects: tuple[mobject, ...], cab=None, loco: int = 0) -> None:
         self.name = name
         self.cbus = cbus
         self.objects = objects
         self.cab = cab
         self.loco = loco
 
-    def begin(self):
+    def init(self) -> None:
         pass
 
-    def stop(self):
+    def begin(self) -> None:
+        pass
+
+    def pause(self) -> None:
+        pass
+
+    def stop(self) -> None:
         pass

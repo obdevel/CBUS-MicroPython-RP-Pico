@@ -27,10 +27,17 @@ class mymodule(cbusmodule.cbusmodule):
         # *** bare minimum module init
         # ***
 
-        self.cbus = cbus.cbus(
-            mcp2515.mcp2515(),
-            cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES),
-        )
+        # self.cbus = cbus.cbus(
+        #     mcp2515.mcp2515(),
+        #     cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES),
+        # )
+
+        from machine import SPI
+        bus = SPI(0, baudrate=10_000_000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=Pin(2), mosi=Pin(3),
+                  miso=Pin(4))
+        can = mcp2515.mcp2515(cs_pin=5, interrupt_pin=1, bus=bus)
+        config = cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4)
+        self.cbus = cbus.cbus(can, config)
 
         self.module_id = 103
         self.module_name = bytes('PYCO   ', 'ascii')

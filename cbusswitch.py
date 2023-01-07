@@ -25,9 +25,9 @@ class cbusswitch:
 
         self.tsf = asyncio.ThreadSafeFlag()
         self.pin.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda x: self.tsf.set())
-        asyncio.create_task(self.run())
+        asyncio.create_task(self.interrupt_handler())
 
-    def run(self) -> None:
+    def interrupt_handler(self) -> None:
         self.last_interrupt_time = time.ticks_ms()
         
         while True:

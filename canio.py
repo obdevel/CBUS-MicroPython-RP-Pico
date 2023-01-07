@@ -1,5 +1,5 @@
 # canio.py
-
+import canmessage
 import logger
 
 
@@ -18,7 +18,7 @@ class canio:
     def send_message(self, msg) -> int:
         pass
 
-    def get_next_message(self) -> None:
+    def get_next_message(self) -> canmessage.canmessage:
         pass
 
     def poll_for_messages(self) -> None:

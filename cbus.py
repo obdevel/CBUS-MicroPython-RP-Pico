@@ -81,8 +81,8 @@ class cbus:
         self.enum_responses = []
         self.timeout_timer = time.ticks_ms()
 
-        self.received_messages = 0
-        self.sent_messages = 0
+        self.num_messages_received = 0
+        self.num_messages_sent = 0
 
         self.func_dict = {
             cbusdefs.OPC_ACON: self.handle_accessory_event,
@@ -162,7 +162,7 @@ class cbus:
     def send_cbus_message_no_header_update(self, msg) -> None:
         self.can.send_message__(msg)
         self.has_ui and self.config.mode == MODE_FLIM and self.led_grn.pulse()
-        self.sent_messages += 1
+        self.num_messages_sent += 1
 
         if self.sent_message_handler is not None:
             self.sent_message_handler(msg)
@@ -227,7 +227,7 @@ class cbus:
             while self.can.available() and processed_msgs < max_msgs:
                 msg = self.can.get_next_message()
 
-                self.received_messages += 1
+                self.num_messages_received += 1
 
                 for h in self.histories:
                     h.add(msg)

@@ -49,10 +49,7 @@ class mymodule(cbusmodule.cbusmodule):
 
         start_time = time.ticks_ms()
 
-        self.cbus = cbus.cbus(
-            mcp2515.mcp2515(),
-            cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES),
-        )
+        self.cbus = cbus.cbus(mcp2515.mcp2515(), cbusconfig.cbusconfig())
 
         self.module_id = 103
         self.module_name = bytes('PYCO   ', 'ascii')
@@ -232,7 +229,7 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def sensor_test_coro(self, pevent: asyncio.Event) -> None:
         event = asyncio.Event()
-        self.sn1 = cbusobjects.binary_sensor('sensor1', mod.cbus, ((0, 22, 32), (1, 22, 23)), (0, 22, 32))
+        self.sn1 = cbusobjects.binary_sensor('sensor1', mod.cbus, ((0, 22, 23), (1, 22, 23)), (0, 22, 33))
         self.logger.log(
             f'sensor_test_coro: start, {self.sn1.name} state = {cbusobjects.sensor_states.get(self.sn1.state)}')
 
