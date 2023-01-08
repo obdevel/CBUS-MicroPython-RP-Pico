@@ -210,6 +210,7 @@ class base_cbus_layout_object:
         self.has_sensor = sensor_events and len(sensor_events) > 1
         self.sensor_events = sensor_events
         self.state = initial_state
+        self.evt = asyncio.Event()
 
         if self.objtype == OBJECT_TYPE_TURNOUT:
             self.objtypename = 'turnout'
@@ -260,8 +261,9 @@ class base_cbus_layout_object:
         return self.state
 
     async def operate(self, target_state, force: bool = False) -> bool:
-        if (target_state != self.state) or force:
+        self.evt.clear()
 
+        if (target_state != self.state) or force:
             if self.objtype == OBJECT_TYPE_TURNOUT or self.objtype == OBJECT_TYPE_SEMAPHORE_SIGNAL:
                 ev = canmessage.event_from_tuple(self.cbus, self.control_events[target_state])
                 ev.send()
@@ -283,6 +285,7 @@ class base_cbus_layout_object:
                     self.state = self.sensor.state
                     self.logger.log(f'{self.name}: operate feedback received, state = {self.state}')
 
+        self.evt.set()
         return True
 
     async def sensor_run_task(self) -> None:

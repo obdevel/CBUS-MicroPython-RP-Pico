@@ -7,6 +7,7 @@ import canmessage
 import cbus
 import cbushistory
 import cbusobjects
+import cbuspubsub
 import logger
 
 ROUTE_STATE_UNSET = const(0)
@@ -15,13 +16,19 @@ ROUTE_STATE_SET = const(2)
 
 ROUTE_RELEASE_TIMEOUT = 30_000
 
-MOBJ_TURNOUT = const(0)
-MOBJ_SIGNAL = const(1)
-MOBJ_ROUTE = const(2)
-MOBJ_LOCO = const(3)
-MOBJ_SPEED = const(4)
-MOBJ_FUNC = const(5)
-MOBJ_SENSOR = const(6)
+STEP_TURNOUT = const(0)
+STEP_SIGNAL_HOME = const(1)
+STEP_SIGNAL_DISTANT = const(2)
+STEP_ROUTE = const(3)
+STEP_LOCO = const(4)
+STEP_SPEED = const(5)
+STEP_FUNC = const(6)
+STEP_SENSOR = const(7)
+STEP_TIME_WAITFOR = const(8)
+STEP_CLOCK_WAITFOR = const(9)
+STEP_TIME_WAITUNTIL = const(10)
+STEP_CLOCK_WAITUNTIL = const(11)
+STEP_EVENT_WAITFOR = const(12)
 
 
 class routeobject:
@@ -258,29 +265,75 @@ class entry_exit:
                         msg.send()
 
 
-class mobject:
+class step:
     def __init__(self, object, type, desired_state):
         self.object = object
         self.type = type
+        self.data = None
         self.desired_state = desired_state
 
 
 class movement:
-    def __init__(self, name: str, cbus: cbus.cbus, objects: tuple[mobject, ...], cab=None, loco: int = 0) -> None:
+    def __init__(self, name: str, cbus: cbus.cbus, objects: tuple[step, ...], operate_objects=False, cab=None,
+                 loco: int = 0) -> None:
+        self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
         self.objects = objects
+        self.operate_objects = operate_objects
+
         self.cab = cab
         self.loco = loco
+
+        self.evt = asyncio.Event()
+        self.evt.clear()
+        self.sub = cbuspubsub.subscription('ps', self.cbus, 0, 0)
+
+        self.run_task_handle = asyncio.create_task(self.run())
 
     def init(self) -> None:
         pass
 
-    def begin(self) -> None:
-        pass
+    async def run(self) -> None:
+        try:
+            self.logger.log('movement running...')
+
+            for i, obj in enumerate(self.objects):
+                if not self.evt.is_set():
+                    self.logger.log('movement, awaiting event set')
+                    await self.evt.wait()
+                    self.logger.log('movement, event is set, continuing')
+
+                self.logger.log(f'movement:{self.name} processing step {i} = {obj.type}')
+
+                if obj.type == STEP_SENSOR:
+                    self.logger.log('movement, step is sensor')
+                elif obj.type == STEP_SIGNAL_HOME:
+                    self.logger.log('movement, step is signal home')
+                elif obj.type == STEP_TURNOUT:
+                    self.logger.log('movement, step is turnout')
+                elif obj.type == STEP_ROUTE:
+                    pass
+                elif obj.type == STEP_LOCO:
+                    pass
+                elif obj.type == STEP_SPEED:
+                    pass
+                elif obj.type == STEP_FUNC:
+                    pass
+                else:
+                    self.logger.log(f'unknown movement {obj.type}')
+
+        except asyncio.CancelledError:
+            self.logger.log(f'movement cancelled')
+        finally:
+            self.logger.log(f'end of movement')
+            self.sub.unsubscribe()
 
     def pause(self) -> None:
-        pass
+        self.evt.clear()
+
+    def resume(self):
+        self.evt.set()
 
     def stop(self) -> None:
-        pass
+        self.run_task_handle.cancel()

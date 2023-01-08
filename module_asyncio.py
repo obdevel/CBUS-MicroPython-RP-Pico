@@ -456,6 +456,20 @@ def op(which):
             await t.close()
 
 
+mov = 0
+
+
+def move_test():
+    global mov
+
+    st1 = cbusroutes.step(t1, cbusroutes.STEP_TURNOUT, 0)
+    st2 = cbusroutes.step(s1, cbusroutes.STEP_SIGNAL_HOME, 0)
+    st3 = cbusroutes.step(mod.sn1, cbusroutes.STEP_SENSOR, 0)
+
+    steps = (st1, st2, st3)
+    mov = cbusroutes.movement('mov', mod.cbus, steps)
+
+
 # *** start the scheduler and run the app class main method
 asyncio.run(mod.run())
 
