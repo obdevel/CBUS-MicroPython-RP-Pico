@@ -437,12 +437,15 @@ def nxtest() -> None:
     nx = cbusroutes.entry_exit('nx', mod.cbus, r, ((0, 22, 50), (0, 22, 51)), ())
 
 
-def load(num: int) -> None:
+def load(num: int, with_sensor: bool = False) -> None:
     global load_data
     load_data = []
     for x in range(num):
-        # load_data.append(cbusobjects.turnout(f't{x}', mod.cbus, ((0, 22, x), (1, 22, x)), -1, ((0, 23, x), (1, 23, x))))
-        load_data.append(cbusobjects.turnout(f't{x}', mod.cbus, ((0, 22, x), (1, 22, x)), -1, ))
+        if with_sensor:
+            load_data.append(
+                cbusobjects.turnout(f't{x}', mod.cbus, ((0, 22, x), (1, 22, x)), -1, ((0, 23, x), (1, 23, x))))
+        else:
+            load_data.append(cbusobjects.turnout(f't{x}', mod.cbus, ((0, 22, x), (1, 22, x)), -1, ))
 
 
 def op(which):

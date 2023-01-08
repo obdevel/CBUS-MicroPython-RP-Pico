@@ -254,6 +254,11 @@ class base_cbus_layout_object:
         if self.lock.locked():
             self.lock.release()
 
+    def get_state(self):
+        if self.has_sensor:
+            self.state = self.sensor.state
+        return self.state
+
     async def operate(self, target_state, force: bool = False) -> bool:
         if (target_state != self.state) or force:
 
@@ -267,6 +272,8 @@ class base_cbus_layout_object:
             if self.has_sensor:
                 self.state = OBJECT_STATE_UNKNOWN
                 t = asyncio.create_task((self.timeout.one_shot()))
+                self.sensor.evt.clear()
+
                 evw = await WaitAny((self.timeout_evt, self.sensor.evt)).wait()
 
                 if evw is self.timeout_evt:
@@ -274,7 +281,7 @@ class base_cbus_layout_object:
                     return False
                 else:
                     self.state = self.sensor.state
-                    self.logger.log(f'object: name = {self.name}, state = {self.state}')
+                    self.logger.log(f'{self.name}: operate feedback received, state = {self.state}')
 
         return True
 
@@ -282,7 +289,7 @@ class base_cbus_layout_object:
         while True:
             await self.sensor.wait()
             self.state = self.sensor.state
-            self.logger.log(f'sensor {self.sensor.name} triggered, state = {self.sensor.state}')
+            self.logger.log(f'layout object sensor {self.sensor.name} triggered, new state = {self.sensor.state}')
 
 
 class turnout(base_cbus_layout_object):

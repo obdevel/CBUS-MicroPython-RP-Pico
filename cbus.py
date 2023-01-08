@@ -548,9 +548,9 @@ class cbus:
     def process_enumeration_responses(self) -> None:
         self.enum_start_time = 0
         self.enumerating = False
-        new_id = -1
+        new_id = self.config.canid
 
-        if not True in self.enum_responses:
+        if True not in self.enum_responses:
             self.logger.log("no enumeration responses received")
 
         for i, r in enumerate(self.enum_responses, start=1):

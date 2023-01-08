@@ -412,12 +412,12 @@ class mcp2515(canio.canio):
         self.bus.write(value_as_byte)
         return None
 
-    async def process_isr(self):
-        self.logger.log('irq handler is waiting for interrupts')
-        while True:
-            await tsf.wait()
-            self.num_interrupts += 1
-            self.poll_for_messages()
+    # async def process_isr(self):
+    #     self.logger.log('irq handler is waiting for interrupts')
+    #     while True:
+    #         await tsf.wait()
+    #         self.num_interrupts += 1
+    #         self.poll_for_messages()
 
     def process_interrupts(self):
         i = self.get_interrupts()
@@ -435,12 +435,13 @@ class mcp2515(canio.canio):
             self.clear_txb_interrupt(1)
         elif i & CANINTF.CANINTF_TX2IF:
             self.clear_txb_interrupt(2)
-        elif i & CANINTF.CANINTF_ERRIF:
-            pass
-        elif i & CANINTF.CANINTF_MERRF:
-            pass
-        else:
-            pass
+
+        # elif i & CANINTF.CANINTF_ERRIF:
+        #     pass
+        # elif i & CANINTF.CANINTF_MERRF:
+        #     pass
+        # else:
+        #     pass
 
     def available(self) -> bool:
         return self.rx_queue.available()
@@ -489,6 +490,7 @@ class mcp2515(canio.canio):
 
         # enable message receive interrupts
         # self.set_register(REGISTER.MCP_CANINTE, CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF)
+
         self.set_register(REGISTER.MCP_CANINTE, CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF |
                           CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF)
 
@@ -586,7 +588,7 @@ class mcp2515(canio.canio):
             self.cs_pin.high()
         else:
             self.cs_pin.high()
-            time.sleep_us(SPI_HOLD_US)  # type: ignore
+            time.sleep_us(SPI_HOLD_US)
 
     def get_status(self) -> int:
         self.cs_pin.low()
@@ -613,9 +615,9 @@ class mcp2515(canio.canio):
     def set_mode(self, mode: int) -> int:
         self.modify_register(REGISTER.MCP_CANCTRL, CANCTRL_REQOP, mode)
 
-        end_time = time.ticks_add(time.ticks_ms(), 10)  # type: ignore
+        end_time = time.ticks_add(time.ticks_ms(), 10)
         mode_match = False
-        while time.ticks_diff(time.ticks_ms(), end_time) < 0:  # type: ignore
+        while time.ticks_diff(time.ticks_ms(), end_time) < 0:
             newmode = self.read_register(REGISTER.MCP_CANSTAT)
             newmode &= CANSTAT_OPMOD
 
@@ -669,11 +671,11 @@ class mcp2515(canio.canio):
     #     return ERROR.ERROR_OK
 
     def prepare_id(self, ext: bool, id_: int) -> bytearray:
-        canid = id_ & 0xFFFF
+        canid = id_ & 0xffff
         buffer = bytearray(CAN_IDLEN)
 
         if ext:
-            buffer[MCP_EID0] = canid & 0xFF
+            buffer[MCP_EID0] = canid & 0xff
             buffer[MCP_EID8] = canid >> 8
             canid = id_ >> 16
             buffer[MCP_SIDL] = canid & 0x03

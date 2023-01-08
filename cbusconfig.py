@@ -190,9 +190,8 @@ class cbusconfig:
         for i in range(self.num_events):
             offset = i * self.event_size
 
-            if ((self.events[offset] >> 8) + self.events[offset + 1]) == nn and (
-                    (self.events[offset + 2] >> 8) + self.events[offset + 3]
-            ) == en:
+            if ((self.events[offset] << 8) + self.events[offset + 1]) == nn and (
+                    (self.events[offset + 2] << 8) + self.events[offset + 3]) == en:
                 return i
 
         return -1
@@ -203,7 +202,7 @@ class cbusconfig:
                 return i
         return -1
 
-    # mod.cbus.config.find_event_by_evs(((1, 3), (2, 6), (3, 9), (4, 12),))
+    # test ... mod.cbus.config.find_event_by_evs(((1, 3), (2, 6), (3, 9), (4, 12),))
 
     def find_event_by_evs(self, query: tuple[tuple[int, int], ...]) -> int:
         for i in range(self.num_events):
@@ -267,7 +266,7 @@ class cbusconfig:
     def clear_event(self, nn: int, en: int) -> bool:
         idx = self.find_existing_event(nn, en)
 
-        if not idx:
+        if idx < 0:
             return False
 
         for i in range(self.event_size):
@@ -289,9 +288,10 @@ class cbusconfig:
         return count
 
     def clear_all_events(self) -> None:
-        # self.events = bytearray(0xff) * ((self.num_evs + 4) * self.num_events)
-        for x in range((self.num_evs + 4) * self.num_events):
-            self.events[x] = 0xff
+        # for x in range((self.event_size) * self.num_events):
+        #     self.events[x] = 0xff
+
+        self.events = bytearray([0xff] * (self.num_events * self.event_size))
         self.backend.store_events(self.events)
 
     def read_nv(self, nvnum: int) -> int:
@@ -309,7 +309,7 @@ class cbusconfig:
     def print_events(self, print_all: bool = False) -> None:
         for i in range(self.num_events):
             if print_all or (self.events[i * self.event_size] < 0xff):
-                print(f'{i:02x} = ', end='')
+                print(f'{i:3} = ', end='')
                 for j in range(0, self.event_size):
                     print(f'{self.events[(i * self.event_size) + j]:02x} ', end='')
                 print()
