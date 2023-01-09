@@ -412,12 +412,12 @@ class mcp2515(canio.canio):
         self.bus.write(value_as_byte)
         return None
 
-    # async def process_isr(self):
-    #     self.logger.log('irq handler is waiting for interrupts')
-    #     while True:
-    #         await tsf.wait()
-    #         self.num_interrupts += 1
-    #         self.poll_for_messages()
+    async def process_isr(self):
+        self.logger.log('irq handler is waiting for interrupts')
+        while True:
+            await tsf.wait()
+            self.num_interrupts += 1
+            self.poll_for_messages()
 
     def process_interrupts(self):
         i = self.get_interrupts()
@@ -489,10 +489,10 @@ class mcp2515(canio.canio):
         #                   CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF | CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF)
 
         # enable message receive interrupts
-        # self.set_register(REGISTER.MCP_CANINTE, CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF)
+        self.set_register(REGISTER.MCP_CANINTE, CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF)
 
-        self.set_register(REGISTER.MCP_CANINTE, CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF |
-                          CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF)
+        # self.set_register(REGISTER.MCP_CANINTE, CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF |
+        #                   CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF)
 
         # Receives all valid messages with either Standard or Extended Identifiers that
         # meet filter criteria. RXF0 is applied for RXB0, RXF1 is applied for RXB1
@@ -528,10 +528,10 @@ class mcp2515(canio.canio):
         self.set_bit_rate()
 
         # install interrupt handler and run message processor
-        # self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: tsf.set())
+        self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: tsf.set())
         # self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: self.poll_for_messages())
-        self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: self.process_interrupts())
-        # asyncio.create_task(self.process_isr())
+        # self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: self.process_interrupts())
+        asyncio.create_task(self.process_isr())
 
         # set normal mode
         self.set_normal_mode()

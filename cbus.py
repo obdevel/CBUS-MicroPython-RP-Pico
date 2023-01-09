@@ -176,7 +176,7 @@ class cbus:
     def set_config(self, config: cbusconfig.cbusconfig) -> None:
         self.config = config
 
-    async def process(self, freq=20, max_msgs=1) -> None:
+    async def process(self, freq=50, max_msgs=1) -> None:
         while True:
             await asyncio.sleep_ms(freq)
 

@@ -335,5 +335,5 @@ class movement:
     def resume(self):
         self.evt.set()
 
-    def stop(self) -> None:
+    def cancel(self) -> None:
         self.run_task_handle.cancel()

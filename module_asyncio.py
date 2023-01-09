@@ -224,20 +224,18 @@ class mymodule(cbusmodule.cbusmodule):
                                       query=canmessage.event_opcodes)
         while True:
             msg = await sub.wait()
-            self.logger.log(f'pubsub_test_coro: got subscribed event = {tuple(msg)}')
+            self.logger.log(f'pubsub_test_coro: (any event) got subscribed event = {tuple(msg)}')
             pevent.set()
 
     async def sensor_test_coro(self, pevent: asyncio.Event) -> None:
-        event = asyncio.Event()
-        self.sn1 = cbusobjects.binary_sensor('sensor1', mod.cbus, ((0, 22, 23), (1, 22, 23)), (0, 22, 33))
+        self.sensor1 = cbusobjects.binary_sensor('sensor1', mod.cbus, ((0, 22, 23), (1, 22, 23)), (0, 22, 33))
         self.logger.log(
-            f'sensor_test_coro: start, {self.sn1.name} state = {cbusobjects.sensor_states.get(self.sn1.state)}')
+            f'sensor_test_coro: start, {self.sensor1.name} state = {cbusobjects.sensor_states.get(self.sensor1.state)}')
 
         while True:
-            await event.wait()
-            event.clear()
+            await self.sensor1.wait()
             self.logger.log(
-                f'sensor_test_coro: {self.sn1.name} changed state to {self.sn1.state} = {cbusobjects.sensor_states.get(self.sn1.state)}')
+                f'sensor_test_coro: {self.sensor1.name} changed state to {self.sensor1.state} = {cbusobjects.sensor_states.get(self.sensor1.state)}')
             pevent.set()
 
     async def any_test_coro(self) -> None:
@@ -250,9 +248,9 @@ class mymodule(cbusmodule.cbusmodule):
         evs = asyncio.Event()
         evh = asyncio.Event()
 
-        tp = asyncio.create_task(self.pubsub_test_coro(evp))
-        ts = asyncio.create_task(self.sensor_test_coro(evs))
-        th = asyncio.create_task(self.history_test_coro(evh))
+        _ = asyncio.create_task(self.pubsub_test_coro(evp))
+        _ = asyncio.create_task(self.sensor_test_coro(evs))
+        _ = asyncio.create_task(self.history_test_coro(evh))
         tt = asyncio.create_task(timer.one_shot())
 
         while True:
@@ -260,7 +258,6 @@ class mymodule(cbusmodule.cbusmodule):
 
             if evw is evt:
                 self.logger.log('any_test_coro: timer expired')
-                tt.cancel()
             elif evw is evp:
                 self.logger.log('any_test_coro: pubsub_test_coro event was set')
             elif evw is evs:
@@ -408,18 +405,22 @@ evt5 = canmessage.event_from_table(mod.cbus, 0)
 t1 = cbusobjects.turnout('t1',
                          mod.cbus,
                          control_events=((0, 22, 25), (1, 22, 25)),
-                         initial_state=cbusobjects.TURNOUT_STATE_UNKNOWN,
-                         sensor_events=((0, 22, 26), (1, 22, 26)))
+                         sensor_events=((0, 22, 26), (1, 22, 26)),
+                         wait_for_sensor=False)
+
+t2 = cbusobjects.turnout('t2',
+                         mod.cbus,
+                         control_events=((0, 22, 25), (1, 22, 25)),
+                         sensor_events=((0, 22, 26), (1, 22, 26)),
+                         wait_for_sensor=True)
 
 s1 = cbusobjects.semaphore_signal('s1',
                                   mod.cbus,
-                                  control_events=((0, 22, 27), (1, 22, 27)),
-                                  initial_state=cbusobjects.SIGNAL_STATE_UNKNOWN)
+                                  control_events=((0, 22, 27), (1, 22, 27)))
 
 s2 = cbusobjects.semaphore_signal('s2',
                                   mod.cbus,
-                                  control_events=((0, 22, 28), (1, 22, 28)),
-                                  initial_state=cbusobjects.SIGNAL_STATE_UNKNOWN)
+                                  control_events=((0, 22, 28), (1, 22, 28)))
 
 tobj1 = cbusroutes.routeobject(t1, cbusobjects.TURNOUT_STATE_CLOSED)
 sobj1 = cbusroutes.routeobject(s1, cbusobjects.SIGNAL_STATE_SET, cbusobjects.WHEN_BEFORE)
@@ -464,7 +465,7 @@ def move_test():
 
     st1 = cbusroutes.step(t1, cbusroutes.STEP_TURNOUT, 0)
     st2 = cbusroutes.step(s1, cbusroutes.STEP_SIGNAL_HOME, 0)
-    st3 = cbusroutes.step(mod.sn1, cbusroutes.STEP_SENSOR, 0)
+    st3 = cbusroutes.step(mod.sensor1, cbusroutes.STEP_SENSOR, 0)
 
     steps = (st1, st2, st3)
     mov = cbusroutes.movement('mov', mod.cbus, steps)
