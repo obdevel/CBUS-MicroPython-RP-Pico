@@ -1,6 +1,6 @@
-#
+# First JW example, taken from Duncan's
 # module_example.py
-#
+# Modified lines 36 to 41 to match Nigel' pin-outs; shown in lines 43 - 56.
 # simplest example CBUS module main class using asyncio library
 #
 
@@ -27,12 +27,17 @@ class mymodule(cbusmodule.cbusmodule):
         # *** bare minimum module init
         # ***
 
-        self.cbus = cbus.cbus(
-            mcp2515.mcp2515(),
-            cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES),
-        )
+        # ** change these pin numbers to suit your CAN interface hardware
+        # ** also the switch and LED pins further down
+        # ** you can also change the module name and ID if desired
+        # ** and the number of events, EVs and NVs
 
-        # ** change the module name and ID if desired
+        from machine import SPI
+        bus = SPI(0, baudrate=10_000_000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=Pin(2), mosi=Pin(3),
+                  miso=Pin(4))
+        can = mcp2515.mcp2515(cs_pin=5, interrupt_pin=1, bus=bus)
+        config = cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4)
+        self.cbus = cbus.cbus(can, config)
 
         self.module_id = 103
         self.module_name = bytes('PYCO   ', 'ascii')
@@ -60,8 +65,10 @@ class mymodule(cbusmodule.cbusmodule):
             0,
         ]
 
+        # ** change these pins if desired to suit your hardware
         self.cbus.set_leds(21, 20)
         self.cbus.set_switch(22)
+
         self.cbus.set_name(self.module_name)
         self.cbus.set_params(self.module_params)
         self.cbus.set_event_handler(self.event_handler)
