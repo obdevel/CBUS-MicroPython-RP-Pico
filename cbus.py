@@ -67,7 +67,8 @@ class cbus:
         self.long_message_handler = None
 
         self.consume_own_messages = False
-        self.messages_to_consume = MSGS_ALL
+        self.consume_query_type = canmessage.QUERY_ALL
+        self.consume_query = None
         self.histories = []
         self.subscriptions = []
 
@@ -168,7 +169,8 @@ class cbus:
             self.sent_message_handler(msg)
 
         if self.consume_own_messages:
-            self.can.rx_queue.enqueue(msg)
+            if msg.matches(self.consume_query_type, self.consume_query):
+                self.can.rx_queue.enqueue(msg)
 
     def set_can(self, can: canio.canio) -> None:
         self.can = can

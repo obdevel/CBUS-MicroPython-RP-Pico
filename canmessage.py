@@ -26,6 +26,7 @@ QUERY_ALL_EVENTS = const(8)
 QUERY_LONG_MESSAGES = const(9)
 QUERY_UDF = const(10)
 QUERY_ALL = const(11)
+QUERY_NONE = const(12)
 
 event_opcodes = (
     cbusdefs.OPC_ACON,

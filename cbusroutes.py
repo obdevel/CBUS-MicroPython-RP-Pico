@@ -21,7 +21,7 @@ STEP_SIGNAL_HOME = const(1)
 STEP_SIGNAL_DISTANT = const(2)
 STEP_ROUTE = const(3)
 STEP_LOCO = const(4)
-STEP_SPEED = const(5)
+STEP_SPEED_DIR = const(5)
 STEP_FUNC = const(6)
 STEP_SENSOR = const(7)
 STEP_TIME_WAITFOR = const(8)
@@ -29,6 +29,7 @@ STEP_CLOCK_WAITFOR = const(9)
 STEP_TIME_WAITUNTIL = const(10)
 STEP_CLOCK_WAITUNTIL = const(11)
 STEP_EVENT_WAITFOR = const(12)
+STEP_LOOP = const(13)
 
 
 class routeobject:
@@ -266,10 +267,10 @@ class entry_exit:
 
 
 class step:
-    def __init__(self, object, type, desired_state):
+    def __init__(self, object, type, data, desired_state):
         self.object = object
         self.type = type
-        self.data = None
+        self.data = data
         self.desired_state = desired_state
 
 
@@ -294,6 +295,14 @@ class movement:
     def init(self) -> None:
         pass
 
+    @staticmethod
+    def create_from_list(step_objects: tuple[tuple, ...]) -> tuple:
+        steps_list = []
+        for step_object in step_objects:
+            st = step(step_object[0], step_object[1], step_object[2], step_object[3])
+            steps_list.append(st)
+        return tuple(steps_list)
+
     async def run(self) -> None:
         try:
             self.logger.log('movement running...')
@@ -316,10 +325,13 @@ class movement:
                     pass
                 elif obj.type == STEP_LOCO:
                     pass
-                elif obj.type == STEP_SPEED:
+                elif obj.type == STEP_SPEED_DIR:
                     pass
                 elif obj.type == STEP_FUNC:
                     pass
+                elif obj.type == STEP_LOOP:
+                    self.logger.log(f'movement: loop back to step {obj.data[0]}')
+                    i = obj.data
                 else:
                     self.logger.log(f'unknown movement {obj.type}')
 

@@ -251,7 +251,7 @@ class mymodule(cbusmodule.cbusmodule):
         _ = asyncio.create_task(self.pubsub_test_coro(evp))
         _ = asyncio.create_task(self.sensor_test_coro(evs))
         _ = asyncio.create_task(self.history_test_coro(evh))
-        tt = asyncio.create_task(timer.one_shot())
+        _ = asyncio.create_task(timer.one_shot())
 
         while True:
             evw = await WaitAny((evt, evp, evs, evh)).wait()
@@ -401,6 +401,8 @@ mod.initialise()
 evt3 = canmessage.event_from_message(mod.cbus, msg3)
 evt4 = canmessage.event_from_tuple(mod.cbus, tuple(msg3))
 evt5 = canmessage.event_from_table(mod.cbus, 0)
+
+cbusobjects.OP_TIMEOUT = 5_000
 
 t1 = cbusobjects.turnout('t1',
                          mod.cbus,
