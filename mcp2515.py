@@ -1,6 +1,6 @@
-import collections
 import sys
 import time
+from collections import namedtuple
 
 import uasyncio as asyncio
 from machine import Pin, SPI
@@ -328,8 +328,8 @@ CAN_MAX_DLEN = const(8)
 # CAN ID length
 CAN_IDLEN = const(4)
 
-TXBnREGS = collections.namedtuple("TXBnREGS", "CTRL SIDH DATA")
-RXBnREGS = collections.namedtuple("RXBnREGS", "CTRL SIDH DATA CANINTFRXnIF")
+TXBnREGS = namedtuple("TXBnREGS", "CTRL SIDH DATA")
+RXBnREGS = namedtuple("RXBnREGS", "CTRL SIDH DATA CANINTFRXnIF")
 
 TXB = [
     TXBnREGS(REGISTER.MCP_TXB0CTRL, REGISTER.MCP_TXB0SIDH, REGISTER.MCP_TXB0DATA),
