@@ -29,7 +29,7 @@ class cbusswitch:
 
     def interrupt_handler(self) -> None:
         self.last_interrupt_time = time.ticks_ms()
-        
+
         while True:
             await self.tsf.wait()
 
@@ -43,10 +43,9 @@ class cbusswitch:
                     self.previous_state = self.state
                     self.previous_state_duration = time.ticks_diff(time.ticks_ms(), self.previous_state_change_at)
                     self.previous_state_change_at = time.ticks_ms()
-                    # self.logger.log(f"switch state changed, state = {self.state}, last duration = {self.previous_state_duration}")
+                    self.logger.log(f"switch state changed, state = {self.state}, last duration = {self.previous_state_duration}")
                 else:
                     self.state_changed = False
-                self.logger.log('switch: spurious interrupt?')
 
     def is_pressed(self) -> bool:
         return self.state == 0
@@ -56,6 +55,6 @@ class cbusswitch:
 
     def reset(self) -> None:
         self.state = 1
-        self.previous_state_change_at = 0
-        self.previous_state_duration = 0
+        # self.previous_state_change_at = 0
+        # self.previous_state_duration = 0
         self.state_changed = False

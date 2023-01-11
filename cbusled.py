@@ -13,7 +13,7 @@ PULSE_DURATION = const(20)
 
 
 class cbusled:
-    def __init__(self, pin):
+    def __init__(self, pin: int) -> None:
         self.logger = logger.logger()
         self.pin = Pin(pin, Pin.OUT)
         self.state = 0
@@ -36,7 +36,7 @@ class cbusled:
             if self.pulsing and time.ticks_diff(time.ticks_ms(), self.last_change_time) >= PULSE_DURATION:
                 self.state = 0
                 self.pin.value(self.state)
-                self.pulsing = 0
+                self.pulsing = False
 
     def on(self) -> None:
         self.blinking = False

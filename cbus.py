@@ -204,11 +204,13 @@ class cbus:
 
             if self.has_ui:
                 if self.switch.is_pressed() and self.switch.current_state_duration() >= 6000:
+                    # self.logger.log('cbus: switch held for 6 seconds')
                     self.indicate_mode(MODE_CHANGING)
 
                 if self.switch.state_changed and not self.switch.is_pressed():
 
                     if self.switch.previous_state_duration >= 6000:
+                        self.logger.log('cbus: long switch press')
                         self.in_transition = True
 
                         if self.config.mode == MODE_SLIM:
@@ -217,12 +219,20 @@ class cbus:
                             self.revert_slim()
 
                     if 2000 >= self.switch.previous_state_duration >= 1000:
+                        self.logger.log('cbus: medium switch press')
                         if self.config.mode == MODE_FLIM:
+                            self.in_transition = True
                             self.init_flim()
 
                     if 1000 >= self.switch.previous_state_duration >= 250:
+                        self.logger.log('cbus: short switch press')
                         if self.config.canid > 0:
                             self.begin_enumeration()
+
+                    if self.switch.previous_state_duration < 250:
+                        self.logger.log('cbus: switch press too short')
+
+                    self.switch.reset()
 
             if self.poll:
                 self.can.poll_for_messages()

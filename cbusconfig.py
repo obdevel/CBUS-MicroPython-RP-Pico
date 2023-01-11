@@ -4,6 +4,7 @@ import gc
 
 from micropython import const
 
+import cbus
 # import i2ceeprom
 import logger
 
@@ -331,13 +332,16 @@ class cbusconfig:
         return gc.mem_free()
 
     def reset_module(self) -> None:
-        self.logger.log('reset_module')
-        self.nvs = bytearray([0] * (10 + self.num_nvs))
-        self.events = bytearray([0xff] * ((self.num_evs + 4) * self.num_events))
-        self.backend.store_nvs(self.nvs)
-        self.backend.store_events(self.events)
-        self.set_reset_flag(True)
-        self.reboot()
+        if self.mode == cbus.MODE_SLIM:
+            self.logger.log('reset_module')
+            self.nvs = bytearray([0] * (10 + self.num_nvs))
+            self.events = bytearray([0xff] * ((self.num_evs + 4) * self.num_events))
+            self.backend.store_nvs(self.nvs)
+            self.backend.store_events(self.events)
+            self.set_reset_flag(True)
+            self.reboot()
+        else:
+            self.logger.log('set module to SLiM before resetting')
 
     def set_reset_flag(self, set: bool) -> None:
         self.nvs[4] = set

@@ -123,8 +123,7 @@ class mymodule(cbusmodule.cbusmodule):
 
         self.logger.log(f'initialise complete, time = {time.ticks_diff(time.ticks_ms(), start_time)} ms')
         self.logger.log()
-        self.logger.log(
-            f'module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
+        self.logger.log(f'module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
         self.logger.log(f'free memory = {self.cbus.config.free_memory()} bytes')
         self.logger.log()
 
@@ -206,12 +205,10 @@ class mymodule(cbusmodule.cbusmodule):
     async def history_test_coro(self, pevent: asyncio.Event) -> None:
         self.logger.log('history_test_coro: start')
         events = ((0, 22, 23), (1, 22, 23))
-        hist = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=5_000, query_type=canmessage.QUERY_TUPLES,
-                                       query=events)
+        hist = cbushistory.cbushistory(self.cbus, max_size=1024, time_to_live=5_000, query_type=canmessage.QUERY_TUPLES, query=events)
         while True:
             await hist.wait()
-            if hist.sequence_received(events, order=cbushistory.ORDER_GIVEN, within=3_000, window=2_000,
-                                      which=cbushistory.WHICH_LATEST):
+            if hist.sequence_received(events, order=cbushistory.ORDER_GIVEN, within=3_000, window=2_000, which=cbushistory.WHICH_LATEST):
                 diff = hist.time_diff(events)
                 self.logger.log(f'history_test_coro: sequence {events} found, time diff = {diff}')
                 pevent.set()
@@ -220,8 +217,7 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def pubsub_test_coro(self, pevent: asyncio.Event) -> None:
         self.logger.log('pubsub_test_coro: start')
-        sub = cbuspubsub.subscription('pubsub_test', self.cbus, query_type=canmessage.QUERY_OPCODES,
-                                      query=canmessage.event_opcodes)
+        sub = cbuspubsub.subscription('pubsub_test', self.cbus, query_type=canmessage.QUERY_OPCODES, query=canmessage.event_opcodes)
         while True:
             msg = await sub.wait()
             self.logger.log(f'pubsub_test_coro: (any event) got subscribed event = {tuple(msg)}')
@@ -229,13 +225,11 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def sensor_test_coro(self, pevent: asyncio.Event) -> None:
         self.sensor1 = cbusobjects.binary_sensor('sensor1', mod.cbus, ((0, 22, 23), (1, 22, 23)), (0, 22, 33))
-        self.logger.log(
-            f'sensor_test_coro: start, {self.sensor1.name} state = {cbusobjects.sensor_states.get(self.sensor1.state)}')
+        self.logger.log(f'sensor_test_coro: start, {self.sensor1.name} state = {cbusobjects.sensor_states.get(self.sensor1.state)}')
 
         while True:
             await self.sensor1.wait()
-            self.logger.log(
-                f'sensor_test_coro: {self.sensor1.name} changed state to {self.sensor1.state} = {cbusobjects.sensor_states.get(self.sensor1.state)}')
+            self.logger.log(f'sensor_test_coro: {self.sensor1.name} changed state to {self.sensor1.state} = {cbusobjects.sensor_states.get(self.sensor1.state)}')
             pevent.set()
 
     async def any_test_coro(self) -> None:
