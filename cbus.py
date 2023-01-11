@@ -193,7 +193,6 @@ class cbus:
 
             if self.enumeration_required:
                 self.logger.log('enumeration required')
-                self.enumeration_required = False
                 self.begin_enumeration()
 
             if self.enumerating and time.ticks_diff(time.ticks_ms(), self.enum_start_time) >= 100:
@@ -554,11 +553,15 @@ class cbus:
         self.send_cbus_message(omsg)
 
     def begin_enumeration(self) -> None:
-        omsg = canmessage.canmessage(self.config.canid, 0, rtr=True)
-        self.enum_responses = [False] * 128
-        self.enumerating = True
-        self.send_cbus_message(omsg)
-        self.enum_start_time = time.ticks_ms()
+        self.enumeration_required = False
+        if self.config.mode == MODE_FLIM:
+            omsg = canmessage.canmessage(self.config.canid, 0, rtr=True)
+            self.enum_responses = [False] * 128
+            self.enumerating = True
+            self.send_cbus_message(omsg)
+            self.enum_start_time = time.ticks_ms()
+        else:
+            self.logger.log('cbus: no enumeration if SLiM')
 
     def process_enumeration_responses(self) -> None:
         self.enum_start_time = 0

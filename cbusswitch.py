@@ -20,16 +20,14 @@ class cbusswitch:
         self.previous_state_change_at = time.ticks_ms()
         self.previous_state_duration = 0
         self.state_changed = False
-        self.num_interrupts = 0
-        self.last_interrupt_time = 0
 
+        self.num_interrupts = 0
+        self.last_interrupt_time = time.ticks_ms()
         self.tsf = asyncio.ThreadSafeFlag()
         self.pin.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda x: self.tsf.set())
         asyncio.create_task(self.interrupt_handler())
 
     def interrupt_handler(self) -> None:
-        self.last_interrupt_time = time.ticks_ms()
-
         while True:
             await self.tsf.wait()
 
