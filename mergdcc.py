@@ -61,7 +61,12 @@ class merg_cab:
 
     def acquire(self, loco: loco) -> bool:
         self.logger.log(f'merg_cab: requesting session for loco {loco.decoder_id} ...')
-        opcodes = (cbusdefs.OPC_RLOC, cbusdefs.OPC_ERR)
+
+        if loco.session != -1:
+            self.logger.log(f'merg_cab: loco already acquired')
+            return True
+
+        opcodes = (cbusdefs.OPC_PLOC, cbusdefs.OPC_ERR)
         self.sub = cbuspubsub.subscription('cab:sub', self.cbus, canmessage.QUERY_OPCODES, opcodes)
 
         msg = canmessage.canmessage(0, 3, (cbusdefs.OPC_RLOC, loco.decoder_id >> 7, loco.decoder_id & 0x7f))
@@ -77,15 +82,21 @@ class merg_cab:
                 if resp.data[0] == cbusdefs.OPC_ERR:
                     self.logger.log(f'merg_cab: acquire returns error = {resp.data[3]}')
                     break
-                elif resp.data[0] == cbusdefs.OPC_PLOC and resp.data[1] == msg.data[1] and resp.data[2] == msg.data[2]:
-                    loco.session = resp.data[1]
+                elif resp.data[0] == cbusdefs.OPC_PLOC and (resp.data[2] << 8) + resp.data[3] == loco.decoder_id:
                     loco.active = True
+                    loco.session = resp.data[1]
+                    loco.speed = resp.data[4] & 0x7f
+                    loco.dir = resp.data[4] >> 7
+                    loco.functions[0] = resp.data[5]
+                    loco.functions[1] = resp.data[6]
+                    loco.functions[2] = resp.data[7]
                     self.active_sessions[loco.decoder_id] = loco
-                    self.logger.log(f'merg_cab: loco {loco.decoder_id}, session = {loco.session}')
+                    self.logger.log(f'merg_cab: loco {loco.decoder_id} acquired successfully, session = {loco.session}')
                     ok = True
                     break
                 else:
-                    self.logger.log('merg_cab: response for another loco')
+                    id = (resp.data[2] << 8) + resp.data[3]
+                    self.logger.log(f'merg_cab: response for another loco = {id}')
             else:
                 self.logger.log('merg_cab: request failed')
 
@@ -101,7 +112,7 @@ class merg_cab:
 
         if evw is self.sub.evt:
             self.logger.log('merg_cab: received response')
-            resp = self.sub.queue.get()
+            resp = await self.sub.queue.get()
             self.sub.evt.clear()
         elif evw is self.evt:
             self.logger.log('merg_cab: timed out')
@@ -155,6 +166,7 @@ class merg_cab:
             await asyncio.sleep(4)
             for loco in self.active_sessions.values():
                 msg = canmessage.canmessage(0, 2, (cbusdefs.OPC_DKEEP, loco.session))
+                self.cbus.send_cbus_message(msg)
 
     async def err_task(self) -> None:
         sub = cbuspubsub.subscription('merg_cab:err_task', self.cbus, canmessage.QUERY_TUPLES, (cbusdefs.OPC_ERR,))

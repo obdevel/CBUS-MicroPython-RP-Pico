@@ -35,6 +35,7 @@ class subscription:
     def publish(self, msg: canmessage.canmessage) -> None:
         if msg.matches(self.query_type, self.query):
             self.queue.put_nowait(msg)
+            self.evt.set()
 
     async def wait(self):
         self.evt.clear()
