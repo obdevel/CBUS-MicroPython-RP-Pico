@@ -59,7 +59,7 @@ class files_backend(storage_backend):
         try:
             f = open(events_file_name, 'r')
         except OSError:
-            self.logger.log('file does not exist')
+            # self.logger.log('file does not exist')
             return None
 
         data = f.read()
@@ -80,7 +80,7 @@ class files_backend(storage_backend):
         try:
             f = open(nvs_file_name, 'r')
         except OSError:
-            self.logger.log('file does not exist')
+            # self.logger.log('file does not exist')
             return None
 
         data = f.read()
@@ -137,15 +137,15 @@ class cbusconfig:
         self.num_evs = num_evs
         self.event_size = self.num_evs + 4
 
-        self.events = bytearray(self.num_events * self.event_size)
-        self.nvs = bytearray(10 + self.num_nvs)
+        self.nvs = bytearray([0] * (10 + self.num_nvs))
+        self.events = bytearray([255] * (self.num_events * self.event_size))
 
         if self.storage_type == CONFIG_TYPE_FILES:
             self.backend = files_backend(0)
         # elif self.storage_type == CONFIG_TYPE_I2C_EEPROM:
         #     self.backend = eeprom_backend(self.num_evs)
         else:
-            raise TypeError('unknown storage type')
+            raise ValueError('unknown storage type')
 
         self.mode = 0
         self.canid = 0
@@ -332,10 +332,10 @@ class cbusconfig:
 
     def reset_module(self) -> None:
         self.logger.log('reset_module')
-        self.nvs = bytearray(10 + self.num_nvs)
-        self.events = bytearray((self.num_evs + 4) * self.num_events)
-        self.backend.store_events(self.events)
+        self.nvs = bytearray([0] * (10 + self.num_nvs))
+        self.events = bytearray([0xff] * ((self.num_evs + 4) * self.num_events))
         self.backend.store_nvs(self.nvs)
+        self.backend.store_events(self.events)
         self.set_reset_flag(True)
         self.reboot()
 

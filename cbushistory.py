@@ -1,11 +1,13 @@
 # CBUS event history
 
 import time
+from random import randint
 
 import uasyncio as asyncio
 from micropython import const
 
 import canmessage
+import cbus
 import logger
 
 ORDER_ANY = const(0)
@@ -35,7 +37,7 @@ class historyitem:
 class cbushistory:
     """CBUS message history"""
 
-    def __init__(self, bus, max_size: int = -1, time_to_live: int = 10000, query_type: int = canmessage.QUERY_ALL,
+    def __init__(self, cbus: cbus.cbus, max_size: int = -1, time_to_live: int = 10000, query_type: int = 11,
                  query=None) -> None:
         self.logger = logger.logger()
         self.history = []
@@ -43,11 +45,12 @@ class cbushistory:
         self.time_to_live = time_to_live
         self.query_type = query_type
         self.query = query
-        self.bus = bus
+        self.id = randint(0, 65535)  # TODO: check unique
+        self.cbus = cbus
         self.add_evt = asyncio.Event()
         self.last_update = 0
         self.last_item_received = None
-        self.bus.add_history(self)
+        self.cbus.add_history(self)
 
         asyncio.create_task(self.reaper())
 
@@ -64,6 +67,9 @@ class cbushistory:
             self.last_item_received = h
             self.last_update = time.ticks_ms()
             self.add_evt.set()
+
+    def remove(self):
+        self.cbus.remove_history(self)
 
     async def wait(self):
         await self.add_evt.wait()
@@ -162,7 +168,7 @@ class cbushistory:
 
         return state
 
-    def time_of_last_message(self, polarity: int = canmessage.POLARITY_EITHER, match_events_only: bool = True) -> int:
+    def time_of_last_message(self, polarity: int = 2, match_events_only: bool = True) -> int:
         latest_time = 0
 
         for h in self.history:

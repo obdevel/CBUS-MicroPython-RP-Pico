@@ -1,7 +1,8 @@
 # cbuspubsub.py
 # publish/subscribe implementation of the observer pattern
-import random
+
 import re
+from random import randint
 
 import uasyncio as asyncio
 
@@ -15,7 +16,7 @@ class subscription:
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
-        self.id = random.randint(0, 65535)  # TODO: check unique
+        self.id = randint(0, 65535)  # TODO: check unique
         self.query = query
         self.query_type = query_type
         self.regex = None

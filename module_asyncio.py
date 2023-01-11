@@ -289,9 +289,9 @@ class mymodule(cbusmodule.cbusmodule):
             self.cbus.config.set_reset_flag(False)
 
         # test co-routines
-        t0 = asyncio.create_task(self.blink_led_coro())
-        t1 = asyncio.create_task(self.any_test_coro())
-        t2 = asyncio.create_task(self.module_main_loop())
+        _ = asyncio.create_task(self.blink_led_coro())
+        _ = asyncio.create_task(self.any_test_coro())
+        _ = asyncio.create_task(self.module_main_loop())
 
         self.logger.log('asyncio is now running the module main loop and co-routines')
 

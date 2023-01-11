@@ -9,6 +9,7 @@ import canio
 import canmessage
 import cbusconfig
 import cbusdefs
+import cbushistory
 import cbusled
 import cbuspubsub
 import cbusswitch
@@ -69,6 +70,7 @@ class cbus:
         self.consume_own_messages = False
         self.consume_query_type = canmessage.QUERY_ALL
         self.consume_query = None
+
         self.histories = []
         self.subscriptions = []
 
@@ -76,9 +78,10 @@ class cbus:
 
         self.in_transition = False
         self.in_learn_mode = False
+
+        self.enumeration_required = False
         self.enumerating = False
         self.enum_start_time = time.ticks_ms()
-        self.enumeration_required = False
         self.enum_responses = []
         self.timeout_timer = time.ticks_ms()
 
@@ -610,12 +613,17 @@ class cbus:
     def set_long_message_handler(self, handler) -> None:
         self.long_message_handler = handler
 
+    def set_gcserver(self, server: gcserver.gcserver) -> None:
+        self.gridconnect_server = server
+
     def add_history(self, history) -> None:
         # self.logger.log(f'cbus: add history, query type = {history.query_type}, query = {history.query}')
         self.histories.append(history)
 
-    def set_gcserver(self, server: gcserver.gcserver) -> None:
-        self.gridconnect_server = server
+    def remove_history(self, history: cbushistory.cbushistory) -> None:
+        for i, h in enumerate(self.histories):
+            if h.id == history.id:
+                del self.histories[i]
 
     def add_subscription(self, sub: cbuspubsub.subscription) -> None:
         # self.logger.log(
