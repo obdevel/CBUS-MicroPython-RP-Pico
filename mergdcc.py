@@ -89,6 +89,7 @@ class merg_cab:
             else:
                 self.logger.log('merg_cab: request failed')
 
+        self.sub.unsubscribe()
         return ok
 
     async def await_reply(self) -> canmessage.canmessage:

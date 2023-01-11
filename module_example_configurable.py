@@ -35,7 +35,7 @@ class mymodule(cbusmodule.cbusmodule):
         from machine import SPI
         bus = SPI(0, baudrate=10_000_000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=Pin(2), mosi=Pin(3),
                   miso=Pin(4))
-        can = mcp2515.mcp2515(cs_pin=5, interrupt_pin=1, bus=bus)
+        can = mcp2515.mcp2515(osc=16_000_000, cs_pin=5, interrupt_pin=1, bus=bus)
         config = cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4)
         self.cbus = cbus.cbus(can, config)
 
