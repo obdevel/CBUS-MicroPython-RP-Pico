@@ -1,7 +1,5 @@
-# First JW example, taken from Duncan's
-# module_example.py
-# Modified lines 36 to 41 to match Nigel' pin-outs; shown in lines 43 - 56.
 # simplest example CBUS module main class using asyncio library
+# shows how to configure pins for non-standard hardware
 #
 
 import uasyncio as asyncio
