@@ -72,7 +72,14 @@ class merg_cab:
         opcodes = (cbusdefs.OPC_PLOC, cbusdefs.OPC_ERR)
         self.sub = cbuspubsub.subscription('cab:sub', self.cbus, canmessage.QUERY_OPCODES, opcodes)
 
-        msg = canmessage.canmessage(0, 3, (cbusdefs.OPC_RLOC, loco.decoder_id >> 7, loco.decoder_id & 0x7f))
+        # For long addresses, bits 6 and 7 of the upper byte should be set by the CAB.
+        nmra_id = (loco.decoder_id)
+        nmra_id_upper = (nmra_id >> 8)
+        nmra_id_lower = nmra_id & 0xff
+        resp_id = 0
+
+        self.logger.log(f'acquire: id = {nmra_id}, upper = {nmra_id_upper}, lower = {nmra_id_lower}')
+        msg = canmessage.canmessage(0, 3, (cbusdefs.OPC_RLOC, nmra_id_upper, nmra_id_lower))
         self.cbus.send_cbus_message(msg)
 
         ok = False
@@ -82,10 +89,13 @@ class merg_cab:
             resp = await self.await_reply()
 
             if resp:
+                resp_id = (resp.data[2] << 8) + resp.data[3]
+                self.logger.log(f'acquire: processing id = {resp_id}')
+
                 if resp.data[0] == cbusdefs.OPC_ERR:
                     self.logger.log(f'merg_cab: acquire returns error = {resp.data[3]}')
                     break
-                elif resp.data[0] == cbusdefs.OPC_PLOC and (resp.data[2] << 8) + resp.data[3] == loco.decoder_id:
+                elif resp.data[0] == cbusdefs.OPC_PLOC and resp_id == nmra_id:
                     loco.active = True
                     loco.session = resp.data[1]
                     loco.speed = resp.data[4] & 0x7f
@@ -98,8 +108,7 @@ class merg_cab:
                     ok = True
                     break
                 else:
-                    id = (resp.data[2] << 8) + resp.data[3]
-                    self.logger.log(f'merg_cab: response for another loco = {id}')
+                    self.logger.log(f'merg_cab: response for another loco, wanted = {nmra_id}, got = {resp_id}')
             else:
                 self.logger.log('merg_cab: request failed')
 
