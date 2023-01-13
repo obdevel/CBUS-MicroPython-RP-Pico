@@ -51,11 +51,14 @@ class merg_cab:
         self.ka = asyncio.create_task(self.keepalive())
         self.et = asyncio.create_task(self.err_task())
 
-    def dispose(self):
+    def dispose(self, stop=False):
         self.ka.cancel()
         self.et.cancel()
-        for loco in self.active_sessions:
-            self.dispatch(loco)
+        for loco in self.active_sessions.values():
+            if stop:
+                self.emergency_stop(loco)
+            else:
+                self.dispatch(loco)
             del loco
             del self.active_sessions
 
