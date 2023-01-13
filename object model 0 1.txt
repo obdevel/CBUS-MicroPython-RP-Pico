@@ -1,0 +1,58 @@
+MicroPython Library for CBUS
+Simplified Object Model
+
+
+CBUS Module
+(canmodule) --->  CBUS
+				 (cbus) --->  Config
+					|  	   	  (cbusconfig)
+					|  			  |
+					|  			  + ---> Storage
+					|  		 	         (storage_backend)
+					| 				  	    |
+					| 				  	    +--> (files_backend)
+					|  				  	    +--> (eeprom_backend)
+					| 				  	    +--> (json_backend)
+					+ ----->  CAN bus
+					          (canio)
+					              |
+					              + ---> MCP2515 CAN controller
+					           	         (mcp2515)
+
+Event
+(cbusevent)
+    |
+    + ---> Message
+       	  (canmessage)
+
+Message subscription
+(cbuspubsub)
+
+Message history
+(cbushistory)
+
+Sensor
+(sensor)
+    |
+    + ---> Message subscription
+
+Turnout/Signal
+(base_cbus_layout_object)
+    |
+    + ---> Events
+    + ---> Sensor
+
+Route
+(route)
+    |
+    + ---> Route objects
+           (routeobject)
+            	 |
+            	 + ---> Turnouts/Signals
+
+Clock
+(cbusclock)
+    |
+    + ---> Alarms
+       	  (time_subscription)
+

@@ -81,7 +81,8 @@ TT_ROTATE_CLOCKWISE = const(1)
 TT_ROTATE_ANTICLOCKWISE = const(2)
 
 MAX_TIMEOUT = const(2_147_483_647)  # sys.maxsize
-OP_TIMEOUT = 2_000
+OP_TIMEOUT = const(2_000)
+UNCOUPLER_TIMEOUT = const(5_000)
 
 
 class timeout:
@@ -481,3 +482,25 @@ class turntable:
     def wait(self) -> None:
         await self.sensor.wait()
         self.evt.set()
+
+
+class uncoupler:
+    def __init__(self, name: str, cbus: cbus.cbus, event: tuple, auto_off: bool = False, timeout: int = UNCOUPLER_TIMEOUT) -> None:
+        self.logger = logger.logger()
+        self.name = name
+        self.cbus = cbus
+        self.timeout = timeout
+        self.evt = canmessage.event_from_tuple(self.cbus, event)
+        self.auto_off = auto_off
+
+    async def uncouple(self) -> None:
+        self.logger.log(f'uncoupler {self.name} uncoupling')
+        self.evt.send_on()
+
+        if not self.auto_off:
+            self.logger.log(f'uncoupler {self.name} waiting')
+            await asyncio.sleep_ms(self.timeout)
+            self.evt.send_off()
+            self.logger.log(f'uncoupler {self.name} uncoupled')
+
+        self.logger.log(f'uncoupler {self.name} complete')
