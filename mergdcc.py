@@ -187,11 +187,11 @@ class merg_cab:
             self.logger.log('keepalive coro cancelled')
 
     async def err_task(self) -> None:
-        sub = cbuspubsub.subscription('merg_cab:err_task', self.cbus, canmessage.QUERY_TUPLES, (cbusdefs.OPC_ERR,))
+        sub = cbuspubsub.subscription('merg_cab:err_task', self.cbus, canmessage.QUERY_OPCODES, (cbusdefs.OPC_ERR,))
         try:
             while True:
                 msg = await sub.wait()
-                loco_id = msg.data[1] << 8 + msg.data[2]
+                loco_id = (msg.data[1] << 8) + msg.data[2]
                 self.logger.log(f'err_task: got error message, loco = {loco_id}, error = {msg.data[3]}')
         except asyncio.CancelledError:
             self.logger.log('err_task coro cancelled')
