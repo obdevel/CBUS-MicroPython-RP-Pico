@@ -25,8 +25,10 @@ COMMS_TIMEOUT = const(500)
 
 
 class loco:
-    def __init__(self, decoder_id) -> None:
+    def __init__(self, decoder_id: int, long_address: bool) -> None:
         self.decoder_id = decoder_id
+        self.long_address = long_address
+        self.address_flag = '(L)' if self.long_address else '(S)'
         self.speed = 0
         self.direction = DIRECTION_FORWARD
         self.functions = [0] * 30
@@ -44,8 +46,8 @@ class merg_cab:
         self.msg = None
         self.active_sessions = {}  # decoder_id: loco object
 
-        self.evt = asyncio.Event()
-        self.timer = cbusobjects.timeout(self.timeout, self.evt)
+        self.timeout_evt = asyncio.Event()
+        self.timer = cbusobjects.timeout(self.timeout, self.timeout_evt)
         self.sub = None
 
         self.ka = asyncio.create_task(self.keepalive())
@@ -62,75 +64,75 @@ class merg_cab:
             del loco
             del self.active_sessions
 
-    def acquire(self, loco: loco) -> bool:
-        self.logger.log(f'merg_cab: requesting session for loco {loco.decoder_id} ...')
-
+    async def acquire(self, loco: loco) -> bool:
         if loco.session != -1:
             self.logger.log(f'merg_cab: loco already acquired')
             return True
 
+        # For long addresses, bits 6 and 7 of the upper byte should be set by the CAB.
+        nmra_id_upper = (loco.decoder_id >> 8)
+        if loco.long_address:
+            nmra_id_upper |= 0b11000000
+        nmra_id_lower = loco.decoder_id & 0xff
+        nmra_id = (nmra_id_upper << 8) + nmra_id_lower
+
+        self.logger.log(f'merg_cab: requesting session for loco {loco.decoder_id}{loco.address_flag} ...')
+
         opcodes = (cbusdefs.OPC_PLOC, cbusdefs.OPC_ERR)
         self.sub = cbuspubsub.subscription('cab:sub', self.cbus, canmessage.QUERY_OPCODES, opcodes)
 
-        # For long addresses, bits 6 and 7 of the upper byte should be set by the CAB.
-        nmra_id = (loco.decoder_id)
-        nmra_id_upper = (nmra_id >> 8)
-        nmra_id_lower = nmra_id & 0xff
-        resp_id = 0
-
-        self.logger.log(f'acquire: id = {nmra_id}, upper = {nmra_id_upper}, lower = {nmra_id_lower}')
+        # self.logger.log(f'acquire: id = {loco.decoder_id}{loco.address_flag}, upper = {nmra_id_upper}, lower = {nmra_id_lower}')
         msg = canmessage.canmessage(0, 3, (cbusdefs.OPC_RLOC, nmra_id_upper, nmra_id_lower))
         self.cbus.send_cbus_message(msg)
 
-        ok = False
-        t1 = time.ticks_ms()
+        acquired_loco_ok = False
+        start_time = time.ticks_ms()
 
-        while time.ticks_diff(time.ticks_ms(), t1) < self.timeout:
-            resp = await self.await_reply()
+        while time.ticks_diff(time.ticks_ms(), start_time) < self.timeout:
+            response = await self.await_reply()
 
-            if resp:
-                resp_id = (resp.data[2] << 8) + resp.data[3]
-                self.logger.log(f'acquire: processing id = {resp_id}')
+            if response:
+                response_decoder_id = (response.data[2] << 8) + response.data[3]
+                self.logger.log(f'acquire: processing response, id = {response_decoder_id}')
 
-                if resp.data[0] == cbusdefs.OPC_ERR:
-                    self.logger.log(f'merg_cab: acquire returns error = {resp.data[3]}')
+                if response.data[0] == cbusdefs.OPC_ERR:
+                    self.logger.log(f'merg_cab: acquire returns error = {response.data[3]}')
                     break
-                elif resp.data[0] == cbusdefs.OPC_PLOC and resp_id == nmra_id:
+                elif response.data[0] == cbusdefs.OPC_PLOC and (response_decoder_id == loco.decoder_id or response_decoder_id == nmra_id):
                     loco.active = True
-                    loco.session = resp.data[1]
-                    loco.speed = resp.data[4] & 0x7f
-                    loco.dir = resp.data[4] >> 7
-                    loco.functions[0] = resp.data[5]
-                    loco.functions[1] = resp.data[6]
-                    loco.functions[2] = resp.data[7]
+                    loco.session = response.data[1]
+                    loco.speed = response.data[4] & 0x7f
+                    loco.dir = response.data[4] >> 7
+                    loco.functions[0] = response.data[5]
+                    loco.functions[1] = response.data[6]
+                    loco.functions[2] = response.data[7]
                     self.active_sessions[loco.decoder_id] = loco
-                    self.logger.log(f'merg_cab: loco {loco.decoder_id} acquired successfully, session = {loco.session}')
-                    ok = True
+                    self.logger.log(f'merg_cab: loco {loco.decoder_id}{loco.address_flag} acquired successfully, session = {loco.session}')
+                    acquired_loco_ok = True
                     break
                 else:
-                    self.logger.log(f'merg_cab: response for another loco, wanted = {nmra_id}, got = {resp_id}')
+                    self.logger.log(f'merg_cab: response for another loco, wanted = {loco.decoder_id}{loco.address_flag}, got = {response_decoder_id}')
             else:
-                self.logger.log('merg_cab: request failed')
+                self.logger.log('merg_cab: request timed out')
 
         self.sub.unsubscribe()
-        return ok
+        return acquired_loco_ok
 
     async def await_reply(self) -> canmessage.canmessage:
-        resp = None
+        response = None
         _ = asyncio.create_task(self.timer.one_shot())
 
-        self.logger.log('merg_cab: awaiting response ...')
-        evw = await WaitAny((self.evt, self.sub.evt)).wait()
+        self.logger.log('await_reply: awaiting response ...')
+        evw = await WaitAny((self.timeout_evt, self.sub.evt)).wait()
 
         if evw is self.sub.evt:
-            self.logger.log('merg_cab: received response')
-            resp = await self.sub.queue.get()
+            self.logger.log('await_reply: received response')
+            response = await self.sub.queue.get()
             self.sub.evt.clear()
-        elif evw is self.evt:
-            self.logger.log('merg_cab: timed out')
+        elif evw is self.timeout_evt:
+            self.logger.log('await_reply: timed out')
 
-        self.sub.unsubscribe()
-        return resp
+        return response
 
     def dispatch(self, loco: loco) -> None:
         msg = canmessage.canmessage(0, 2, (cbusdefs.OPC_KLOC, loco.session))
@@ -140,49 +142,57 @@ class merg_cab:
             del self.active_sessions[loco.decoder_id]
         except KeyError:
             pass
-        self.logger.log(f'dispatch: id = {loco.decoder_id}')
+        finally:
+            self.logger.log(f'dispatch: id = {loco.decoder_id}{loco.address_flag}')
 
     def set_speed_and_direction(self, loco: loco) -> None:
-        msg = canmessage.canmessage(0, 3, (cbusdefs.OPC_DSPD, loco.session, loco.speed + (loco.direction * 128)))
+        msg = canmessage.canmessage(0, 3, (cbusdefs.OPC_DSPD, loco.session, loco.speed + (loco.direction << 7)))
         self.cbus.send_cbus_message(msg)
         self.logger.log(
-            f'set_speed_and_direction: id = {loco.decoder_id}, speed = {loco.speed}, direction = {loco.direction}')
+            f'set_speed_and_direction: id = {loco.decoder_id}{loco.address_flag}, speed = {loco.speed}, direction = {loco.direction}')
 
     def set_speed(self, loco: loco, speed: int) -> None:
         loco.speed = speed
         self.set_speed_and_direction(loco)
-        self.logger.log(f'set_speed, id = {loco.decoder_id}, speed = {loco.speed}')
+        self.logger.log(f'set_speed, id = {loco.decoder_id}{loco.address_flag}, speed = {loco.speed}')
 
     def set_direction(self, loco: loco, direction: int) -> None:
         loco.direction = direction
         self.set_speed_and_direction(loco)
-        self.logger.log(f'set_direction, id = {loco.decoder_id}, direction = {loco.direction}')
+        self.logger.log(f'set_direction, id = {loco.decoder_id}{loco.address_flag}, direction = {loco.direction}')
 
     def function(self, loco: loco, function: int, polarity: int) -> None:
         opc = cbusdefs.OPC_DFNON if polarity else cbusdefs.OPC_DFNOF
         msg = canmessage.canmessage(0, 3, (opc, loco.session, function))
         self.cbus.send_cbus_message(msg)
-        self.logger.log(f'set function, id = {loco.decoder_id}, function {function} = {polarity}')
+        self.logger.log(f'set function, id = {loco.decoder_id}{loco.address_flag}, function {function} = {polarity}')
 
     def emergency_stop(self, loco: loco) -> None:
         self.set_speed(loco, 1)
-        self.logger.log('e stop')
+        self.logger.log(f'e-stop, id = {loco.decoder_id}{loco.address_flag}')
 
     def emergency_stop_all(self) -> None:
         msg = canmessage.canmessage(0, 1, (cbusdefs.OPC_RESTP,))
         self.cbus.send_cbus_message(msg)
-        self.logger.log('e stop all')
+        self.logger.log('e-stop all')
 
     async def keepalive(self) -> None:
-        while True:
-            await asyncio.sleep(4)
-            for loco in self.active_sessions.values():
-                msg = canmessage.canmessage(0, 2, (cbusdefs.OPC_DKEEP, loco.session))
-                self.cbus.send_cbus_message(msg)
+        try:
+            while True:
+                await asyncio.sleep(4)
+                for loco in self.active_sessions.values():
+                    msg = canmessage.canmessage(0, 2, (cbusdefs.OPC_DKEEP, loco.session))
+                    self.cbus.send_cbus_message(msg)
+        except asyncio.CancelledError:
+            self.logger.log('keepalive coro cancelled')
 
     async def err_task(self) -> None:
         sub = cbuspubsub.subscription('merg_cab:err_task', self.cbus, canmessage.QUERY_TUPLES, (cbusdefs.OPC_ERR,))
-        while True:
-            msg = await sub.wait()
-            loco_id = msg.data[1] << 8 + msg.data[2]
-            self.logger.log(f'err_task: got error message, loco = {loco_id}, error = {msg.data[3]}')
+        try:
+            while True:
+                msg = await sub.wait()
+                loco_id = msg.data[1] << 8 + msg.data[2]
+                self.logger.log(f'err_task: got error message, loco = {loco_id}, error = {msg.data[3]}')
+        except asyncio.CancelledError:
+            self.logger.log('err_task coro cancelled')
+            sub.unsubscribe()
