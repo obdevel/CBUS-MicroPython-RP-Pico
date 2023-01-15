@@ -14,6 +14,7 @@ POLARITY_ON = const(1)
 POLARITY_EITHER = const(2)
 
 QUERY_UNKNOWN = const(-1)
+QUERY_TUPLE = const(20)
 QUERY_TUPLES = const(0)
 QUERY_SHORTCODES = const(1)
 QUERY_OPCODES = const(2)
@@ -172,6 +173,8 @@ class canmessage:
 
         if query_type == QUERY_TUPLES:
             return tuple(self) in query
+        elif query_type == QUERY_TUPLE:
+            return tuple(self) == query
         elif query_type == QUERY_SHORTCODES:
             return self.as_shortcode() in query
         elif query_type == QUERY_OPCODES:

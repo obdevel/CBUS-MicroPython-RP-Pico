@@ -8,7 +8,6 @@ import uasyncio as asyncio
 from machine import Pin
 
 import aiorepl
-import canmessage
 import cbus
 import cbusconfig
 import cbusdefs
@@ -84,11 +83,6 @@ class mymodule(cbusmodule.cbusmodule):
 
         # *** end of initialise method
 
-    def event_handler(self, msg, idx: int) -> None:
-        self.logger.log(f'-- event handler: idx = {idx}: {msg}')
-        ev1 = self.cbus.config.read_event_ev(idx, 1)
-        self.logger.log(f'first EV = {ev1}')
-
     # ***
     # *** coroutines that run in parallel
     # ***
@@ -110,16 +104,8 @@ class mymodule(cbusmodule.cbusmodule):
     # *** user module application task - like Arduino loop()
     async def module_main_loop_coro(self) -> None:
         self.logger.log('main loop coroutine start')
-        pin_state = Pin(10).value()
-        evt = canmessage.cbusevent(mod.cbus, 0, 22, 23)
-
         while True:
             await asyncio.sleep_ms(25)
-            pin = Pin(10).value()
-            if pin != pin_state:
-                pin_state = pin
-                evt.polarity = pin_state
-                evt.send()
 
     # ***
     # *** module main entry point - like Arduino setup()
@@ -127,11 +113,6 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def run(self) -> None:
         self.logger.log('run start')
-
-        # module has been reset - do one-time config here
-        if self.cbus.config.was_reset:
-            self.logger.log('module was reset')
-            self.cbus.config.set_reset_flag(False)
 
         # start coroutines
         self.tb = asyncio.create_task(self.blink_led_coro())
