@@ -23,9 +23,15 @@ POWER_OFF = const(0)
 POWER_ON = const(1)
 COMMS_TIMEOUT = const(500)
 
+LONG_ADDRESS = const(True)
+SHORT_ADDRESS = const(False)
+
 
 class loco:
-    def __init__(self, decoder_id: int, long_address: bool) -> None:
+    def __init__(self, decoder_id: int, long_address: bool = LONG_ADDRESS) -> None:
+        if decoder_id > 127 and not long_address:
+            raise ValueError('loco addresses >127 must be long')
+
         self.decoder_id = decoder_id
         self.long_address = long_address
         self.address_flag = '(L)' if self.long_address else '(S)'
@@ -128,7 +134,7 @@ class merg_cab:
         if evw is self.sub.evt:
             self.logger.log('await_reply: received response')
             response = await self.sub.queue.get()
-            self.sub.evt.clear()
+            # self.sub.evt.clear()
         elif evw is self.timeout_evt:
             self.logger.log('await_reply: timed out')
 

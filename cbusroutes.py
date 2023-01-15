@@ -16,20 +16,37 @@ ROUTE_STATE_SET = const(2)
 
 ROUTE_RELEASE_TIMEOUT = 30_000
 
-STEP_TURNOUT = const(0)
-STEP_SIGNAL_HOME = const(1)
-STEP_SIGNAL_DISTANT = const(2)
-STEP_ROUTE = const(3)
-STEP_LOCO = const(4)
-STEP_SPEED_DIR = const(5)
-STEP_FUNC = const(6)
-STEP_SENSOR = const(7)
-STEP_TIME_WAITFOR = const(8)
-STEP_CLOCK_WAITFOR = const(9)
-STEP_TIME_WAITUNTIL = const(10)
-STEP_CLOCK_WAITUNTIL = const(11)
-STEP_EVENT_WAITFOR = const(12)
-STEP_LOOP = const(13)
+STEP_NOOP = const(0)
+
+STEP_LOCO_ACQUIRE = const(1)
+STEP_LOCO_SPEED_DIR = const(2)
+STEP_LOCO_FUNC = const(3)
+
+STEP_SENSOR = const(4)
+STEP_TURNOUT = const(5)
+STEP_SIGNAL_HOME = const(6)
+STEP_SIGNAL_DISTANT = const(7)
+STEP_ROUTE = const(8)
+
+STEP_TIME_WAITFOR = const(9)
+STEP_CLOCK_WAITFOR = const(10)
+STEP_TIME_WAITUNTIL = const(11)
+STEP_CLOCK_WAITUNTIL = const(12)
+
+STEP_EVENT_WAITFOR = const(13)
+STEP_SEQUENCE_WAITFOR = const(14)
+
+STEP_SEND_EVENT = const(15)
+STEP_UNCOUPLER = const(16)
+STEP_TURNTABLE = const(17)
+
+STEP_LOOP = const(99)
+
+MOVEMENT_STATE_NOT_RUNNING = const(-1)
+MOVEMENT_STATE_PAUSED = const(0)
+MOVEMENT_STATE_RUNNING = const(1)
+
+current_movements = {}
 
 
 class routeobject:
@@ -275,12 +292,11 @@ class step:
 
 
 class movement:
-    def __init__(self, name: str, cbus: cbus.cbus, objects: tuple[step, ...], operate_objects=False, cab=None,
-                 loco: int = 0) -> None:
+    def __init__(self, name: str, cbus: cbus.cbus, steps: tuple[step, ...], autorun: bool = False, operate_objects=False, cab=None, loco: int = 0) -> None:
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
-        self.objects = objects
+        self.steps = steps
         self.operate_objects = operate_objects
 
         self.cab = cab
@@ -290,7 +306,13 @@ class movement:
         self.evt.clear()
         self.sub = cbuspubsub.subscription('ps', self.cbus, 0, 0)
 
-        self.run_task_handle = asyncio.create_task(self.run())
+        self.state = MOVEMENT_STATE_NOT_RUNNING
+        self.current_index = -1
+        current_movements[self.name] = self
+
+        if autorun:
+            self.state = MOVEMENT_STATE_PAUSED
+            self.run_task_handle = asyncio.create_task(self.run_sequence())
 
     def init(self) -> None:
         pass
@@ -303,43 +325,114 @@ class movement:
             steps_list.append(st)
         return tuple(steps_list)
 
-    async def run(self) -> None:
-        try:
-            self.logger.log('movement running...')
+    def run(self):
+        self.state = MOVEMENT_STATE_PAUSED
+        self.run_task_handle = asyncio.create_task(self.run_sequence())
 
-            for i, obj in enumerate(self.objects):
+    async def run_sequence(self) -> None:
+        try:
+            self.logger.log('movement sequence running...')
+
+            for self.current_index in range(len(self.steps)):
                 if not self.evt.is_set():
                     self.logger.log('movement, awaiting event set')
+                    self.state = MOVEMENT_STATE_PAUSED
                     await self.evt.wait()
+                    self.state = MOVEMENT_STATE_RUNNING
                     self.logger.log('movement, event is set, continuing')
-
-                self.logger.log(f'movement:{self.name} processing step {i} = {obj.type}')
-
-                if obj.type == STEP_SENSOR:
-                    self.logger.log('movement, step is sensor')
-                elif obj.type == STEP_SIGNAL_HOME:
-                    self.logger.log('movement, step is signal home')
-                elif obj.type == STEP_TURNOUT:
-                    self.logger.log('movement, step is turnout')
-                elif obj.type == STEP_ROUTE:
-                    pass
-                elif obj.type == STEP_LOCO:
-                    pass
-                elif obj.type == STEP_SPEED_DIR:
-                    pass
-                elif obj.type == STEP_FUNC:
-                    pass
-                elif obj.type == STEP_LOOP:
-                    self.logger.log(f'movement: loop back to step {obj.data[0]}')
-                    i = obj.data
                 else:
-                    self.logger.log(f'unknown movement {obj.type}')
+                    self.state = MOVEMENT_STATE_RUNNING
+
+                current_step = self.steps[self.current_index]
+                self.logger.log(f'movement:{self.name} processing step {self.current_index} = {current_step.type}')
+
+                if current_step.type == STEP_LOCO_ACQUIRE:
+                    self.logger.log('acquire loco')
+                    if not await self.cab.acquire(self.loco):
+                        self.logger.log('failed to acquire loco')
+                        break
+
+                elif current_step.type == STEP_LOCO_SPEED_DIR:
+                    self.logger.log('set loco speed')
+                    self.loco.speed = current_step.data[0]
+                    self.loco.direction = current_step.data[1]
+                    self.cab.set_speed_and_direction(self.loco)
+
+                elif current_step.type == STEP_LOCO_FUNC:
+                    self.logger.log('set loco function')
+                    self.cab.function(self.loco, current_step.data[0], current_step.data[1])
+
+                elif current_step.type == STEP_SENSOR:
+                    self.logger.log(f'sensor {current_step.object.name}, state = {current_step.object.state}')
+
+                elif current_step.type == STEP_SIGNAL_DISTANT:
+                    self.logger.log(f'distant signal {current_step.object.name}, state = {current_step.object.state}')
+
+                elif current_step.type == STEP_SIGNAL_HOME:
+                    self.logger.log(f'home signal {current_step.object.name}, state = {current_step.object.state}')
+
+                elif current_step.type == STEP_TURNOUT:
+                    self.logger.log(f'turnout {current_step.object.name}, state = {current_step.object.state}')
+
+                elif current_step.type == STEP_ROUTE:
+                    self.logger.log(f'route {current_step.object.name}, state = {current_step.object.state}')
+
+                elif current_step.type == STEP_TIME_WAITFOR:
+                    self.logger.log(f'time wait for {current_step.data}')
+                    await asyncio.sleep_ms(current_step.data)
+
+                elif current_step.type == STEP_CLOCK_WAITFOR:
+                    self.logger.log('clock wait for')
+
+                elif current_step.type == STEP_TIME_WAITUNTIL:
+                    self.logger.log(f'time wait until {current_step.desired_state}')
+                    while time.ticks_ms() != current_step.desired_state:
+                        await asyncio.sleep_ms(500)
+
+                elif current_step.type == STEP_CLOCK_WAITUNTIL:
+                    self.logger.log('clock wait until')
+
+                elif current_step.type == STEP_EVENT_WAITFOR:
+                    self.logger.log(f'event wait for event {current_step.data}')
+                    sub = cbuspubsub.subscription('m1', self.cbus, canmessage.QUERY_TUPLES, [current_step.data])
+                    await sub.wait()
+                    sub.unsubscribe()
+
+                elif current_step.type == STEP_SEQUENCE_WAITFOR:
+                    self.logger.log(f'sequence wait for sequence {current_step.data[0]}')
+                    history = cbushistory.cbushistory(self.cbus, 1_000, 10_000, canmessage.QUERY_TUPLES, current_step.data)
+                    while True:
+                        await history.wait()
+                        if history.sequence_received(current_step.data[0]):
+                            history.remove()
+                            break
+
+                elif current_step.type == STEP_SEND_EVENT:
+                    self.logger.log('send event')
+                    evt = canmessage.event_from_tuple(self.cbus, current_step.data)
+                    evt.send()
+
+                elif current_step.type == STEP_UNCOUPLER:
+                    pass
+
+                elif current_step.type == STEP_TURNTABLE:
+                    pass
+
+                elif current_step.type == STEP_LOOP:
+                    self.logger.log(f'loop back to step {current_step.data[0]}')
+                    idx = current_step.data[0]
+
+                else:
+                    self.logger.log(f'unknown movement {current_step.type}')
 
         except asyncio.CancelledError:
             self.logger.log(f'movement cancelled')
+            if self.cab:
+                self.cab.emergency_stop(self.loco)
         finally:
             self.logger.log(f'end of movement')
             self.sub.unsubscribe()
+            del current_movements[self.name]
 
     def pause(self) -> None:
         self.evt.clear()
