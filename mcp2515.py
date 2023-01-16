@@ -358,8 +358,7 @@ tsf = asyncio.ThreadSafeFlag()
 class mcp2515(canio.canio):
     """a canio derived class for use with an MCP2515 CAN controller device"""
 
-    def __init__(self, osc: int = 16_000_000, cs_pin: int = 5, interrupt_pin: int = 1, bus=None, rxq_size: int = 64,
-                 txq_size: int = 8):
+    def __init__(self, osc: int = 16_000_000, cs_pin: int = 5, interrupt_pin: int = 1, bus=None, rxq_size: int = 16, txq_size: int = 4):
         super().__init__()
         self.logger = logger.logger()
         self.poll = False

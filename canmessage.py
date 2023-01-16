@@ -64,6 +64,13 @@ event_opcodes = (
     cbusdefs.OPC_ARSOF3
 )
 
+event_opcodes_lookup = (
+    ((cbusdefs.OPC_ACOF, cbusdefs.OPC_ACON), (cbusdefs.OPC_ASOF, cbusdefs.OPC_ASON)),
+    ((cbusdefs.OPC_ACOF1, cbusdefs.OPC_ACON1), (cbusdefs.OPC_ASOF1, cbusdefs.OPC_ASON1)),
+    ((cbusdefs.OPC_ACOF2, cbusdefs.OPC_ACON2), (cbusdefs.OPC_ASOF2, cbusdefs.OPC_ASON2)),
+    ((cbusdefs.OPC_ACOF3, cbusdefs.OPC_ACON3), (cbusdefs.OPC_ASOF3, cbusdefs.OPC_ASON3))
+)
+
 polarity_lookup = {
     "*": POLARITY_EITHER,
     "+": POLARITY_ON,
@@ -223,16 +230,19 @@ class cbusevent(canmessage):
             self.send_off()
 
     def send_on(self) -> None:
-        opcode = cbusdefs.OPC_ASON if self.nn == 0 else cbusdefs.OPC_ACON
-        self.sync_data(opcode)
-        self.cbus.send_cbus_message(self)
         self.polarity = POLARITY_ON
+        self.sync_data(self.calc_opcode())
+        self.cbus.send_cbus_message(self)
 
     def send_off(self) -> None:
-        opcode = cbusdefs.OPC_ASOF if self.nn == 0 else cbusdefs.OPC_ACOF
-        self.sync_data(opcode)
-        self.cbus.send_cbus_message(self)
         self.polarity = POLARITY_OFF
+        self.sync_data(self.calc_opcode())
+        self.cbus.send_cbus_message(self)
+
+    def calc_opcode(self) -> int:
+        add_bytes = self.dlc - 5
+        evt_length = self.nn == 0
+        return event_opcodes_lookup[add_bytes][evt_length][self.polarity]
 
 
 def message_from_tuple(t: tuple) -> canmessage:
@@ -253,33 +263,35 @@ def message_from_tuple(t: tuple) -> canmessage:
         msg.data[3] = t[2] >> 8
         msg.data[4] = t[2] & 0xff
     else:
-        for x in range(tlen):
-            msg.data[x] = t[x]
+        msg.data = bytearray(t)
 
     return msg
+
+
+def event_from_message(cbus: cbus.cbus, msg: canmessage) -> cbusevent:
+    evt = cbusevent(cbus)
+    evt.canid = cbus.config.canid if msg.canid == 0 else msg.canid
+    # evt.dlc = 5
+    evt.polarity = POLARITY_OFF if msg.data[0] & 1 else POLARITY_ON
+    for i in range(evt.dlc):
+        evt.data[i] = msg.data[i]
+    evt.data[0] = evt.calc_opcode()
+    evt.nn = msg.get_node_number()
+    evt.en = msg.get_event_number()
+
+    return evt
 
 
 def event_from_tuple(cbus: cbus.cbus, t: tuple) -> cbusevent:
     msg = message_from_tuple(t)
     evt = event_from_message(cbus, msg)
     evt.canid = cbus.config.canid
-    evt.dlc = 5
+    # evt.dlc = 5
     evt.polarity = t[0]
     evt.nn = t[1]
     evt.en = t[2]
-    evt.sync_data(NO_OPCODE)
-    return evt
+    evt.sync_data(evt.calc_opcode())
 
-
-def event_from_message(cbus: cbus.cbus, msg: canmessage) -> cbusevent:
-    evt = cbusevent(cbus)
-    evt.canid = cbus.config.canid if msg.canid == 0 else msg.canid
-    evt.dlc = 5
-    evt.polarity = POLARITY_OFF if msg.data[0] & 1 else POLARITY_ON
-    for i in range(evt.dlc):
-        evt.data[i] = msg.data[i]
-    evt.nn = msg.get_node_number()
-    evt.en = msg.get_event_number()
     return evt
 
 
@@ -289,8 +301,10 @@ def event_from_table(cbus: cbus.cbus, idx: int) -> canmessage:
     evdata = cbus.config.read_event(idx)
     for i in range(4):
         evt.data[i + 1] = evdata[i]
+    evt.data[0] = evt.calc_opcode()
     evt.dlc = 5
     evt.polarity = POLARITY_UNKNOWN
     evt.nn = evt.get_node_number()
     evt.en = evt.get_event_number()
+
     return evt

@@ -26,8 +26,8 @@ MSGS_ALL = const(1)
 class cbus:
     def __init__(
             self,
-            can: canio.canio = None,
-            config: cbusconfig.cbusconfig = None,
+            can: canio.canio,
+            config: cbusconfig.cbusconfig,
             switch: cbusswitch.cbusswitch = None,
             led_grn: cbusled.cbusled = None,
             led_ylw: cbusled.cbusled = None,

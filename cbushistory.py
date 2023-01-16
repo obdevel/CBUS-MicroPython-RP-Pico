@@ -27,16 +27,12 @@ WHICH_LATEST = const(2)
 
 
 class historyitem:
-    """CBUS message history item"""
-
     def __init__(self, msg):
         self.msg = msg
         self.arrival_time = time.ticks_ms()
 
 
 class cbushistory:
-    """CBUS message history"""
-
     def __init__(self, cbus: cbus.cbus, max_size: int = -1, time_to_live: int = 10000, query_type: int = 11,
                  query=None) -> None:
         self.logger = logger.logger()
@@ -53,9 +49,6 @@ class cbushistory:
         self.cbus.add_history(self)
 
         asyncio.create_task(self.reaper())
-
-    def set_ttl(self, time_to_live) -> None:
-        self.time_to_live = time_to_live
 
     def add(self, msg: canmessage.canmessage) -> None:
         if not (self.max_size == -1 or len(self.history) < self.max_size):
@@ -187,8 +180,7 @@ class cbushistory:
 
         return latest_time
 
-    def time_diff(self, events: tuple, within: int = TIME_ANY, timespan: int = WINDOW_ANY,
-                  which: int = WHICH_ANY) -> int | None:
+    def time_diff(self, events: tuple, within: int = TIME_ANY, timespan: int = WINDOW_ANY, which: int = WHICH_ANY) -> int | None:
         atimes = []
 
         if len(events) < 2:
@@ -208,8 +200,13 @@ class cbushistory:
         else:
             return None
 
-    def sequence_received(self, events: tuple, order: int = ORDER_ANY, within: int = TIME_ANY, window: int = TIME_ANY,
-                          which: int = WHICH_ANY) -> bool:
+    def any_received(self, events: tuple, within: int = TIME_ANY) -> bool:
+        for ev in events:
+            if self.event_exists(ev, within):
+                return True
+        return False
+
+    def sequence_received(self, events: tuple, order: int = ORDER_ANY, within: int = TIME_ANY, window: int = TIME_ANY, which: int = WHICH_ANY) -> bool:
         times = []
 
         if self.count() < 1 or len(events) < 1:
@@ -242,9 +239,3 @@ class cbushistory:
                 return False
 
         return True
-
-    def any_received(self, events: tuple, within: int = TIME_ANY) -> bool:
-        for ev in events:
-            if self.event_exists(ev, within):
-                return True
-        return False

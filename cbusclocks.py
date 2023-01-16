@@ -7,6 +7,7 @@ import machine
 import uasyncio as asyncio
 from micropython import const
 
+import canmessage
 import logger
 
 WALLCLOCK = const(0)
@@ -78,17 +79,18 @@ class cbusclock:
         self.use_ntp = use_ntp and clock_type == WALLCLOCK
         self.ntp_server = ntp_server if ntp_server else default_ntp_server
         self.ntp_update_interval = 3_600_000
-        self.last_ntp_update = 0
+        self.last_ntp_update = time.ticks_ms()
         self.tz_offset = 0
         self.dst_offset = 0
-        self.send_cbus_events = False
+        self.cbus_event = None
         self.event_freq = 0
         self.event_last_sent = 0
         self.has_temp_sensor = False
         self.temp_pin = 0
         self.current_temperature = 0.0
-        self.last_temp_reading = 0
+        self.last_temp_reading = time.ticks_ms()
         self.subscriptions = []
+        self.tick_funcs = []
 
         self.set_multiplier(1)
 
@@ -118,7 +120,7 @@ class cbusclock:
     def set_time_from_ntp(self, ntp_server: str) -> None:
         import ntptime
         if ntp_server and len(ntp_server) > 0:
-            ntptime.host = ntp_server
+            ntptime.host = self.ntp_server
             ntp_time = ntptime.time()
             if ntp_time > 0:
                 lt = time.gmtime(ntp_time)
@@ -126,6 +128,7 @@ class cbusclock:
                 self.rtc.datetime(tt)
                 self.current_time = time.time()
                 self.last_ntp_update = time.ticks_ms()
+                del ntptime
 
     def set_multiplier(self, multiplier: int) -> None:
         self.multiplier = multiplier
@@ -150,9 +153,13 @@ class cbusclock:
                 del self.subscriptions[i]
                 break
 
-    def send_events(self, send: bool = False, freq: int = 30000):
-        self.send_cbus_events = send
-        self.event_freq = freq
+    def add_tick_func(self, task) -> None:
+        self.tick_funcs.append(task)
+
+    def del_tick_func(self, task) -> None:
+        for i, t in enumerate(self.tick_funcs):
+            if t.task == task:
+                del self.tick_funcs[i]
 
     def read_temperature(self) -> None:
         self.last_temp_reading = time.ticks_ms()
@@ -188,8 +195,13 @@ class cbusclock:
                         if not s.repeat:
                             del self.subscriptions[i]
 
-                if self.send_cbus_events and time.ticks_diff(now, self.event_last_sent) > self.event_freq:
+                if self.cbus_event and time.ticks_diff(now, self.event_last_sent) > self.event_freq:
+                    evt = canmessage.event_from_tuple(self.cbus, self.cbus_event)
+                    evt.send()
                     self.event_last_sent = now
+
+                for t in self.tick_funcs:
+                    t(self.current_time)
 
                 if self.has_temp_sensor and time.ticks_diff(now, self.last_temp_reading) > 10_000:
                     self.read_temperature()

@@ -416,11 +416,11 @@ OPC_DTXC = const(0xE9)  # CBUS long message packet
 # 
 # Modes for STMOD
 # 
-TMOD_SPD_MASK = const(3)  #
-TMOD_SPD_128 = const(0)  #
-TMOD_SPD_14 = const(1)  #
-TMOD_SPD_28I = const(2)  #
-TMOD_SPD_28 = const(3)  #
+# TMOD_SPD_MASK = const(3)  #
+# TMOD_SPD_128 = const(0)  #
+# TMOD_SPD_14 = const(1)  #
+# TMOD_SPD_28I = const(2)  #
+# TMOD_SPD_28 = const(3)  #
 # 
 # Error codes for OPC_ERR
 # 

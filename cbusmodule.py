@@ -3,16 +3,14 @@
 
 import uasyncio as asyncio
 
+import canmessage
 import logger
 
 
 class cbusmodule:
     def __init__(self):
         self.logger = logger.logger()
-        self.lm = None
-        self.history = None
-        self.start_gc_server = False
-        asyncio.create_task(self.mem_coro())
+        asyncio.create_task(self.gc_coro())
 
     def initialise(self):
         pass
@@ -20,20 +18,21 @@ class cbusmodule:
     def run(self):
         pass
 
-    def event_handler(self, msg, idx: int) -> None:
+    def event_handler(self, msg: canmessage, idx: int) -> None:
         self.logger.log(f'-- event handler: idx = {idx}: {msg}')
 
-    def received_message_handler(self, msg) -> None:
+    def received_message_handler(self, msg: canmessage) -> None:
         self.logger.log(f'-- received message handler: {msg}')
 
-    def sent_message_handler(self, msg) -> None:
+    def sent_message_handler(self, msg: canmessage) -> None:
         self.logger.log(f'-- sent message handler: {msg}')
 
     def long_message_handler(self, message: bytearray, streamid: int, status: int) -> None:
         self.logger.log('-- user long message handler:')
         self.logger.log(f'status = {status}, streamid = {streamid}, msg = <{message.decode()}>')
 
-    async def mem_coro(self):
+    @staticmethod
+    async def gc_coro():
         import gc
         gc.enable()
         while True:

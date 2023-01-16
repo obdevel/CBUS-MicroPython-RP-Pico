@@ -78,8 +78,7 @@ class mymodule(cbusmodule.cbusmodule):
         # ***
         # *** module initialisation complete
 
-        self.logger.log(
-            f'module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
+        self.logger.log(f'module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
         self.logger.log(f'free memory = {self.cbus.config.free_memory()} bytes')
         self.logger.log()
 
