@@ -45,7 +45,6 @@ class gcserver:
         idx = len(self.clients) - 1
         self.logger.log(f'gcserver: using client idx = {idx}')
 
-        data = None
         currgc = ''
 
         while True:
@@ -75,15 +74,17 @@ class gcserver:
                         self.peer_queue.enqueue(qmsg(cport, currgc))
                         if self.bus.consume_own_messages:
                             self.bus.can.rx_queue.enqueue(m)
-
-                        await asyncio.sleep_ms(1)
             else:
                 self.logger.log(f'gcserver: client idx = {idx} disconnected, closing stream')
                 break
 
-        for i in range(len(self.clients)):
-            if self.clients[i] == writer:
-                break
+        # for i in range(len(self.clients)):
+        #     if self.clients[i] == writer:
+        #         break
+
+        for i, cl in enumerate(self.clients):
+            if cl == writer:
+                del self.clients[i]
 
         writer.close()
         await writer.wait_closed()
@@ -95,14 +96,17 @@ class gcserver:
                 self.logger.log('gcserver: message(s) available to send')
                 msg = self.output_queue.dequeue()
                 await self.send_message(msg)
+                await asyncio.sleep_ms(5)
 
             while self.peer_queue.available():
+                self.logger.log('gcserver: message(s) available to send to peers')
                 pmsg = self.peer_queue.dequeue()
                 for idx in range(len(self.clients) - 1):
                     cport = self.clients[idx].get_extra_info('peername')
                     if cport != pmsg.source:
                         self.clients[idx].write(pmsg.gc)
                         await self.clients[idx].drain()
+                        await asyncio.sleep_ms(5)
 
             await asyncio.sleep_ms(20)
 
@@ -115,6 +119,7 @@ class gcserver:
                 self.clients[idx].write(gc)
                 await self.clients[idx].drain()
                 count += 1
+                await asyncio.sleep_ms(5)
 
         self.logger.log(f'gcserver: sent message to {count} client(s)')
 

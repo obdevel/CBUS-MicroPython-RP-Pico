@@ -456,14 +456,18 @@ def op(which):
 mov = 0
 
 
-def move_test():
+def move_test(timer):
     global mov
 
     st1 = cbusroutes.step(t1, cbusroutes.STEP_TURNOUT, None, 0)
     st2 = cbusroutes.step(s1, cbusroutes.STEP_SIGNAL_HOME, None, 0)
     st3 = cbusroutes.step(mod.sensor1, cbusroutes.STEP_SENSOR, None, 0)
+    st4 = cbusroutes.step(r, cbusroutes.STEP_ROUTE, None, 0)
+    st5 = cbusroutes.step(None, cbusroutes.STEP_EVENT_WAITFOR, (0, 22, 23), 0)
+    st6 = cbusroutes.step(None, cbusroutes.STEP_SEQUENCE_WAITFOR, (((0, 22, 23), (1, 22, 23)),), 0)
+    st7 = cbusroutes.step(None, cbusroutes.STEP_TIME_WAITFOR, timer, 0)
 
-    steps = (st1, st2, st3)
+    steps = (st1, st2, st3, st4, st5, st6, st7,)
     mov = cbusroutes.movement('mov', mod.cbus, steps)
 
 

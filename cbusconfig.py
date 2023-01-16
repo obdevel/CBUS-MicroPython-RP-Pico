@@ -1,6 +1,7 @@
 # cbusconfig.py
 
 import gc
+import json
 
 from micropython import const
 
@@ -8,18 +9,19 @@ import cbus
 # import i2ceeprom
 import logger
 
-nvs_file_name = const('/nvs.dat')
-events_file_name = const('/events.dat')
+NVS_FILENAME = const('/nvs.dat')
+EVENTS_FILENAME = const('/events.dat')
 
 CONFIG_TYPE_FILES = const(0)
-CONFIG_TYPE_I2C_EEPROM = const(1)
+CONFIG_TYPE_JSON = const(1)
+CONFIG_TYPE_I2C_EEPROM = const(2)
 
 
 class storage_backend:
     events = ''
     nvs = ''
 
-    def __init__(self, storage_type=CONFIG_TYPE_FILES, ev_offset=0):
+    def __init__(self, storage_type=CONFIG_TYPE_FILES, ev_offset: int = 0):
         self.logger = logger.logger()
         self.storage_type = storage_type
         self.ev_offset = ev_offset
@@ -42,55 +44,135 @@ class storage_backend:
     def store_nvs(self, nvs):
         pass
 
-    def __str__(self):
-        pass
 
+# backend using binary files
 
 class files_backend(storage_backend):
-    def __init__(self, ev_offset):
+    def __init__(self, ev_offset: int = 0):
         self.logger = logger.logger()
         super().__init__(ev_offset)
 
     def init_events(self, events):
-        f = open(events_file_name, 'w')
+        f = open(EVENTS_FILENAME, 'w')
         f.write(bytearray(events))
         f.close()
 
     def load_events(self, ev_size):
         try:
-            f = open(events_file_name, 'r')
+            f = open(EVENTS_FILENAME, 'r')
         except OSError:
-            # self.logger.log('file does not exist')
             return None
 
-        data = f.read()
+        try:
+            data = f.read()
+        except UnicodeError:
+            return None
+
         f.close()
         return bytearray(data.encode('ascii'))
 
     def store_events(self, events):
-        f = open(events_file_name, 'w')
+        f = open(EVENTS_FILENAME, 'w')
         f.write(bytearray(events))
         f.close()
 
     def init_nvs(self, nvs):
-        f = open(nvs_file_name, 'w')
+        f = open(NVS_FILENAME, 'w')
         f.write(bytearray(nvs))
         f.close()
 
     def load_nvs(self, num_nvs):
         try:
-            f = open(nvs_file_name, 'r')
+            f = open(NVS_FILENAME, 'r')
         except OSError:
-            # self.logger.log('file does not exist')
             return None
 
-        data = f.read()
+        try:
+            data = f.read()
+        except UnicodeError:
+            return None
+
         f.close()
         return bytearray(data.encode('ascii'))
 
     def store_nvs(self, nvs):
-        f = open(nvs_file_name, 'w')
+        f = open(NVS_FILENAME, 'w')
         f.write(bytearray(nvs))
+        f.close()
+
+
+# backend using json text files
+
+class json_backend(storage_backend):
+
+    def __init__(self, ev_offset: int = 0):
+        self.logger = logger.logger()
+        super(json_backend, self).__init__(ev_offset)
+
+    @staticmethod
+    def dict_from_array(a: list) -> dict:
+        d = dict([(key, value) for key, value in enumerate(a)])
+        return d
+
+    def init_events(self, events):
+        f = open(EVENTS_FILENAME, 'w')
+        d = self.dict_from_array(events)
+        s = json.dumps(d)
+        f.write(bytearray(s))
+        f.close()
+
+    def load_events(self, ev_size):
+        try:
+            f = open(EVENTS_FILENAME, 'r')
+        except OSError:
+            return None
+
+        try:
+            data = f.read()
+        except UnicodeError:
+            return None
+
+        f.close()
+        s = data.encode('ascii')
+        d = json.loads(s)
+        b = bytearray(d.values())
+        return bytearray(b)
+
+    def store_events(self, events):
+        f = open(EVENTS_FILENAME, 'w')
+        d = self.dict_from_array(events)
+        s = json.dumps(d)
+        f.write(bytearray(s))
+        f.close()
+
+    def init_nvs(self, nvs):
+        with open(NVS_FILENAME, 'w') as f:
+            d = self.dict_from_array(nvs)
+            s = json.dumps(d)
+            f.write(bytearray(s))
+
+    def load_nvs(self, num_nvs):
+        try:
+            f = open(NVS_FILENAME, 'r')
+        except OSError:
+            return None
+
+        try:
+            data = f.read()
+        except UnicodeError:
+            return None
+
+        f.close()
+        s = data.encode('ascii')
+        d = json.loads(s)
+        b = bytearray(d.values())
+        return bytearray(b)
+
+    def store_nvs(self, nvs):
+        f = open(NVS_FILENAME, 'w')
+        d = self.dict_from_array(nvs)
+        s = json.dumps(d)
+        f.write(bytearray(s))
         f.close()
 
 
@@ -143,8 +225,8 @@ class cbusconfig:
 
         if self.storage_type == CONFIG_TYPE_FILES:
             self.backend = files_backend(0)
-        # elif self.storage_type == CONFIG_TYPE_I2C_EEPROM:
-        #     self.backend = eeprom_backend(self.num_evs)
+        elif self.storage_type == CONFIG_TYPE_JSON:
+            self.backend = json_backend(0)
         else:
             raise ValueError('unknown storage type')
 

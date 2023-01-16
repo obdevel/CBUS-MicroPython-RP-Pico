@@ -60,6 +60,8 @@ class mymodule(cbusmodule.cbusmodule):
             0,
         ]
 
+        # change the CBUS switch and LED pin numbers if desired
+
         self.cbus.set_leds(21, 20)
         self.cbus.set_switch(22)
         self.cbus.set_name(self.module_name)
