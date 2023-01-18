@@ -2,6 +2,7 @@
 
 import time
 
+import machine
 import uasyncio as asyncio
 from micropython import const
 
@@ -89,6 +90,7 @@ class cbus:
         self.num_messages_sent = 0
 
         self.callback_flag = asyncio.ThreadSafeFlag()
+        self.timer = machine.Timer(-1)
 
         self.func_dict = {
             cbusdefs.OPC_ACON: self.handle_accessory_event,
@@ -129,7 +131,7 @@ class cbus:
             cbusdefs.OPC_RSTAT: self.handle_rstat,
         }
 
-    def begin(self, freq=20, max_msgs=1) -> None:
+    def begin(self, freq=20, max_msgs=10) -> None:
         self.config.begin()
         self.has_ui and self.indicate_mode(self.config.mode)
         self.can.message_received_flag = self.callback_flag
@@ -169,7 +171,7 @@ class cbus:
         self.send_cbus_message_no_header_update(msg)
 
     def send_cbus_message_no_header_update(self, msg) -> None:
-        self.can.send_message__(msg)
+        await self.can.send_message__(msg)
         self.has_ui and self.config.mode == MODE_FLIM and self.led_grn.pulse()
         self.num_messages_sent += 1
 
@@ -186,10 +188,10 @@ class cbus:
     def set_config(self, config: cbusconfig.cbusconfig) -> None:
         self.config = config
 
-    async def process(self, freq=50, max_msgs=1) -> None:
+    async def process(self, freq=50, max_msgs=10) -> None:
         while True:
-            await asyncio.sleep_ms(freq)
-            # await self.callback_flag.wait()
+            # await asyncio.sleep_ms(freq)
+            await self.callback_flag.wait()
             # self.logger.log('cbus: callback flag was set')
 
             if self.in_transition and time.ticks_diff(time.ticks_ms(), self.timeout_timer) >= 30000:
@@ -358,7 +360,7 @@ class cbus:
             self.enumeration_required = True
 
     def handle_canid(self, msg: canmessage.canmessage) -> None:
-        # self.logger.log('CANID')
+        self.logger.log('cbus: CANID')
 
         if msg.get_node_number() == self.config.node_number:
             if msg.data[3] < 1 or msg.data[3] > 99:
@@ -368,7 +370,7 @@ class cbus:
                 self.send_nn_ack()
 
     def handle_enum(self, msg: canmessage.canmessage) -> None:
-        # self.logger.log('ENUM')
+        self.logger.log('cbus: ENUM')
 
         if (msg.get_node_number() == self.config.node_number
                 and msg.get_canid() != self.config.canid
@@ -578,6 +580,7 @@ class cbus:
             self.enumerating = True
             self.send_cbus_message(omsg)
             self.enum_start_time = time.ticks_ms()
+            self.timer.init(period=110, mode=machine.Timer.ONE_SHOT, callback=lambda t: self.callback_flag.set())
         else:
             self.logger.log('cbus: no enumeration if SLiM')
 

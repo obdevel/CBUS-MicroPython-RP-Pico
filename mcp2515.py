@@ -352,8 +352,6 @@ RXB = [
     ),
 ]
 
-tsf = asyncio.ThreadSafeFlag()
-
 
 class mcp2515(canio.canio):
     """a canio derived class for use with an MCP2515 CAN controller device"""
@@ -395,6 +393,7 @@ class mcp2515(canio.canio):
 
         self.mcp2515_rx_index = 0
         self.txb_free = [True] * 3
+        self.tsf = asyncio.ThreadSafeFlag()
         self.message_received_flag = None
 
     def spi_transfer(self, value: int = SPI_DUMMY_INT, read: bool = False):
@@ -411,44 +410,6 @@ class mcp2515(canio.canio):
             return int.from_bytes(output, sys.byteorder)
         self.bus.write(value_as_byte)
         return None
-
-    async def process_isr(self):
-        self.logger.log('irq handler is waiting for interrupts')
-        while True:
-            await tsf.wait()
-            self.num_interrupts += 1
-            await self.poll_for_messages()
-
-    def process_interrupts(self):
-        i = self.get_interrupts()
-
-        # if i & CANINTF.CANINTF_RX0IF:
-        #     self.poll_for_messages(0)
-        # elif i & CANINTF.CANINTF_RX1IF:
-        #     self.poll_for_messages(1)
-
-        if i & CANINTF.CANINTF_RX0IF or i & CANINTF.CANINTF_RX1IF:
-            self.poll_for_messages()
-        elif i & CANINTF.CANINTF_TX0IF:
-            self.clear_txb_interrupt(0)
-        elif i & CANINTF.CANINTF_TX1IF:
-            self.clear_txb_interrupt(1)
-        elif i & CANINTF.CANINTF_TX2IF:
-            self.clear_txb_interrupt(2)
-
-        # elif i & CANINTF.CANINTF_ERRIF:
-        #     pass
-        # elif i & CANINTF.CANINTF_MERRF:
-        #     pass
-        # else:
-        #     pass
-
-    async def available(self) -> bool:
-        return await self.rx_queue.available()
-
-    async def get_next_message(self) -> canmessage.canmessage:
-        msg = await self.rx_queue.dequeue()
-        return msg
 
     def begin(self) -> int:
         self.reset()
@@ -529,7 +490,7 @@ class mcp2515(canio.canio):
         self.set_bit_rate()
 
         # install interrupt handler and run message processor
-        self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: tsf.set())
+        self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: self.tsf.set())
         # self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: self.poll_for_messages())
         # self.interrupt_pin.irq(trigger=Pin.IRQ_FALLING, handler=lambda t: self.process_interrupts())
         asyncio.create_task(self.process_isr())
@@ -538,6 +499,44 @@ class mcp2515(canio.canio):
         self.set_normal_mode()
 
         return ERROR.ERROR_OK
+
+    async def process_isr(self):
+        self.logger.log('irq handler is waiting for interrupts')
+        while True:
+            await self.tsf.wait()
+            self.num_interrupts += 1
+            await self.poll_for_messages()
+
+    # def process_interrupts(self):
+    #     i = self.get_interrupts()
+    #
+    #     # if i & CANINTF.CANINTF_RX0IF:
+    #     #     self.poll_for_messages(0)
+    #     # elif i & CANINTF.CANINTF_RX1IF:
+    #     #     self.poll_for_messages(1)
+    #
+    #     if i & CANINTF.CANINTF_RX0IF or i & CANINTF.CANINTF_RX1IF:
+    #         self.poll_for_messages()
+    #     elif i & CANINTF.CANINTF_TX0IF:
+    #         self.clear_txb_interrupt(0)
+    #     elif i & CANINTF.CANINTF_TX1IF:
+    #         self.clear_txb_interrupt(1)
+    #     elif i & CANINTF.CANINTF_TX2IF:
+    #         self.clear_txb_interrupt(2)
+    #
+    #     elif i & CANINTF.CANINTF_ERRIF:
+    #         pass
+    #     elif i & CANINTF.CANINTF_MERRF:
+    #         pass
+    #     else:
+    #         pass
+
+    async def available(self) -> bool:
+        return await self.rx_queue.available()
+
+    async def get_next_message(self) -> canmessage.canmessage:
+        msg = await self.rx_queue.dequeue()
+        return msg
 
     def reset(self):
         self.cs_pin.low()
@@ -746,12 +745,12 @@ class mcp2515(canio.canio):
     #     else:
     #         return None
 
-    def send_message(self, msg: canmessage.canmessage, txbn=None) -> int:
-        if self.txb_free[0] or self.txb_free[1] or self.txb_free[2]:
-            return self.send_message_(msg, txbn)
-        else:
-            self.tx_queue.enqueue(msg)
-            return ERROR.ERROR_OK
+    # def send_message(self, msg: canmessage.canmessage, txbn=None) -> int:
+    #     if self.txb_free[0] or self.txb_free[1] or self.txb_free[2]:
+    #         return self.send_message_(msg, txbn)
+    #     else:
+    #         self.tx_queue.enqueue(msg)
+    #         return ERROR.ERROR_OK
 
     def send_message_(self, frame: canmessage.canmessage, txbn=None) -> int:
         if txbn is None:
@@ -843,7 +842,8 @@ class mcp2515(canio.canio):
 
         return rc
 
-    async def poll_for_messages(self, rxbn: int = None):
+    async def poll_for_messages(self, rxbn: int = None) -> None:
+        msgs = 0
         while self.check_receive():
             # self.logger.log('mcp2515 has message')
             # us = time.ticks_us()
@@ -852,12 +852,14 @@ class mcp2515(canio.canio):
             if r == ERROR.ERROR_OK:
                 # self.logger.log('mcp2515: enqueuing new message')
                 await self.rx_queue.enqueue(msg)
-                if self.message_received_flag is not None:
-                    self.message_received_flag.set()
+                msgs += 1
                 # self.logger.log(f'message processing took {time.ticks_diff(time.ticks_us(), us)} us')
                 # self.logger.log('message queued')
             else:
-                self.logger.log(f'mcp2515: no message, err = {r}')
+                self.logger.log(f'mcp2515: no message to read, err = {r}')
+
+        if msgs > 0 and self.message_received_flag is not None:
+            self.message_received_flag.set()
 
     def check_receive(self) -> bool:
         res = self.get_status()
