@@ -1,8 +1,12 @@
 # circularQueue.py
 
+import uasyncio as asyncio
+
+import canmessage
+
 
 class circularQueue:
-    def __init__(self, capacity: int):
+    def __init__(self, capacity: int) -> None:
         self.capacity = capacity
         self.queue = [None] * capacity
         self.tail = -1
@@ -12,29 +16,40 @@ class circularQueue:
         self.dropped = 0
         self.puts = 0
         self.gets = 0
+        self.lock = asyncio.Lock()
 
-    def available(self) -> bool:
-        return self.size > 0
+    async def available(self) -> bool:
+        await self.lock.acquire()
+        size = self.size
+        self.lock.release()
+        return size > 0
 
-    def enqueue(self, item):
+    async def enqueue(self, item: canmessage.canmessage) -> None:
         if self.size == self.capacity:
             self.dropped = self.dropped + 1
+            print('queue is full')
         else:
+            await self.lock.acquire()
             self.tail = (self.tail + 1) % self.capacity
             self.queue[self.tail] = item
             self.size = self.size + 1
             self.hwm = self.hwm + 1 if self.size > self.hwm else self.hwm
             self.puts += 1
+            self.lock.release()
 
-    def dequeue(self):
+    async def dequeue(self) -> canmessage.canmessage | None:
         if self.size == 0:
+            print('nothing to dequeue')
             return None
         else:
+            await self.lock.acquire()
             tmp = self.queue[self.head]
             self.queue[self.head] = None
             self.head = (self.head + 1) % self.capacity
             self.size = self.size - 1
             self.gets += 1
+            self.lock.release()
+            # print('item dequeued')
             return tmp
 
     # def peek(self):

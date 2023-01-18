@@ -15,13 +15,13 @@ class canio:
     def send_message(self, msg: canmessage) -> int:
         pass
 
-    def get_next_message(self) -> canmessage.canmessage:
+    async def get_next_message(self) -> canmessage.canmessage:
+        pass
+
+    async def available(self) -> bool:
         pass
 
     def poll_for_messages(self) -> None:
-        pass
-
-    def available(self) -> bool:
         pass
 
     def reset(self) -> None:

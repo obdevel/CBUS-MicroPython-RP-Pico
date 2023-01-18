@@ -26,7 +26,12 @@ class cbusled:
 
     async def run(self) -> None:
         while True:
-            await asyncio.sleep_ms(PULSE_DURATION)
+            if self.pulsing:
+                sleep_duration = PULSE_DURATION
+            else:
+                sleep_duration = BLINK_DURATION
+
+            await asyncio.sleep_ms(sleep_duration)
 
             if self.blinking and time.ticks_diff(time.ticks_ms(), self.last_change_time) >= BLINK_DURATION:
                 self.state = not self.state

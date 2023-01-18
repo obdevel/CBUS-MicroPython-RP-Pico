@@ -24,6 +24,7 @@ class cbusswitch:
         self.num_interrupts = 0
         self.last_interrupt_time = time.ticks_ms()
         self.tsf = asyncio.ThreadSafeFlag()
+        self.switch_changed_state_flag = None
         self.pin.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=lambda x: self.tsf.set())
         asyncio.create_task(self.interrupt_handler())
 
@@ -42,6 +43,9 @@ class cbusswitch:
                     self.previous_state_duration = time.ticks_diff(time.ticks_ms(), self.previous_state_change_at)
                     self.previous_state_change_at = time.ticks_ms()
                     self.logger.log(f"switch state changed, state = {self.state}, last duration = {self.previous_state_duration}")
+
+                    if self.switch_changed_state_flag is not None:
+                        self.switch_changed_state_flag.set()
                 else:
                     self.state_changed = False
 

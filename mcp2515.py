@@ -395,6 +395,7 @@ class mcp2515(canio.canio):
 
         self.mcp2515_rx_index = 0
         self.txb_free = [True] * 3
+        self.message_received_flag = None
 
     def spi_transfer(self, value: int = SPI_DUMMY_INT, read: bool = False):
         """Write int value to SPI and read SPI as int value simultaneously.
@@ -416,7 +417,7 @@ class mcp2515(canio.canio):
         while True:
             await tsf.wait()
             self.num_interrupts += 1
-            self.poll_for_messages()
+            await self.poll_for_messages()
 
     def process_interrupts(self):
         i = self.get_interrupts()
@@ -442,11 +443,12 @@ class mcp2515(canio.canio):
         # else:
         #     pass
 
-    def available(self) -> bool:
-        return self.rx_queue.available()
+    async def available(self) -> bool:
+        return await self.rx_queue.available()
 
-    def get_next_message(self) -> canmessage.canmessage:
-        return self.rx_queue.dequeue()
+    async def get_next_message(self) -> canmessage.canmessage:
+        msg = await self.rx_queue.dequeue()
+        return msg
 
     def begin(self) -> int:
         self.reset()
@@ -841,14 +843,17 @@ class mcp2515(canio.canio):
 
         return rc
 
-    def poll_for_messages(self, rxbn: int = None):
+    async def poll_for_messages(self, rxbn: int = None):
         while self.check_receive():
             # self.logger.log('mcp2515 has message')
             # us = time.ticks_us()
             self.num_interrupts += 1
             r, msg = self.read_message(rxbn)
             if r == ERROR.ERROR_OK:
-                self.rx_queue.enqueue(msg)
+                # self.logger.log('mcp2515: enqueuing new message')
+                await self.rx_queue.enqueue(msg)
+                if self.message_received_flag is not None:
+                    self.message_received_flag.set()
                 # self.logger.log(f'message processing took {time.ticks_diff(time.ticks_us(), us)} us')
                 # self.logger.log('message queued')
             else:
