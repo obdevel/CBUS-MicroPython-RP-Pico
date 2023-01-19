@@ -86,7 +86,7 @@ __exec_task = asyncio.create_task(__code())
 
 # REPL task. Invoke this with an optional mutable globals dict.
 async def task(g=None, prompt="--> "):
-    print("Starting asyncio REPL...")
+    # print("Starting asyncio REPL...")
     if g is None:
         g = __import__("__main__").__dict__
         pass

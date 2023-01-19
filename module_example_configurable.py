@@ -31,8 +31,7 @@ class mymodule(cbusmodule.cbusmodule):
         # ** and the number of events, EVs and NVs
 
         from machine import SPI
-        bus = SPI(0, baudrate=10_000_000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=Pin(2), mosi=Pin(3),
-                  miso=Pin(4))
+        bus = SPI(0, baudrate=10_000_000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=Pin(2), mosi=Pin(3), miso=Pin(4))
         can = mcp2515.mcp2515(osc=16_000_000, cs_pin=5, interrupt_pin=1, bus=bus)
         config = cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4)
         self.cbus = cbus.cbus(can, config)
@@ -81,10 +80,8 @@ class mymodule(cbusmodule.cbusmodule):
         # ***
         # *** module initialisation complete
 
-        self.logger.log(
-            f'module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
+        self.logger.log(f'module: name = <{self.module_name.decode()}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
         self.logger.log(f'free memory = {self.cbus.config.free_memory()} bytes')
-        self.logger.log()
 
         # *** end of initialise method
 
@@ -129,10 +126,10 @@ class mymodule(cbusmodule.cbusmodule):
         self.tb = asyncio.create_task(self.blink_led_coro())
         self.tm = asyncio.create_task(self.module_main_loop_coro())
 
-        self.logger.log('asyncio is now running the module main loop and co-routines')
-
         # start async REPL and wait for exit
         repl = asyncio.create_task(aiorepl.task(globals()))
+
+        self.logger.log('module startup complete')
         await asyncio.gather(repl)
 
 

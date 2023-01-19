@@ -501,7 +501,7 @@ class mcp2515(canio.canio):
         return ERROR.ERROR_OK
 
     async def process_isr(self):
-        self.logger.log('irq handler is waiting for interrupts')
+        # self.logger.log('irq handler is waiting for interrupts')
         while True:
             await self.tsf.wait()
             self.num_interrupts += 1

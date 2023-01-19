@@ -78,9 +78,8 @@ class mymodule(cbusmodule.cbusmodule):
         # ***
         # *** module initialisation complete
 
-        self.logger.log(f'module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
+        self.logger.log(f'module: name = <{self.cbus.name.decode()}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
         self.logger.log(f'free memory = {self.cbus.config.free_memory()} bytes')
-        self.logger.log()
 
         # *** end of initialise method
 
@@ -113,16 +112,15 @@ class mymodule(cbusmodule.cbusmodule):
     # ***
 
     async def run(self) -> None:
-        self.logger.log('run start')
+        # self.logger.log('run start')
 
         # start coroutines
         self.tb = asyncio.create_task(self.blink_led_coro())
         self.tm = asyncio.create_task(self.module_main_loop_coro())
 
-        self.logger.log('asyncio is now running the module main loop and co-routines')
-
-        # start async REPL and wait for exit
         repl = asyncio.create_task(aiorepl.task(globals()))
+
+        self.logger.log('module startup complete')
         await asyncio.gather(repl)
 
 

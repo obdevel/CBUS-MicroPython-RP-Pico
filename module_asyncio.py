@@ -85,7 +85,7 @@ class mymodule(cbusmodule.cbusmodule):
         self.cbus.set_received_message_handler(self.received_message_handler)
         self.cbus.set_sent_message_handler(self.sent_message_handler)
 
-        self.cbus.begin(freq=20, max_msgs=1)
+        self.cbus.begin()
 
         # ***
         # *** end of bare minimum init
@@ -123,7 +123,7 @@ class mymodule(cbusmodule.cbusmodule):
 
         self.logger.log(f'initialise complete, time = {time.ticks_diff(time.ticks_ms(), start_time)} ms')
         self.logger.log()
-        self.logger.log(f'module: name = <{self.module_name}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
+        self.logger.log(f'module: name = <{self.module_name.decode()}>, mode = {self.cbus.config.mode}, can id = {self.cbus.config.canid}, node number = {self.cbus.config.node_number}')
         self.logger.log(f'free memory = {self.cbus.config.free_memory()} bytes')
         self.logger.log()
 
@@ -220,7 +220,8 @@ class mymodule(cbusmodule.cbusmodule):
         sub = cbuspubsub.subscription('pubsub_test', self.cbus, query_type=canmessage.QUERY_OPCODES, query=canmessage.event_opcodes)
         while True:
             msg = await sub.wait()
-            self.logger.log(f'pubsub_test_coro: (any event) got subscribed event = {tuple(msg)}')
+            # msg = WaitAny(sub).wait()
+            self.logger.log(f'pubsub_test_coro: received an event (any event) = {tuple(msg)}')
             pevent.set()
 
     async def sensor_test_coro(self, pevent: asyncio.Event) -> None:
@@ -235,8 +236,7 @@ class mymodule(cbusmodule.cbusmodule):
     async def any_test_coro(self) -> None:
         self.logger.log('any_test_coro: start')
 
-        evt = asyncio.Event()
-        timer = cbusobjects.timeout(5_000, evt)
+        timer = cbusobjects.timeout(5_000)
 
         evp = asyncio.Event()
         evs = asyncio.Event()
@@ -248,9 +248,9 @@ class mymodule(cbusmodule.cbusmodule):
         _ = asyncio.create_task(timer.one_shot())
 
         while True:
-            evw = await WaitAny((evt, evp, evs, evh)).wait()
+            evw = await WaitAny((timer.evt, evp, evs, evh)).wait()
 
-            if evw is evt:
+            if evw is timer.evt:
                 self.logger.log('any_test_coro: timer expired')
             elif evw is evp:
                 self.logger.log('any_test_coro: pubsub_test_coro event was set')

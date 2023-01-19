@@ -60,8 +60,6 @@ class cbus:
         else:
             self.name = name
 
-        self.poll = False
-
         self.event_handler = None
         self.opcodes = ()
         self.received_message_handler = None
@@ -131,47 +129,50 @@ class cbus:
             cbusdefs.OPC_RSTAT: self.handle_rstat,
         }
 
-    def begin(self, freq=20, max_msgs=10) -> None:
+    def begin(self, max_msgs: int = 10) -> None:
         self.config.begin()
         self.has_ui and self.indicate_mode(self.config.mode)
         self.can.message_received_flag = self.callback_flag
         self.switch.switch_changed_state_flag = self.callback_flag
         self.can.begin()
 
-        asyncio.create_task(self.process(freq, max_msgs))
+        asyncio.create_task(self.process(max_msgs))
 
-    def set_switch(self, pin) -> None:
+    def set_switch(self, pin: int) -> None:
         self.switch = cbusswitch.cbusswitch(pin)
         self.has_ui = True
 
-    def set_leds(self, grn_pin, ylw_pin) -> None:
+    def set_leds(self, grn_pin: int, ylw_pin: int) -> None:
         self.led_grn = cbusled.cbusled(grn_pin)
         self.led_ylw = cbusled.cbusled(ylw_pin)
         self.has_ui = True
 
-    def set_name(self, name) -> None:
+    def set_name(self, name: bytes) -> None:
         self.name = bytearray(name)
 
-    def set_params(self, params) -> None:
+    def set_params(self, params: list) -> None:
         self.params = params
 
     def set_event_handler(self, event_handler) -> None:
         self.event_handler = event_handler
 
-    def set_received_message_handler(self, received_message_handler, opcodes=()) -> None:
+    def set_received_message_handler(self, received_message_handler, opcodes: tuple = ()) -> None:
         self.received_message_handler = received_message_handler
         self.opcodes = opcodes
 
     def set_sent_message_handler(self, sent_message_handler) -> None:
         self.sent_message_handler = sent_message_handler
 
-    def send_cbus_message(self, msg) -> None:
+    def send_cbus_message(self, msg: canmessage.canmessage) -> None:
+        # self.logger.log(f'cbus: send_cbus_message: sending {msg}')
         msg.canid = self.config.canid
         msg.make_header()
+        # self.logger.log(f'cbus: send_cbus_message: calling send_cbus_message_no_header_update')
         self.send_cbus_message_no_header_update(msg)
 
     def send_cbus_message_no_header_update(self, msg) -> None:
-        await self.can.send_message__(msg)
+        # self.logger.log(f'cbus: send_cbus_message_no_header_update: sending {msg}')
+        self.can.send_message__(msg)
         self.has_ui and self.config.mode == MODE_FLIM and self.led_grn.pulse()
         self.num_messages_sent += 1
 
@@ -188,11 +189,9 @@ class cbus:
     def set_config(self, config: cbusconfig.cbusconfig) -> None:
         self.config = config
 
-    async def process(self, freq=50, max_msgs=10) -> None:
+    async def process(self, max_msgs: int = 10) -> None:
         while True:
-            # await asyncio.sleep_ms(freq)
             await self.callback_flag.wait()
-            # self.logger.log('cbus: callback flag was set')
 
             if self.in_transition and time.ticks_diff(time.ticks_ms(), self.timeout_timer) >= 30000:
                 self.logger.log('cbus: mode change timeout')
@@ -233,16 +232,13 @@ class cbus:
 
                     if 1000 >= self.switch.previous_state_duration >= 250:
                         self.logger.log('cbus: short switch press = enumerate')
-                        if self.config.canid > 0:
+                        if self.config.mode == MODE_FLIM:
                             self.begin_enumeration()
 
                     if self.switch.previous_state_duration < 250:
                         self.logger.log('cbus: switch press too short')
 
                     self.switch.reset()
-
-            if self.poll:
-                self.can.poll_for_messages()
 
             processed_msgs = 0
 
@@ -298,10 +294,7 @@ class cbus:
                         self.logger.log('cbus: no message found')
 
                 else:
-                    # self.logger.log(f'cbus: end of data, avail = {avail}, msgs = {processed_msgs}')
                     break
-
-            # self.logger.log('cbus: end of process')
 
         #
         # end of process()
@@ -360,7 +353,7 @@ class cbus:
             self.enumeration_required = True
 
     def handle_canid(self, msg: canmessage.canmessage) -> None:
-        self.logger.log('cbus: CANID')
+        # self.logger.log('cbus: CANID')
 
         if msg.get_node_number() == self.config.node_number:
             if msg.data[3] < 1 or msg.data[3] > 99:
@@ -546,7 +539,8 @@ class cbus:
             self.long_message_handler.handle_long_message_fragment(msg)
 
     def handle_rstat(self, msg: canmessage.canmessage) -> None:
-        self.logger.log('cbus: no action for OPC_RSTAT')
+        # self.logger.log('cbus: no action for OPC_RSTAT')
+        pass
 
     def send_nn_ack(self) -> None:
         omsg = canmessage.canmessage(self.config.canid, 3)
