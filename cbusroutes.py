@@ -34,7 +34,7 @@ STEP_TIME_WAITUNTIL = const(11)
 STEP_CLOCK_WAITUNTIL = const(12)
 
 STEP_EVENT_WAITFOR = const(13)
-STEP_SEQUENCE_WAITFOR = const(14)
+STEP_HISTORY_SEQUENCE_WAITFOR = const(14)
 
 STEP_SEND_EVENT = const(15)
 STEP_UNCOUPLER = const(16)
@@ -46,7 +46,7 @@ MOVEMENT_STATE_NOT_RUNNING = const(-1)
 MOVEMENT_STATE_PAUSED = const(0)
 MOVEMENT_STATE_RUNNING = const(1)
 
-current_movements = {}
+current_sequences = {}
 
 
 class routeobject:
@@ -55,6 +55,13 @@ class routeobject:
         self.robject = robject
         self.target_state = target_state
         self.when = when
+
+
+ACQUIRE_EVENT = const(0)
+SET_EVENT = const(1)
+RELEASE_EVENT = const(2)
+OCCUPIED_EVENT = const(3)
+UNOCCUPIED_EVENT = const(4)
 
 
 class route:
@@ -69,7 +76,7 @@ class route:
         self.state = ROUTE_STATE_UNSET
         self.release_timeout_task_handle = None
 
-        # acquire, set, release
+        # acquire, set, release, occupied, unoccupied
         self.feedback_events = feedback_events
 
         self.occupancy_events = occupancy_events
@@ -88,6 +95,7 @@ class route:
 
         self.lock = asyncio.Lock()
         self.locked_objects = []
+        self.evt = asyncio.Event()
         self.set_time = None
 
     def __call__(self):
@@ -95,30 +103,39 @@ class route:
 
     def udf(self, msg):
         ev = tuple(msg)
-        for ev1 in self.occupancy_events:
-            if ev in ev1:
-                return True
-        return False
+        # self.logger.log(f'udf called with event = {ev}')
+        return ev in self.occupancy_events
 
     async def occupancy_task(self):
+        last_state = False
+
         while True:
             await self.occupancy_history.wait()
-            self.logger.log(f'route:{self.name}: got occupancy event')
             t = tuple(self.occupancy_history.last_item_received.msg)
+            self.logger.log(f'route {self.name}: got occupancy event')
 
             for i, e in enumerate(self.occupancy_events):
                 if t == e[0]:
-                    self.logger.log(f'route:{self.name}: event is 0')
+                    self.logger.log(f'route:{self.name}: event {i} is off')
                     self.occupancy_states[i] = False
                     break
                 if t == e[1]:
-                    self.logger.log(f'route:{self.name}: event is 1')
+                    self.logger.log(f'route:{self.name}: event {i} is on')
                     self.occupancy_states[i] = True
                     break
 
             self.occupied = True in self.occupancy_states
             self.logger.log(f'route:{self.name}: occupied = {self.occupied}')
             self.occupied_evt.set()
+
+            if last_state != self.occupied:
+                last_state = self.occupied
+                if t := canmessage.tuple_from_tuples(self.feedback_events, OCCUPIED_EVENT):
+                    evt = canmessage.event_from_tuple(self.cbus, t)
+                    if self.occupied:
+                        evt.send_on()
+                    else:
+                        evt.send_off()
 
     async def acquire(self) -> bool:
         if self.occupied:
@@ -147,8 +164,8 @@ class route:
                     obj.robject.release()
                 self.lock.release()
 
-        if self.feedback_events and len(self.feedback_events) > 0:
-            msg = canmessage.event_from_tuple(self.cbus, self.feedback_events[0])
+        if t := canmessage.tuple_from_tuples(self.feedback_events, ACQUIRE_EVENT):
+            msg = canmessage.event_from_tuple(self.cbus, t)
             msg.polarity = all_objects_locked
             msg.send()
 
@@ -200,10 +217,12 @@ class route:
         for s in self.robjects:
             state_ok = s.robject.state > ROUTE_STATE_UNSET
 
-        if self.feedback_events and len(self.feedback_events) > 1:
-            msg = canmessage.event_from_tuple(self.cbus, self.feedback_events[1])
+        if t := canmessage.tuple_from_tuples(self.feedback_events, SET_EVENT):
+            msg = canmessage.event_from_tuple(self.cbus, t)
             msg.polarity = state_ok
             msg.send()
+
+        self.evt.set()
 
     def release(self) -> None:
         for obj in self.locked_objects:
@@ -212,10 +231,11 @@ class route:
 
         self.locked_objects = []
         self.lock.release()
+        self.evt.clear()
         self.state = ROUTE_STATE_UNSET
 
-        if self.feedback_events and len(self.feedback_events) > 2:
-            msg = canmessage.event_from_tuple(self.cbus, self.feedback_events[2])
+        if t := canmessage.tuple_from_tuples(self.feedback_events, RELEASE_EVENT):
+            msg = canmessage.event_from_tuple(self.cbus, t)
             msg.send()
 
     def keepalive(self, delta: int = 60_000):
@@ -232,6 +252,9 @@ class route:
         if self.state != ROUTE_STATE_UNSET:
             self.logger.log('route release timeout')
             self.release()
+
+    def wait(self, timeout=0):
+        await self.evt.wait()
 
 
 class entry_exit:
@@ -291,8 +314,8 @@ class step:
         self.desired_state = desired_state
 
 
-class movement:
-    def __init__(self, name: str, cbus: cbus.cbus, steps: tuple[step, ...], autorun: bool = False, operate_objects=False, cab=None, loco: int = 0) -> None:
+class sequence:
+    def __init__(self, name: str, cbus: cbus.cbus, steps: tuple[step, ...], autorun: bool = False, operate_objects=False, cab=None, loco: int = 0, clock=None) -> None:
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
@@ -306,9 +329,11 @@ class movement:
         self.evt.clear()
         self.sub = cbuspubsub.subscription('ps', self.cbus, 0, 0)
 
+        self.clock = None
+
         self.state = MOVEMENT_STATE_NOT_RUNNING
         self.current_index = -1
-        current_movements[self.name] = self
+        current_sequences[self.name] = self
 
         if autorun:
             self.state = MOVEMENT_STATE_PAUSED
@@ -317,13 +342,13 @@ class movement:
     def init(self) -> None:
         pass
 
-    @staticmethod
-    def create_from_list(step_objects: tuple[tuple, ...]) -> tuple:
-        steps_list = []
-        for step_object in step_objects:
-            st = step(step_object[0], step_object[1], step_object[2], step_object[3])
-            steps_list.append(st)
-        return tuple(steps_list)
+    # @staticmethod
+    # def create_from_list(step_objects: tuple[tuple, ...]) -> tuple:
+    #     steps_list = []
+    #     for step_object in step_objects:
+    #         st = step(step_object[0], step_object[1], step_object[2], step_object[3])
+    #         steps_list.append(st)
+    #     return tuple(steps_list)
 
     def run(self):
         self.state = MOVEMENT_STATE_PAUSED
@@ -331,20 +356,20 @@ class movement:
 
     async def run_sequence(self) -> None:
         try:
-            self.logger.log('movement sequence running...')
+            self.logger.log('sequence running...')
 
             for self.current_index in range(len(self.steps)):
                 if not self.evt.is_set():
-                    self.logger.log('movement, awaiting event set')
+                    self.logger.log('sequence, awaiting event set')
                     self.state = MOVEMENT_STATE_PAUSED
                     await self.evt.wait()
                     self.state = MOVEMENT_STATE_RUNNING
-                    self.logger.log('movement, event is set, continuing')
+                    self.logger.log('sequence, event is set, continuing')
                 else:
                     self.state = MOVEMENT_STATE_RUNNING
 
                 current_step = self.steps[self.current_index]
-                self.logger.log(f'movement:{self.name} processing step {self.current_index} = {current_step.type}')
+                self.logger.log(f'sequence:{self.name} processing step {self.current_index} = {current_step.type}')
 
                 if current_step.type == STEP_LOCO_ACQUIRE:
                     self.logger.log('acquire loco')
@@ -367,15 +392,27 @@ class movement:
 
                 elif current_step.type == STEP_SIGNAL_DISTANT:
                     self.logger.log(f'distant signal {current_step.object.name}, state = {current_step.object.state}')
+                    if self.operate_objects:
+                        pass
+                    await current_step.object.wait()
 
                 elif current_step.type == STEP_SIGNAL_HOME:
                     self.logger.log(f'home signal {current_step.object.name}, state = {current_step.object.state}')
+                    if self.operate_objects:
+                        pass
+                    await current_step.object.wait()
 
                 elif current_step.type == STEP_TURNOUT:
                     self.logger.log(f'turnout {current_step.object.name}, state = {current_step.object.state}')
+                    if self.operate_objects:
+                        pass
+                    await current_step.object.wait()
 
                 elif current_step.type == STEP_ROUTE:
                     self.logger.log(f'route {current_step.object.name}, state = {current_step.object.state}')
+                    if self.operate_objects:
+                        pass
+                    await current_step.object.wait()
 
                 elif current_step.type == STEP_TIME_WAITFOR:
                     self.logger.log(f'time wait for {current_step.data}')
@@ -393,14 +430,14 @@ class movement:
                     self.logger.log('clock wait until')
 
                 elif current_step.type == STEP_EVENT_WAITFOR:
-                    self.logger.log(f'event wait for event {current_step.data}')
-                    sub = cbuspubsub.subscription('m1', self.cbus, canmessage.QUERY_TUPLES, [current_step.data])
+                    self.logger.log(f'wait for event {current_step.data}')
+                    sub = cbuspubsub.subscription('m1', self.cbus, canmessage.QUERY_TUPLES, tuple(current_step.data))
                     await sub.wait()
                     sub.unsubscribe()
 
-                elif current_step.type == STEP_SEQUENCE_WAITFOR:
-                    self.logger.log(f'sequence wait for sequence {current_step.data[0]}')
-                    history = cbushistory.cbushistory(self.cbus, 1_000, 10_000, canmessage.QUERY_TUPLES, current_step.data)
+                elif current_step.type == STEP_HISTORY_SEQUENCE_WAITFOR:
+                    self.logger.log(f'wait for sequence {current_step.data[0]}')
+                    history = cbushistory.cbushistory(self.cbus, 1_000, 10_000, canmessage.QUERY_TUPLES, tuple(current_step.data))
                     while True:
                         await history.wait()
                         if history.sequence_received(current_step.data[0]):
@@ -413,26 +450,26 @@ class movement:
                     evt.send()
 
                 elif current_step.type == STEP_UNCOUPLER:
-                    pass
+                    current_step.object.on()
 
                 elif current_step.type == STEP_TURNTABLE:
-                    pass
+                    current_step.object.position_to(current_step.data, True)
 
                 elif current_step.type == STEP_LOOP:
                     self.logger.log(f'loop back to step {current_step.data[0]}')
                     idx = current_step.data[0]
 
                 else:
-                    self.logger.log(f'unknown movement {current_step.type}')
+                    self.logger.log(f'unknown sequence step type {current_step.type}')
 
         except asyncio.CancelledError:
-            self.logger.log(f'movement cancelled')
+            self.logger.log(f'sequence cancelled')
             if self.cab:
                 self.cab.emergency_stop(self.loco)
         finally:
-            self.logger.log(f'end of movement')
+            self.logger.log(f'end of sequence')
             self.sub.unsubscribe()
-            del current_movements[self.name]
+            del current_sequences[self.name]
 
     def pause(self) -> None:
         self.evt.clear()

@@ -28,6 +28,8 @@ QUERY_LONG_MESSAGES = const(9)
 QUERY_UDF = const(10)
 QUERY_ALL = const(11)
 QUERY_NONE = const(12)
+QUERY_NN = const(13)
+QUERY_DN = const(14)
 
 event_opcodes = (
     cbusdefs.OPC_ACON,
@@ -176,12 +178,15 @@ class canmessage:
         print()
 
     def matches(self, query_type: int = QUERY_ALL, query=None) -> bool:
-        # self.logger.log(f'matches: query_type = {query_type}, query = {query}')
-
-        if query_type == QUERY_TUPLES:
-            return tuple(self) in query
-        elif query_type == QUERY_TUPLE:
-            return tuple(self) == query
+        if query_type in (QUERY_TUPLES, QUERY_TUPLE):
+            if isinstance(query, tuple):
+                if len(query) == 1:
+                    return tuple(self) == query
+                else:
+                    return tuple(self) in query
+            else:
+                self.logger.log(f'matches: expected tuple as query, query = {query}')
+                return False
         elif query_type == QUERY_SHORTCODES:
             return self.as_shortcode() in query
         elif query_type == QUERY_OPCODES:
@@ -204,6 +209,10 @@ class canmessage:
             return query(self)
         elif query_type == QUERY_ALL:
             return True
+        elif query_type == QUERY_NN:
+            return self.get_node_number() == query
+        elif query_type == QUERY_DN:
+            return self.get_event_number() == query
         else:
             return False
 
@@ -308,3 +317,13 @@ def event_from_table(cbus: cbus.cbus, idx: int) -> canmessage:
     evt.en = evt.get_event_number()
 
     return evt
+
+
+def tuple_from_tuples(events: tuple, which: int) -> tuple | None:
+    t = None
+    try:
+        t = events[which]
+    except IndexError:
+        t = None
+    finally:
+        return t

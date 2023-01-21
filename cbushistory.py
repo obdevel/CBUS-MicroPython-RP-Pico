@@ -149,7 +149,7 @@ class cbushistory:
         else:
             return self.received_after(event1, event2)
 
-    def current_event_state(self, event: tuple) -> int:
+    def current_event_polarity(self, event: tuple) -> int:
         state = canmessage.POLARITY_UNKNOWN
         earliest_time = 0
 

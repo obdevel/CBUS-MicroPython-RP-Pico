@@ -26,6 +26,8 @@ class subscription:
             self.regex = re.compile(query)
         self.subscribe()
 
+        self.logger.log(f'subscription: query_type = {self.query_type}, query = {self.query}')
+
     def subscribe(self) -> None:
         self.cbus.add_subscription(self)
 
@@ -33,6 +35,8 @@ class subscription:
         self.cbus.remove_subscription(self)
 
     def publish(self, msg: canmessage.canmessage) -> None:
+        self.logger.log(f'subscription: publish, query_type = {self.query_type}, query = {self.query}')
+
         if msg.matches(self.query_type, self.query):
             self.queue.put_nowait(msg)
             self.evt.set()
