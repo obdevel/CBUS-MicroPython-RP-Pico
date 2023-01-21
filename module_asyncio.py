@@ -15,7 +15,6 @@ import cbusdefs
 # import cbuslongmessage
 import cbusmodule
 import cbusobjects
-import cbusroutes
 import logger
 import mcp2515
 
@@ -414,6 +413,8 @@ s2 = cbusobjects.semaphore_signal('s2',
                                   mod.cbus,
                                   control_events=((0, 22, 30), (1, 22, 30)))
 
+import cbusroutes
+
 tobj1 = cbusroutes.routeobject(t1, cbusobjects.TURNOUT_STATE_CLOSED)
 tobj2 = cbusroutes.routeobject(t2, cbusobjects.TURNOUT_STATE_THROWN)
 sobj1 = cbusroutes.routeobject(s1, cbusobjects.SIGNAL_STATE_SET, cbusobjects.WHEN_BEFORE)
@@ -457,18 +458,19 @@ sensor1 = cbusobjects.binary_sensor('sensor1', mod.cbus, ((0, 22, 23), (1, 22, 2
 
 
 def seq_test(timer):
+    import cbussequence
     global seq
 
-    st1 = cbusroutes.step(t1, cbusroutes.STEP_TURNOUT, None, 0)
-    st2 = cbusroutes.step(s1, cbusroutes.STEP_SIGNAL_HOME, None, 0)
-    st3 = cbusroutes.step(sensor1, cbusroutes.STEP_SENSOR, None, 0)
-    st4 = cbusroutes.step(r, cbusroutes.STEP_ROUTE, None, 0)
-    st5 = cbusroutes.step(None, cbusroutes.STEP_EVENT_WAITFOR, ((0, 22, 30),), 0)
-    st6 = cbusroutes.step(None, cbusroutes.STEP_HISTORY_SEQUENCE_WAITFOR, (((0, 22, 31), (1, 22, 31)),), 0)
-    st7 = cbusroutes.step(None, cbusroutes.STEP_TIME_WAITFOR, timer, 0)
+    st1 = cbussequence.step(t1, cbussequence.STEP_TURNOUT, None, 0)
+    st2 = cbussequence.step(s1, cbussequence.STEP_SIGNAL_HOME, None, 0)
+    st3 = cbussequence.step(sensor1, cbussequence.STEP_SENSOR, None, 0)
+    st4 = cbussequence.step(r, cbussequence.STEP_ROUTE, None, 0)
+    st5 = cbussequence.step(None, cbussequence.STEP_EVENT_WAITFOR, ((0, 22, 30),), 0)
+    st6 = cbussequence.step(None, cbussequence.STEP_HISTORY_SEQUENCE_WAITFOR, (((0, 22, 31), (1, 22, 31)),), 0)
+    st7 = cbussequence.step(None, cbussequence.STEP_TIME_WAITFOR, timer, 0)
 
-    steps = (st1, st2, st3, st5, st6, st7,)
-    seq = cbusroutes.sequence('seq1', mod.cbus, steps)
+    steps = (st1, st2, st3, st7,)
+    seq = cbussequence.sequence('seq1', mod.cbus, steps)
 
 
 # *** start the scheduler and run the app class main method
