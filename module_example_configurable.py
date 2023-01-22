@@ -140,3 +140,5 @@ asyncio.run(mod.run())
 
 # the asyncio scheduler is now in control
 # no code after this line is executed
+
+print('*** application has ended ***')

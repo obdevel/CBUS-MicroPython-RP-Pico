@@ -5,14 +5,13 @@
 import time
 
 import uasyncio as asyncio
-from machine import RTC, Pin
+from machine import Pin
 from micropython import const
 
 import aiorepl
 import cbus
 import cbusconfig
 import cbusdefs
-# import cbuslongmessage
 import cbusmodule
 import cbusobjects
 import logger
@@ -102,15 +101,15 @@ class mymodule(cbusmodule.cbusmodule):
         # self.history = cbushistory.cbushistory(self.cbus, max_size=256, time_to_live=1000)
 
         # network-related
-        self.is_picow = is_picow
-        self.start_gc_server = start_gc_server
-
-        if self.is_picow:
-            self.connect_wifi()
-            self.get_ntp_time()
-
-            if self.start_gc_server:
-                self.run_gc_server()
+        # self.is_picow = is_picow
+        # self.start_gc_server = start_gc_server
+        #
+        # if self.is_picow:
+        #     self.connect_wifi()
+        #     self.get_ntp_time()
+        #
+        #     if self.start_gc_server:
+        #         self.run_gc_server()
 
         # ***
         # *** module initialisation complete
@@ -130,54 +129,54 @@ class mymodule(cbusmodule.cbusmodule):
     # *** network-related methods
     # ***
 
-    def connect_wifi(self) -> None:
-        try:
-            import network
-            self.logger.log('device is Pico W')
-            self.wlan = network.WLAN(network.STA_IF)
-            self.wlan.active(True)
-            self.wlan.connect('HUAWEI-B311-E39A', '33260100')
-            self.logger.log('waiting for wifi...')
-            tt = time.ticks_ms()
-
-            while not self.wlan.isconnected() and time.ticks_diff(time.ticks_ms(), tt) < 5000:
-                time.sleep_ms(500)
-
-            if self.wlan.isconnected():
-                self.ip = self.wlan.ifconfig()[0]
-                self.channel = self.wlan.config('channel')
-                self.logger.log(f'connected to wifi, channel = {self.channel}, address = {self.ip}')
-                self.host = self.ip
-            else:
-                self.logger.log('unable to connect to wifi')
-
-        except ImportError:
-            self.logger.log('import failed; device is not Pico W')
-            self.is_picow = False
-
-    def get_ntp_time(self) -> None:
-        try:
-            import ntptime
-            ntptime.host = ntp_server
-            self.logger.log(f'getting NTP time from {ntp_server} ...')
-            nt = ntptime.time()
-            lt = time.gmtime(nt)
-            tt = (lt[0], lt[1], lt[2], 4, lt[3], lt[4], lt[5], lt[6])
-            self.rtc = RTC()
-            self.rtc.datetime(tt)
-            self.logger.log(f'NTP time = {tt}')
-        except ImportError:
-            self.logger.log('import failed; device is not Pico W')
-            self.is_picow = False
-
-    def run_gc_server(self) -> None:
-        try:
-            import gcserver
-            self.gcserver = gcserver.gcserver(self.cbus, self.host, 5550)
-            asyncio.create_task(
-                asyncio.start_server(self.gcserver.client_connected_cb, self.gcserver.host, self.gcserver.port))
-        except ImportError:
-            self.logger.log('import failed; device is not Pico W')
+    # def connect_wifi(self) -> None:
+    #     try:
+    #         import network
+    #         self.logger.log('device is Pico W')
+    #         self.wlan = network.WLAN(network.STA_IF)
+    #         self.wlan.active(True)
+    #         self.wlan.connect('HUAWEI-B311-E39A', '33260100')
+    #         self.logger.log('waiting for wifi...')
+    #         tt = time.ticks_ms()
+    #
+    #         while not self.wlan.isconnected() and time.ticks_diff(time.ticks_ms(), tt) < 5000:
+    #             time.sleep_ms(500)
+    #
+    #         if self.wlan.isconnected():
+    #             self.ip = self.wlan.ifconfig()[0]
+    #             self.channel = self.wlan.config('channel')
+    #             self.logger.log(f'connected to wifi, channel = {self.channel}, address = {self.ip}')
+    #             self.host = self.ip
+    #         else:
+    #             self.logger.log('unable to connect to wifi')
+    #
+    #     except ImportError:
+    #         self.logger.log('import failed; device is not Pico W')
+    #         self.is_picow = False
+    #
+    # def get_ntp_time(self) -> None:
+    #     try:
+    #         import ntptime
+    #         ntptime.host = ntp_server
+    #         self.logger.log(f'getting NTP time from {ntp_server} ...')
+    #         nt = ntptime.time()
+    #         lt = time.gmtime(nt)
+    #         tt = (lt[0], lt[1], lt[2], 4, lt[3], lt[4], lt[5], lt[6])
+    #         self.rtc = RTC()
+    #         self.rtc.datetime(tt)
+    #         self.logger.log(f'NTP time = {tt}')
+    #     except ImportError:
+    #         self.logger.log('import failed; device is not Pico W')
+    #         self.is_picow = False
+    #
+    # def run_gc_server(self) -> None:
+    #     try:
+    #         import gcserver
+    #         self.gcserver = gcserver.gcserver(self.cbus, self.host, 5550)
+    #         asyncio.create_task(
+    #             asyncio.start_server(self.gcserver.client_connected_cb, self.gcserver.host, self.gcserver.port))
+    #     except ImportError:
+    #         self.logger.log('import failed; device is not Pico W')
 
     # ***
     # *** coroutines that run in parallel
@@ -478,3 +477,5 @@ asyncio.run(mod.run())
 
 # *** the asyncio scheduler is now in control
 # *** no code after this line is executed
+
+print('*** application has ended ***')

@@ -756,8 +756,8 @@ class mcp2515(canio.canio):
         if txbn is None:
             return self.send_message__(frame)
 
-        if frame.dlc > CAN_MAX_DLEN:
-            return ERROR.ERROR_FAILTX
+        # if frame.dlc > CAN_MAX_DLEN:
+        #     return ERROR.ERROR_FAILTX
 
         txbuf = TXB[txbn]
         id_ = frame.canid & (CAN_EFF_MASK if frame.ext else CAN_SFF_MASK)
@@ -785,8 +785,8 @@ class mcp2515(canio.canio):
         return ERROR.ERROR_OK
 
     def send_message__(self, frame: canmessage.canmessage) -> int:
-        if frame.dlc > CAN_MAX_DLEN:
-            return ERROR.ERROR_FAILTX
+        # if frame.dlc > CAN_MAX_DLEN:
+        #     return ERROR.ERROR_FAILTX
 
         tx_buffers = (TXBn.TXB0, TXBn.TXB1, TXBn.TXB2)
 
@@ -814,8 +814,8 @@ class mcp2515(canio.canio):
             id_ |= CAN_EFF_FLAG
 
         dlc_ = tbufdata[MCP_DLC] & DLC_MASK
-        if dlc_ > CAN_MAX_DLEN:
-            return ERROR.ERROR_FAIL, None
+        # if dlc_ > CAN_MAX_DLEN:
+        #     return ERROR.ERROR_FAIL, None
 
         ctrl = self.read_register(rxb.CTRL)
         if ctrl & RXBnCTRL_RTR:
@@ -844,10 +844,11 @@ class mcp2515(canio.canio):
 
     async def poll_for_messages(self, rxbn: int = None) -> None:
         msgs = 0
+        self.num_interrupts += 1
+
         while self.check_receive():
             # self.logger.log('mcp2515 has message')
             # us = time.ticks_us()
-            self.num_interrupts += 1
             r, msg = self.read_message(rxbn)
             if r == ERROR.ERROR_OK:
                 # self.logger.log('mcp2515: enqueuing new message')
