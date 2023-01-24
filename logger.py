@@ -10,6 +10,7 @@ WARN = const(1)
 ERROR = const(2)
 DEBUG = const(3)
 
+current_level = DEBUG
 
 class logger:
     def __new__(cls):
@@ -18,7 +19,8 @@ class logger:
         return cls.instance
 
     @staticmethod
-    def log(msg: str = '') -> None:
-        tstr = f'{time.ticks_ms():10} {msg}'
-        sys.stdout.write(tstr)
-        sys.stdout.write(b'\n')
+    def log(msg: str = '', level: int = DEBUG) -> None:
+        if level >= current_level:
+            tstr = f'{time.ticks_ms():10} {msg}'
+            sys.stdout.write(tstr)
+            sys.stdout.write(b'\n')

@@ -157,7 +157,7 @@ class cbushistory:
             if h.msg.get_node_number() == event[1] and h.msg.get_event_number() == event[2]:
                 if h.arrival_time > earliest_time:
                     earliest_time = h.arrival_time
-                    state = (canmessage.POLARITY_OFF if (h.msg.data[0] & 1) else canmessage.POLARITY_ON)
+                    state = canmessage.POLARITY_OFF if (h.msg.data[0] & 1) else canmessage.POLARITY_ON
 
         return state
 

@@ -395,14 +395,14 @@ cbusobjects.OP_TIMEOUT = 5_000
 t1 = cbusobjects.turnout('t1',
                          mod.cbus,
                          control_events=((0, 22, 25), (1, 22, 25)),
-                         sensor_events=((0, 22, 26), (1, 22, 26)),
-                         wait_for_sensor=False)
+                         feedback_events=((0, 22, 26), (1, 22, 26)),
+                         wait_for_feedback=False)
 
 t2 = cbusobjects.turnout('t2',
                          mod.cbus,
                          control_events=((0, 22, 27), (1, 22, 27)),
-                         sensor_events=((0, 22, 28), (1, 22, 28)),
-                         wait_for_sensor=True)
+                         feedback_events=((0, 22, 28), (1, 22, 28)),
+                         wait_for_feedback=True)
 
 s1 = cbusobjects.semaphore_signal('s1',
                                   mod.cbus,
@@ -419,10 +419,12 @@ tobj2 = cbusroutes.routeobject(t2, cbusobjects.TURNOUT_STATE_THROWN)
 sobj1 = cbusroutes.routeobject(s1, cbusobjects.SIGNAL_STATE_SET, cbusobjects.WHEN_BEFORE)
 sobj2 = cbusroutes.routeobject(s2, cbusobjects.SIGNAL_STATE_CLEAR, cbusobjects.WHEN_AFTER)
 
-rf = ((0, 22, 70), (0, 22, 71), (0, 22, 72), (0, 22, 73), (0, 22, 74))
-ro = ((0, 22, 80), (0, 22, 81), (0, 22, 82), (0, 22, 83), (0, 22, 84), (1, 22, 80), (1, 22, 81), (1, 22, 82), (1, 22, 83), (1, 22, 84))
+ro = (((0, 22, 80), (1, 22, 80)), ((0, 22, 81), (1, 22, 81)), ((0, 22, 82), (1, 22, 82)), ((0, 22, 83), (1, 22, 83)), ((0, 22, 84), (1, 22, 84)))
+rp = ((0, 22, 70), (0, 22, 71), (0, 22, 72), (0, 22, 73), (0, 22, 74))
 
-r = cbusroutes.route('r1', mod.cbus, (tobj1, tobj2, sobj1, sobj2,), rf, ro, False, 0)
+r = cbusroutes.route('r1', mod.cbus, (tobj1, tobj2, sobj1, sobj2,),
+                     occupancy_events=ro, producer_events=rp, sequential=False,
+                     delay=500, wait_for_feedback=True)
 
 # nx = None
 # load_data = []

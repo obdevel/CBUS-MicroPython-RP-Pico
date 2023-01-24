@@ -5,7 +5,7 @@ import canmessage
 import cbus
 import cbuspubsub
 import logger
-from primitives import WaitAny
+from primitives import WaitAny, WaitAll
 
 WAIT_FOREVER = const(-1)
 
@@ -14,7 +14,7 @@ STATE_OFF = const(0)
 STATE_ON = const(1)
 
 WHEN_BEFORE = const(0)
-WHEN_DONT_CARE = const(1)
+WHEN_DURING = const(1)
 WHEN_AFTER = const(2)
 
 SENSOR_STATE_UNKNOWN = const(-1)
@@ -36,12 +36,12 @@ OBJECT_TYPE_SERVO = const(3)
 
 OBJECT_STATE_AWAITING_SENSOR = const(-2)
 OBJECT_STATE_UNKNOWN = const(-1)
-OBJECT_STATE_CLOSED = const(0)
-OBJECT_STATE_OPEN = const(1)
+OBJECT_STATE_OFF = const(0)
+OBJECT_STATE_ON = const(1)
 
 TURNOUT_STATE_UNKNOWN = const(OBJECT_STATE_UNKNOWN)
-TURNOUT_STATE_CLOSED = const(OBJECT_STATE_CLOSED)
-TURNOUT_STATE_THROWN = const(OBJECT_STATE_OPEN)
+TURNOUT_STATE_CLOSED = const(OBJECT_STATE_OFF)
+TURNOUT_STATE_THROWN = const(OBJECT_STATE_ON)
 
 turnout_states = {
     TURNOUT_STATE_UNKNOWN: 'Unknown',
@@ -50,8 +50,8 @@ turnout_states = {
 }
 
 SIGNAL_STATE_UNKNOWN = const(OBJECT_STATE_UNKNOWN)
-SIGNAL_STATE_CLEAR = const(OBJECT_STATE_CLOSED)
-SIGNAL_STATE_SET = const(OBJECT_STATE_OPEN)
+SIGNAL_STATE_CLEAR = const(OBJECT_STATE_OFF)
+SIGNAL_STATE_SET = const(OBJECT_STATE_ON)
 
 signal_states = {
     SIGNAL_STATE_UNKNOWN: 'Unknown',
@@ -100,25 +100,65 @@ class timeout:
         self.evt.clear()
         await asyncio.sleep_ms(self.ms)
         self.evt.set()
-        self.evt.clear()
 
     async def recurrent(self) -> None:
-        self.evt.clear()
         while True:
+            self.evt.clear()
             await asyncio.sleep_ms(self.ms)
             self.evt.set()
-            self.evt.clear()
 
     async def wait(self) -> None:
         await self.evt.wait()
 
 
+class WaitAnyTimeout:
+    def __init__(self, objects: tuple, ms: int) -> None:
+        self.objects = objects
+        self.ms = ms
+
+    async def wait(self):
+        timer = timeout(self.ms)
+        tt = asyncio.create_task(timer.one_shot())
+        any_objects = self.objects + (timer,)
+        e = await WaitAny(any_objects).wait()
+
+        if e is timer:
+            return None
+        else:
+            tt.cancel()
+            return e
+
+
+class WaitAllTimeout:
+    def __init__(self, objects: tuple, ms: int) -> None:
+        self.objects = objects
+        self.ms = ms
+
+    async def wait(self):
+        timer = timeout(self.ms)
+        tt = asyncio.create_task(timer.one_shot())
+        w = WaitAll(self.objects)
+        any_objects = (w, timer)
+        e = await WaitAny(any_objects).wait()
+
+        if e is timer:
+            return None
+        else:
+            tt.cancel()
+            return self.objects[0]
+
+
+# sn1 = cbusobjects.binary_sensor('sn1', mod.cbus, ((0,22,24),(1,22,24)))
+# sn2 = cbusobjects.binary_sensor('sn2', mod.cbus, ((0,22,25),(1,22,25)))
+# x = await cbusobjects.WaitAnyTimeout((sn1, sn2), 5_000).wait()
+# x = await cbusobjects.WaitAllTimeout((sn1, sn2), 5_000).wait()
+
 class sensor:
-    def __init__(self, name: str, cbus: cbus.cbus, sensor_events: tuple, query_message: tuple = None):
+    def __init__(self, name: str, cbus: cbus.cbus, feedback_events: tuple, query_message: tuple = None):
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
-        self.sensor_events = sensor_events
+        self.feedback_events = feedback_events
         self.query_message = query_message
         self.state = SENSOR_STATE_UNKNOWN
         self.sub = None
@@ -159,12 +199,12 @@ class sensor:
         if waitfor != WAIT_FOREVER:
             self.timer.ms = waitfor
             tt = asyncio.create_task(self.timer.one_shot())
-            r = await WaitAny((self.evt, self.timer.evt)).wait()
+            r = await WaitAny((self.evt, self.timer)).wait()
 
             if r is self.evt:
                 tt.cancel()
                 return self.state
-            elif r is self.timer.evt:
+            elif r is self.timer:
                 return -1
         else:
             await self.evt.wait()
@@ -172,15 +212,15 @@ class sensor:
 
 
 class binary_sensor(sensor):
-    def __init__(self, name: str, cbus: cbus.cbus, sensor_events: tuple, query_message: tuple = None):
-        super(binary_sensor, self).__init__(name, cbus, sensor_events, query_message)
+    def __init__(self, name: str, cbus: cbus.cbus, feedback_events: tuple, query_message: tuple = None):
+        super(binary_sensor, self).__init__(name, cbus, feedback_events, query_message)
 
     def udf(self, msg):
-        return tuple(msg) in self.sensor_events
+        return tuple(msg) in self.feedback_events
 
     def interpret(self, msg: canmessage.cbusevent):
         t = tuple(msg)
-        new_state = 0 if t == self.sensor_events[0] else 1
+        new_state = 0 if t == self.feedback_events[0] else 1
 
         if self.state != new_state:
             self.state = new_state
@@ -193,18 +233,18 @@ class binary_sensor(sensor):
 
 
 class multi_sensor(sensor):
-    def __init__(self, name: str, cbus: cbus.cbus, sensor_events: tuple, query_message: tuple = None):
-        super(multi_sensor, self).__init__(name, cbus, sensor_events, query_message)
+    def __init__(self, name: str, cbus: cbus.cbus, feedback_events: tuple, query_message: tuple = None):
+        super(multi_sensor, self).__init__(name, cbus, feedback_events, query_message)
 
     def udf(self, msg: canmessage.canmessage) -> bool:
-        if tuple(msg) in self.sensor_events:
+        if tuple(msg) in self.feedback_events:
             return True
 
     def interpret(self, msg: canmessage.canmessage) -> None:
         t = tuple(msg)
         new_state = -1
 
-        for x in self.sensor_events:
+        for x in self.feedback_events:
             if t == x:
                 new_state = t[2]
                 break
@@ -219,8 +259,8 @@ class multi_sensor(sensor):
 
 
 class value_sensor(sensor):
-    def __init__(self, name: str, cbus: cbus.cbus, sensor_events: tuple, query_message: tuple = None):
-        super(value_sensor, self).__init__(name, cbus, sensor_events, query_message)
+    def __init__(self, name: str, cbus: cbus.cbus, feedback_events: tuple, query_message: tuple = None):
+        super(value_sensor, self).__init__(name, cbus, feedback_events, query_message)
         self.value = -1
         self.state = SENSOR_STATE_UNKNOWN
 
@@ -230,7 +270,7 @@ class value_sensor(sensor):
         self.evt.set()
 
     def udf(self, msg):
-        return msg in self.sensor_events
+        return msg in self.feedback_events
 
     def dispose(self):
         self.task.cancel()
@@ -239,8 +279,8 @@ class value_sensor(sensor):
 
 class base_cbus_layout_object:
     def __init__(self, objtype: int, name: str, cbus: cbus.cbus, control_events: tuple,
-                 initial_state: int = OBJECT_STATE_UNKNOWN, sensor_events: tuple = None, query_message: tuple = None,
-                 init: bool = False, wait_for_sensor: bool = True):
+                 initial_state: int = OBJECT_STATE_UNKNOWN, feedback_events: tuple = None, query_message: tuple = None,
+                 init: bool = False, wait_for_feedback: bool = True):
 
         self.logger = logger.logger()
         self.objtype = objtype
@@ -248,9 +288,9 @@ class base_cbus_layout_object:
         self.cbus = cbus
         self.control_events = control_events
         self.query_message = query_message
-        self.has_sensor = sensor_events and len(sensor_events) > 1
-        self.sensor_events = sensor_events
-        self.wait_for_sensor = wait_for_sensor
+        self.has_sensor = feedback_events and len(feedback_events) > 1
+        self.feedback_events = feedback_events
+        self.wait_for_feedback = wait_for_feedback
         self.state = initial_state
         self.target_state = initial_state
         self.evt = asyncio.Event()
@@ -268,14 +308,15 @@ class base_cbus_layout_object:
         self.timer = timeout(OP_TIMEOUT)
 
         self.lock = asyncio.Lock()
+        self.locked_by = None
         self.must_lock = LOCK_BEFORE_OPERATION
         self.auto_release = False
         self.lock_timeout_task_handle = None
         self.release_timeout = RELEASE_TIMEOUT
 
-        if self.has_sensor and sensor_events and len(sensor_events) == 2:
+        if self.has_sensor and feedback_events and len(feedback_events) == 2:
             self.sensor_name = self.objtypename + ':' + self.name + ':sensor'
-            self.sensor = binary_sensor(self.sensor_name, cbus, self.sensor_events, self.query_message)
+            self.sensor = binary_sensor(self.sensor_name, cbus, self.feedback_events, self.query_message)
             self.sensor_monitor_task_handle = asyncio.create_task(self.sensor_monitor_task())
 
         if init:
@@ -306,9 +347,9 @@ class base_cbus_layout_object:
         if self.lock.locked():
             self.lock.release()
 
-    async def operate(self, target_state, wait_for_sensor: bool = True, force: bool = False) -> bool:
+    async def operate(self, target_state, wait_for_feedback: bool = True, force: bool = False) -> bool:
         self.target_state = target_state
-        self.wait_for_sensor = wait_for_sensor
+        self.wait_for_feedback = wait_for_feedback
         self.evt.clear()
         ret = True
 
@@ -328,7 +369,7 @@ class base_cbus_layout_object:
             if self.has_sensor:
                 self.state = OBJECT_STATE_AWAITING_SENSOR
 
-                if self.wait_for_sensor:
+                if self.wait_for_feedback:
                     self.state = await self.sensor.wait(OP_TIMEOUT)
 
                     if self.state == SENSOR_STATE_UNKNOWN:
@@ -346,6 +387,8 @@ class base_cbus_layout_object:
 
     async def sensor_monitor_task(self) -> None:
         if self.has_sensor:
+            self.evt.clear()
+
             while True:
                 await self.sensor.wait()
                 self.evt.set()
@@ -381,10 +424,10 @@ class base_cbus_layout_object:
 
 class turnout(base_cbus_layout_object):
     def __init__(self, name, cbus: cbus.cbus, control_events: tuple, initial_state: int = TURNOUT_STATE_UNKNOWN,
-                 sensor_events: tuple = None, query_message: tuple = None, init: bool = False,
-                 wait_for_sensor: bool = True):
+                 feedback_events: tuple = None, query_message: tuple = None, init: bool = False,
+                 wait_for_feedback: bool = True):
         super(turnout, self).__init__(OBJECT_TYPE_TURNOUT, name, cbus, control_events, initial_state,
-                                      sensor_events, query_message, init, wait_for_sensor)
+                                      feedback_events, query_message, init, wait_for_feedback)
 
     async def close(self, wait_for_feedback: bool = True, force: bool = False) -> bool:
         return await self.operate(TURNOUT_STATE_CLOSED, wait_for_feedback, force)
@@ -395,10 +438,10 @@ class turnout(base_cbus_layout_object):
 
 class semaphore_signal(base_cbus_layout_object):
     def __init__(self, name: str, cbus: cbus.cbus, control_events: tuple, query_message: tuple = None,
-                 initial_state: int = SIGNAL_STATE_UNKNOWN, sensor_events: tuple = None, init: bool = False,
-                 wait_for_sensor: bool = True):
+                 initial_state: int = SIGNAL_STATE_UNKNOWN, feedback_events: tuple = None, init: bool = False,
+                 wait_for_feedback: bool = True):
         super(semaphore_signal, self).__init__(OBJECT_TYPE_SEMAPHORE_SIGNAL, name, cbus, control_events, initial_state,
-                                               sensor_events, query_message, init, wait_for_sensor)
+                                               feedback_events, query_message, init, wait_for_feedback)
 
     async def clear(self, wait_for_feedback: bool = True, force: bool = False) -> bool:
         return await self.operate(SIGNAL_STATE_CLEAR, wait_for_feedback, force)
@@ -415,6 +458,7 @@ class colour_light_signal:
         self.num_aspects = num_aspects
         self.control_events = control_events
         self.state = initial_state if init else SIGNAL_STATE_UNKNOWN
+        self.has_sensor = False
 
         if init:
             self.set_aspect(initial_state)
@@ -422,7 +466,7 @@ class colour_light_signal:
     def __call__(self):
         return self.state
 
-    def set_aspect(self, aspect):
+    def set_aspect(self, aspect: int):
         if aspect < self.num_aspects:
             ev = canmessage.event_from_tuple(self.cbus, self.control_events[aspect])
             ev.send()
@@ -474,14 +518,14 @@ class colour_light_signal_group:
 
 class turntable:
     def __init__(self, name: str, cbus: cbus.cbus, position_events: tuple, stop_event: tuple = None,
-                 sensor_events: tuple = None, query_message: tuple = None, init: bool = False, init_pos: int = 0):
+                 feedback_events: tuple = None, query_message: tuple = None, init: bool = False, init_pos: int = 0):
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
         self.position_events = position_events
         self.stop_event = stop_event
-        self.has_sensor = sensor_events is not None
-        self.sensor_events = sensor_events
+        self.has_sensor = feedback_events is not None
+        self.feedback_events = feedback_events
         self.query_message = query_message
         self.sensor = None
         self.current_position = 0
@@ -490,7 +534,7 @@ class turntable:
 
         if self.has_sensor:
             self.sensor_name = 'turntable:' + self.name + ':sensor'
-            self.sensor = multi_sensor(self.sensor_name, cbus, self.sensor_events, self.query_message)
+            self.sensor = multi_sensor(self.sensor_name, cbus, self.feedback_events, self.query_message)
             self.sensor_monitor_task_handle = asyncio.create_task(self.sensor_monitor_task())
             self.timeout = timeout(OP_TIMEOUT)
 
