@@ -5,7 +5,6 @@ from micropython import const
 
 import canmessage
 import cbus
-import cbushistory
 import cbusobjects
 import cbuspubsub
 import logger
@@ -13,14 +12,14 @@ import logger
 ROUTE_STATE_ERROR = const(-1)
 ROUTE_STATE_UNSET = const(0)
 ROUTE_STATE_ACQUIRED = const(1)
-ROUTE_STATE_SET = const(2)
+ROUTE_STATE_AWAITING_FEEDBACK = const(2)
+ROUTE_STATE_SET = const(3)
 
 NO_AUTO_RELEASE = const(-1)
 
 
 class routeobject:
-    def __init__(self, robject: cbusobjects.base_cbus_layout_object, target_state: int,
-                 when: int = cbusobjects.WHEN_DURING):
+    def __init__(self, robject: cbusobjects.base_cbus_layout_object, target_state: int, when: int = cbusobjects.WHEN_DURING):
         self.robject = robject
         self.target_state = target_state
         self.when = when
@@ -50,6 +49,10 @@ class route:
         self.state = ROUTE_STATE_UNSET
         self.release_timeout_task_handle = None
 
+        for o in self.robjects:
+            if not isinstance(o, routeobject):
+                raise TypeError('route component is not of type routeobject')
+
         # acquire, set, release, occupied, unoccupied, error
         self.producer_events = producer_events
 
@@ -62,7 +65,7 @@ class route:
         if self.occupancy_events:
             self.occupancy_states = [False] * len(self.occupancy_events)
             if len(self.occupancy_events) > 0:
-                self.occupancy_sub = cbuspubsub.subscription('route:' + self.name + ':occ:sub', self.cbus, query_type=canmessage.QUERY_UDF, query=self.udf)
+                self.occupancy_sub = cbuspubsub.subscription('route:' + self.name + ':occ:sub', self.cbus, query_type=canmessage.QUERY_UDF, query=self.occ_sub_udf)
                 self.occupied_evt = asyncio.Event()
                 self.occupancy_task_handle = asyncio.create_task(self.occupancy_task())
 
@@ -71,22 +74,22 @@ class route:
         self.evt = asyncio.Event()
         self.acquire_time = None
 
-    def dispose(self):
+    def dispose(self) -> None:
         if self.occupancy_events:
             self.occupancy_sub.unsubscribe()
             self.occupancy_task_handle.cancel()
 
-    def __call__(self):
+    def __call__(self) -> int:
         return self.state
 
-    def udf(self, msg):
+    def occ_sub_udf(self, msg) -> bool:
         ev = tuple(msg)
         for ov in self.occupancy_events:
             if ev in ov:
                 return True
         return False
 
-    async def occupancy_task(self):
+    async def occupancy_task(self) -> None:
         last_state = False
 
         while True:
@@ -120,13 +123,14 @@ class route:
 
     async def acquire(self) -> bool:
         if self.occupied:
+            self.logger.log(f'route {self.name}: acquire, route is occupied {self.occupancy_states}')
             return False
 
         self.state = ROUTE_STATE_UNSET
         all_objects_locked = True
 
         if self.lock.locked():
-            self.logger.log(f'route {self.name}: route is locked')
+            self.logger.log(f'route {self.name}: route is already locked')
             all_objects_locked = False
         else:
             await self.lock.acquire()
@@ -164,6 +168,10 @@ class route:
         group = route_objects[0].when
         self.logger.log(f'set_route_objects_group: processing group = {group}')
 
+        if len(route_objects) == 0:
+            self.logger.log('set_route_objects_group: no objects in this group')
+            return
+
         for robj in route_objects:
             self.logger.log(f'set_route_object: object = {robj.robject.name}, state = {robj.target_state}, when = {robj.when}')
 
@@ -198,7 +206,7 @@ class route:
 
         self.logger.log()
 
-    async def set(self) -> None:
+    async def set(self) -> int:
         if not self.lock.locked():
             raise RuntimeError('route not acquired')
 
@@ -207,7 +215,11 @@ class route:
         for rgroup in (cbusobjects.WHEN_BEFORE, cbusobjects.WHEN_DURING, cbusobjects.WHEN_AFTER):
             self.logger.log(f'set: setting objects for group = {rgroup}')
             group_list = [obj for obj in self.robjects if obj.when == rgroup]
-            await self.set_route_objects_group(group_list)
+
+            if group_list and len(group_list) > 0:
+                await self.set_route_objects_group(group_list)
+            else:
+                self.logger.log('set: no objects in this group')
 
         self.logger.log('set: all groups set')
 
@@ -215,11 +227,15 @@ class route:
         state_ok = False
         self.state = ROUTE_STATE_ACQUIRED
 
-        for obj in self.robjects:
-            self.logger.log(f'set: object = {obj.robject.name} state = {obj.robject.state}')
-            state_ok = obj.robject.state > cbusobjects.OBJECT_STATE_UNKNOWN
+        num_objects_unset, num_objects_with_sensor = self.calc_state()
 
-        self.state = ROUTE_STATE_SET if state_ok else ROUTE_STATE_ERROR
+        if num_objects_unset > 0:
+            if num_objects_with_sensor > 0:
+                self.state = ROUTE_STATE_AWAITING_FEEDBACK
+            else:
+                self.state = ROUTE_STATE_UNSET
+        else:
+            self.state = ROUTE_STATE_SET
 
         if self.state == ROUTE_STATE_SET:
             if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_SET_EVENT):
@@ -229,6 +245,23 @@ class route:
 
         self.evt.set()
         self.logger.log(f'route set complete, overall state = {self.state}')
+        return self.state
+
+    def calc_state(self) -> tuple[int, int]:
+        num_objects_unset = 0
+        num_objects_with_sensor = 0
+
+        for obj in self.robjects:
+            if obj.robject.state == obj.robject.target_state:
+                self.logger.log(f'route wait: object {obj.robject.name} has correct state = {obj.robject.state}')
+                self.state = ROUTE_STATE_SET
+            else:
+                self.logger.log(f'route wait: object {obj.robject.name} has incorrect state, {obj.robject.state} != {obj.robject.target_state}')
+                num_objects_unset += 1
+                if obj.robject.has_sensor:
+                    num_objects_with_sensor += 1
+
+        return num_objects_unset, num_objects_with_sensor
 
     def release(self) -> None:
         for obj in self.locked_objects:
@@ -253,17 +286,21 @@ class route:
             self.release()
 
     async def wait(self, timeout: int = 0) -> int:
+        if not self.lock.locked():
+            raise RuntimeError('route not acquired')
+
         self.logger.log(f'route wait: current state = {self.state}')
+        num_objects_unset, num_objects_with_sensor = self.calc_state()
 
-        for obj in self.robjects:
-            if obj.robject.state == obj.robject.target_state:
-                self.logger.log(f'route wait: object {obj.robject.name} has correct state = {obj.robject.state}')
-                self.state = ROUTE_STATE_SET
+        if num_objects_unset > 0:
+            if num_objects_with_sensor > 0:
+                self.state = ROUTE_STATE_AWAITING_FEEDBACK
             else:
-                self.logger.log(f'route wait: object {obj.robject.name} has incorrect state, {obj.robject.state} != {obj.robject.target_state}')
                 self.state = ROUTE_STATE_UNSET
+        else:
+            self.state = ROUTE_STATE_SET
 
-        if timeout > 0:
+        if timeout > 0 and num_objects_unset > 0:
             objs = []
             for obj in self.robjects:
                 if obj.robject.has_sensor:
@@ -276,58 +313,11 @@ class route:
                 self.logger.log(f'route wait: return is {e}')
                 self.state = ROUTE_STATE_SET if e else ROUTE_STATE_ERROR
 
+        self.logger.log(f'route wait: state now = {self.state}')
+
+        if self.state == ROUTE_STATE_SET:
+            if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_SET_EVENT):
+                msg = canmessage.event_from_tuple(self.cbus, t)
+                msg.send()
+
         return self.state
-
-
-class entry_exit:
-    def __init__(self, name: str, cbus: cbus.cbus, nxroute: route, switch_events: tuple, producer_events: tuple) -> None:
-        self.logger = logger.logger()
-        self.name = name
-        self.cbus = cbus
-        self.switch_events = switch_events
-        self.nxroute = nxroute
-        self.producer_events = producer_events
-
-        self.switch_history = cbushistory.cbushistory(self.cbus, time_to_live=5_000, query_type=canmessage.QUERY_UDF,
-                                                      query=self.udf)
-        self.nx_run_task_handle = asyncio.create_task(self.nx_run_task())
-
-    def dispose(self):
-        self.switch_history.remove()
-        self.nx_run_task_handle.cancel()
-        self.nxroute.dispose()
-
-    def udf(self, msg):
-        if tuple(msg) in self.switch_events:
-            return True
-
-    async def nx_run_task(self):
-        while True:
-            await self.switch_history.add_evt.wait()
-            self.switch_history.add_evt.clear()
-
-            if self.nxroute.state == ROUTE_STATE_UNSET:
-                if self.switch_history.sequence_received(self.switch_events):
-                    self.logger.log(f'nxroute:{self.name}: received sequence')
-                    b = await self.nxroute.acquire()
-                    self.logger.log(f'nxroute:{self.name}: acquire returns {b}')
-                    if b:
-                        await self.nxroute.set()
-                        self.logger.log(f'nxroute:{self.name}: route set')
-                    if len(self.producer_events) > 0 and len(self.producer_events[0] == 3):
-                        msg = canmessage.event_from_tuple(self.cbus, self.producer_events[0])
-                        msg.polarity = int(b)
-                        msg.send()
-                else:
-                    self.logger.log(f'nxroute:{self.name}: received one event')
-                    if len(self.producer_events) > 1 and len(self.producer_events[1] == 3):
-                        msg = canmessage.event_from_tuple(self.cbus, self.producer_events[1])
-                        msg.send()
-            else:
-                if self.switch_history.any_received(self.switch_events):
-                    self.logger.log(f'nxroute:{self.name}: releasing route')
-                    self.nxroute.release()
-                    self.nxroute.release_timeout_task_handle.cancel()
-                    if len(self.producer_events) > 2 and len(self.producer_events[2] == 3):
-                        msg = canmessage.event_from_tuple(self.cbus, self.producer_events[2])
-                        msg.send()

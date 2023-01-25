@@ -414,17 +414,18 @@ s2 = cbusobjects.semaphore_signal('s2',
 
 import cbusroutes
 
-tobj1 = cbusroutes.routeobject(t1, cbusobjects.TURNOUT_STATE_CLOSED)
-tobj2 = cbusroutes.routeobject(t2, cbusobjects.TURNOUT_STATE_THROWN)
+tobj1 = cbusroutes.routeobject(t1, cbusobjects.TURNOUT_STATE_CLOSED, cbusobjects.WHEN_DURING)
+tobj2 = cbusroutes.routeobject(t2, cbusobjects.TURNOUT_STATE_THROWN, cbusobjects.WHEN_DURING)
 sobj1 = cbusroutes.routeobject(s1, cbusobjects.SIGNAL_STATE_SET, cbusobjects.WHEN_BEFORE)
 sobj2 = cbusroutes.routeobject(s2, cbusobjects.SIGNAL_STATE_CLEAR, cbusobjects.WHEN_AFTER)
 
 ro = (((0, 22, 80), (1, 22, 80)), ((0, 22, 81), (1, 22, 81)), ((0, 22, 82), (1, 22, 82)), ((0, 22, 83), (1, 22, 83)), ((0, 22, 84), (1, 22, 84)))
-rp = ((0, 22, 70), (0, 22, 71), (0, 22, 72), (0, 22, 73), (0, 22, 74))
+# acquire, set, release, occupied, unoccupied, error
+rp = ((0, 22, 70), (0, 22, 71), (0, 22, 72), (0, 22, 73), (0, 22, 74), (0, 22, 75))
 
 r = cbusroutes.route('r1', mod.cbus, (tobj1, tobj2, sobj1, sobj2,),
                      occupancy_events=ro, producer_events=rp, sequential=False,
-                     delay=250, wait_for_feedback=True)
+                     delay=250, wait_for_feedback=False)
 
 # nx = None
 # load_data = []

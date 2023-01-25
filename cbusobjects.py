@@ -175,7 +175,7 @@ class sensor:
         self.evt = asyncio.Event()
         self.evt.clear()
         self.sub = cbuspubsub.subscription(name + ':sub', self.cbus, canmessage.QUERY_UDF, self.udf)
-        self.task = asyncio.create_task(self.run_task())
+        self.task_handle = asyncio.create_task(self.run_task())
 
         self.sync_state()
 
@@ -196,8 +196,9 @@ class sensor:
             self.cbus.send_cbus_message(msg)
 
     def dispose(self):
+        self.evt.set()
         self.sub.unsubscribe()
-        self.task.cancel()
+        self.task_handle.cancel()
 
     async def wait(self, timeout: int = WAIT_FOREVER) -> int:
         if timeout == WAIT_FOREVER:
@@ -234,7 +235,6 @@ class binary_sensor(sensor):
             self.evt.set()
 
     def dispose(self):
-        self.task.cancel()
         super().dispose()
 
 
@@ -261,7 +261,7 @@ class multi_sensor(sensor):
             self.evt.set()
 
     def dispose(self) -> None:
-        pass
+        super().dispose()
 
 
 class value_sensor(sensor):
@@ -279,7 +279,6 @@ class value_sensor(sensor):
         return msg in self.feedback_events
 
     def dispose(self):
-        self.task.cancel()
         super().dispose()
 
 
@@ -311,7 +310,7 @@ class base_cbus_layout_object:
         self.sensor = None
         self.sensor_name = None
         self.sensor_monitor_task_handle = None
-        self.timer = timeout(OP_TIMEOUT)
+        # self.timer = timeout(OP_TIMEOUT)
 
         self.lock = asyncio.Lock()
         self.locked_by = None
@@ -332,8 +331,8 @@ class base_cbus_layout_object:
         if self.has_sensor:
             self.sensor_monitor_task_handle.cancel()
             self.sensor.dispose()
-            if self.lock_timeout_task_handle is not None:
-                self.lock_timeout_task_handle.cancel()
+        if self.lock_timeout_task_handle is not None:
+            self.lock_timeout_task_handle.cancel()
 
     def __call__(self):
         return self.state
@@ -401,7 +400,7 @@ class base_cbus_layout_object:
         if self.has_sensor:
             while True:
                 self.evt.clear()
-                await self.sensor.wait(MAX_TIMEOUT)
+                await self.sensor.wait(WAIT_FOREVER)
                 self.state = self.sensor.state
                 if self.state == self.target_state:
                     self.logger.log(f'sensor_monitor_task: object sensor {self.sensor.name} triggered, new state = {self.sensor.state}')
@@ -418,9 +417,7 @@ class base_cbus_layout_object:
             else:
                 r = await WaitAnyTimeout((self.evt,), waitfor).wait()
 
-                if r is self.evt:
-                    return self.state
-                elif r is self.timer.evt:
+                if r is not self.evt:
                     return OBJECT_STATE_UNKNOWN
 
         return self.state
