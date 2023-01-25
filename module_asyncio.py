@@ -424,7 +424,7 @@ rp = ((0, 22, 70), (0, 22, 71), (0, 22, 72), (0, 22, 73), (0, 22, 74))
 
 r = cbusroutes.route('r1', mod.cbus, (tobj1, tobj2, sobj1, sobj2,),
                      occupancy_events=ro, producer_events=rp, sequential=False,
-                     delay=500, wait_for_feedback=True)
+                     delay=250, wait_for_feedback=True)
 
 # nx = None
 # load_data = []

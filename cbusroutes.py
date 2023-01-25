@@ -15,8 +15,7 @@ ROUTE_STATE_UNSET = const(0)
 ROUTE_STATE_ACQUIRED = const(1)
 ROUTE_STATE_SET = const(2)
 
-ROUTE_RELEASE_TIMEOUT = const(30_000)
-WAIT_TIME = const(10_000)
+NO_AUTO_RELEASE = const(-1)
 
 
 class routeobject:
@@ -27,16 +26,18 @@ class routeobject:
         self.when = when
 
 
-ACQUIRE_EVENT = const(0)
-SET_EVENT = const(1)
-RELEASE_EVENT = const(2)
-OCCUPIED_EVENT = const(3)
-UNOCCUPIED_EVENT = const(4)
+ROUTE_ACQUIRE_EVENT = const(0)
+ROUTE_SET_EVENT = const(1)
+ROUTE_RELEASE_EVENT = const(2)
+ROUTE_OCCUPIED_EVENT = const(3)
+ROUTE_UNOCCUPIED_EVENT = const(4)
+ROUTE_ERROR_EVENT = const(5)
 
 
 class route:
     def __init__(self, name, cbus: cbus.cbus, robjects: tuple[routeobject, ...], occupancy_events: tuple = None,
-                 producer_events: tuple = None, sequential: bool = False, delay: int = 0, wait_for_feedback: bool = False):
+                 producer_events: tuple = None, sequential: bool = False, delay: int = 0, wait_for_feedback: bool = False,
+                 wait_time: int = 0, hold_time: int = NO_AUTO_RELEASE):
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus
@@ -44,10 +45,12 @@ class route:
         self.sequential = sequential
         self.delay = delay
         self.wait_for_feedback = wait_for_feedback
+        self.wait_time = wait_time
+        self.hold_time = hold_time
         self.state = ROUTE_STATE_UNSET
         self.release_timeout_task_handle = None
 
-        # acquire, set, release, occupied, unoccupied
+        # acquire, set, release, occupied, unoccupied, error
         self.producer_events = producer_events
 
         self.occupancy_events = occupancy_events
@@ -59,14 +62,14 @@ class route:
         if self.occupancy_events:
             self.occupancy_states = [False] * len(self.occupancy_events)
             if len(self.occupancy_events) > 0:
-                self.occupancy_sub = cbuspubsub.subscription(self.name + ':occ', self.cbus, query_type=canmessage.QUERY_UDF, query=self.udf)
+                self.occupancy_sub = cbuspubsub.subscription('route:' + self.name + ':occ:sub', self.cbus, query_type=canmessage.QUERY_UDF, query=self.udf)
                 self.occupied_evt = asyncio.Event()
                 self.occupancy_task_handle = asyncio.create_task(self.occupancy_task())
 
         self.lock = asyncio.Lock()
         self.locked_objects = []
         self.evt = asyncio.Event()
-        self.set_time = None
+        self.acquire_time = None
 
     def dispose(self):
         if self.occupancy_events:
@@ -108,7 +111,7 @@ class route:
             if last_state != self.occupied:
                 last_state = self.occupied
                 self.logger.log(f'route:{self.name}: occupancy state changed to {self.occupied}')
-                if t := canmessage.tuple_from_tuples(self.producer_events, OCCUPIED_EVENT):
+                if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_OCCUPIED_EVENT):
                     evt = canmessage.event_from_tuple(self.cbus, t)
                     if self.occupied:
                         evt.send_on()
@@ -142,15 +145,16 @@ class route:
                     obj.robject.release()
                 self.lock.release()
 
-        if t := canmessage.tuple_from_tuples(self.producer_events, ACQUIRE_EVENT):
+        if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_ACQUIRE_EVENT):
             msg = canmessage.event_from_tuple(self.cbus, t)
             msg.polarity = all_objects_locked
             msg.send()
 
         if all_objects_locked:
             self.state = ROUTE_STATE_ACQUIRED
-            self.set_time = time.ticks_ms()
-            self.release_timeout_task_handle = asyncio.create_task(self.release_timeout_task())
+            if self.hold_time != NO_AUTO_RELEASE:
+                self.acquire_time = time.ticks_ms()
+                self.release_timeout_task_handle = asyncio.create_task(self.release_timeout_task())
         else:
             self.state = ROUTE_STATE_UNSET
 
@@ -163,48 +167,36 @@ class route:
         for robj in route_objects:
             self.logger.log(f'set_route_object: object = {robj.robject.name}, state = {robj.target_state}, when = {robj.when}')
 
-            # if isinstance(robj.robject, cbusobjects.turnout):
-            #     if robj.target_state == cbusobjects.TURNOUT_STATE_CLOSED:
-            #         await robj.robject.close(wait_for_feedback=self.sequential)
-            #     else:
-            #         await robj.robject.throw(wait_for_feedback=self.sequential)
-            # elif isinstance(robj.robject, cbusobjects.semaphore_signal):
-            #     if robj.target_state == cbusobjects.SIGNAL_STATE_CLEAR:
-            #         await robj.robject.clear(wait_for_feedback=self.sequential)
-            #     else:
-            #         await robj.robject.set(wait_for_feedback=self.sequential)
-            # elif isinstance(robj.robject, cbusobjects.colour_light_signal):
-            #     robj.robject.set_aspect(robj.target_state)
-
             await robj.robject.operate(robj.target_state, wait_for_feedback=self.sequential, force=True)
 
             if self.sequential and robj.robject.has_sensor:
                 self.logger.log(f'set_route_objects_group: waiting for object, name = {robj.robject.name}')
-                x = await robj.robject.sensor.wait(2_000)
+                x = await robj.robject.wait(2_000)
                 self.logger.log(f'set_route_objects_group: wait returns {x}')
             else:
                 self.logger.log(f'set_route_objects_group: sleeping for delay = {self.delay}')
                 await asyncio.sleep_ms(self.delay)
-                self.logger.log(f'set_route_objects_group: sleep done')
 
         if not self.sequential and self.wait_for_feedback:
             self.logger.log(f'set_route_objects_group: collecting objects with sensors for group = {group}')
-            wait_events = []
+            wait_objects = []
             for robj in route_objects:
                 if robj.robject.has_sensor:
-                    wait_events.append(robj.robject.feedback_events[robj.target_state])
+                    wait_objects.append(robj.robject)
 
-            if len(wait_events) > 0:
-                self.logger.log(f'set_route_objects_group: waiting for objects with sensors, for group = {group}')
-                x = cbusobjects.WaitAllTimeout(tuple(wait_events), WAIT_TIME)
+            if len(wait_objects) > 0:
+                self.logger.log(f'set_route_objects_group: waiting for objects with sensors, for group = {group}, objects = {wait_objects}')
+                x = await cbusobjects.WaitAllTimeout(tuple(wait_objects), self.wait_time).wait()
                 if x is None:
-                    self.logger.log(f'set_route_objects_group: wait timed out')
+                    self.logger.log(f'set_route_objects_group: wait timed out after {self.wait_time}')
                 else:
                     self.logger.log(f'set_route_objects_group: all objects responded')
             else:
                 self.logger.log('set_route_objects_group: no objects with sensors')
         else:
             self.logger.log(f'set_route_objects_group: not waiting for feedback for group = {group}, seq = {self.sequential}, wait = {self.wait_for_feedback}')
+
+        self.logger.log()
 
     async def set(self) -> None:
         if not self.lock.locked():
@@ -230,7 +222,7 @@ class route:
         self.state = ROUTE_STATE_SET if state_ok else ROUTE_STATE_ERROR
 
         if self.state == ROUTE_STATE_SET:
-            if t := canmessage.tuple_from_tuples(self.producer_events, SET_EVENT):
+            if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_SET_EVENT):
                 msg = canmessage.event_from_tuple(self.cbus, t)
                 msg.polarity = state_ok
                 msg.send()
@@ -248,31 +240,47 @@ class route:
         self.evt.clear()
         self.state = ROUTE_STATE_UNSET
 
-        if t := canmessage.tuple_from_tuples(self.producer_events, RELEASE_EVENT):
+        if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_RELEASE_EVENT):
             msg = canmessage.event_from_tuple(self.cbus, t)
             msg.send()
 
-    def keepalive(self, delta: int = 60_000):
-        self.set_time += delta
-
-    def release_timeout_task(self):
-        while True:
-            await asyncio.sleep_ms(ROUTE_RELEASE_TIMEOUT)
-            if time.ticks_diff(time.ticks_ms(), self.set_time) >= ROUTE_RELEASE_TIMEOUT:
-                break
-            else:
-                self.logger.log('release_timeout_task: timeout was extended')
+    def release_timeout_task(self) -> None:
+        self.logger.log(f'route: release_timeout_task: sleeping at {time.ticks_ms()}')
+        await asyncio.sleep_ms(self.hold_time)
 
         if self.state != ROUTE_STATE_UNSET:
-            self.logger.log('route release timeout')
+            self.logger.log('route: release_timeout_task: release timeout')
             self.release()
 
-    def wait(self, timeout=0):
-        await self.evt.wait()
+    async def wait(self, timeout: int = 0) -> int:
+        self.logger.log(f'route wait: current state = {self.state}')
+
+        for obj in self.robjects:
+            if obj.robject.state == obj.robject.target_state:
+                self.logger.log(f'route wait: object {obj.robject.name} has correct state = {obj.robject.state}')
+                self.state = ROUTE_STATE_SET
+            else:
+                self.logger.log(f'route wait: object {obj.robject.name} has incorrect state, {obj.robject.state} != {obj.robject.target_state}')
+                self.state = ROUTE_STATE_UNSET
+
+        if timeout > 0:
+            objs = []
+            for obj in self.robjects:
+                if obj.robject.has_sensor:
+                    objs.append(obj.robject)
+
+            if len(objs) > 0:
+                self.state = ROUTE_STATE_UNSET
+                self.logger.log(f'route wait: waiting for {len(objs)} objects = {objs}, current route state = {self.state}')
+                e = await cbusobjects.WaitAllTimeout(tuple(objs), timeout).wait()
+                self.logger.log(f'route wait: return is {e}')
+                self.state = ROUTE_STATE_SET if e else ROUTE_STATE_ERROR
+
+        return self.state
 
 
 class entry_exit:
-    def __init__(self, name: str, cbus: cbus.cbus, nxroute: route, switch_events: tuple, producer_events: tuple):
+    def __init__(self, name: str, cbus: cbus.cbus, nxroute: route, switch_events: tuple, producer_events: tuple) -> None:
         self.logger = logger.logger()
         self.name = name
         self.cbus = cbus

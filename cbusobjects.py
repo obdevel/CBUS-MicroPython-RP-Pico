@@ -81,9 +81,9 @@ TT_ROTATE_CLOCKWISE = const(1)
 TT_ROTATE_ANTICLOCKWISE = const(2)
 
 LOCK_BEFORE_OPERATION = False
-MAX_TIMEOUT = const(2_147_483_647)  # sys.maxsize
+MAX_TIMEOUT = const(1_000_000)
 OP_TIMEOUT = const(5_000)
-RELEASE_TIMEOUT = const(10_000)
+RELEASE_TIMEOUT = const(30_000)
 
 
 def objects_must_be_locked(arg: bool = True):
@@ -112,40 +112,49 @@ class timeout:
 
 
 class WaitAnyTimeout:
-    def __init__(self, objects: tuple, ms: int) -> None:
+    def __init__(self, objects: tuple, ms: int = 0) -> None:
+        self.logger = logger.logger()
+        # self.logger.log(f'WaitAnyTimeout: objects = {objects}, timeout = {ms}')
+
         self.objects = objects
         self.ms = ms
+        self.timer = timeout(self.ms)
+        self.timer_task_handle = asyncio.create_task(self.timer.one_shot())
 
     async def wait(self):
-        timer = timeout(self.ms)
-        tt = asyncio.create_task(timer.one_shot())
-        any_objects = self.objects + (timer,)
-        e = await WaitAny(any_objects).wait()
+        if isinstance(self.objects, tuple):
+            self.objects = self.objects + (self.timer,)
+        else:
+            self.objects = (self.objects, self.timer)
 
-        if e is timer:
+        # self.logger.log(f'WaitAnyTimeout: wait: objects = {self.objects}')
+        e = await WaitAny(self.objects).wait()
+
+        if e is self.timer:
+            # self.logger.log(f'WaitAnyTimeout: wait: timed out, returning None')
             return None
         else:
-            tt.cancel()
+            # self.logger.log(f'WaitAnyTimeout: wait: returning event = {e}')
+            self.timer_task_handle.cancel()
             return e
 
 
 class WaitAllTimeout:
-    def __init__(self, objects: tuple, ms: int) -> None:
+    def __init__(self, objects: tuple, ms: int = 0) -> None:
+        self.logger = logger.logger()
+        # self.logger.log(f'WaitAllTimeout: objects = {objects}, timeout = {ms}')
+
         self.objects = objects
         self.ms = ms
 
     async def wait(self):
-        timer = timeout(self.ms)
-        tt = asyncio.create_task(timer.one_shot())
-        w = WaitAll(self.objects)
-        any_objects = (w, timer)
-        e = await WaitAny(any_objects).wait()
+        if not isinstance(self.objects, tuple):
+            self.objects = (self.objects,)
 
-        if e is timer:
-            return None
-        else:
-            tt.cancel()
-            return self.objects[0]
+        # self.logger.log(f'WaitAllTimeout: wait objects = {self.objects}, timeout = {self.ms}')
+        e = await WaitAnyTimeout(WaitAll(self.objects), self.ms).wait()
+        # self.logger.log(f'WaitAllTimeout: returning = {e}')
+        return e
 
 
 # sn1 = cbusobjects.binary_sensor('sn1', mod.cbus, ((0,22,24),(1,22,24)))
@@ -165,7 +174,6 @@ class sensor:
 
         self.evt = asyncio.Event()
         self.evt.clear()
-        self.timer = timeout(OP_TIMEOUT)
         self.sub = cbuspubsub.subscription(name + ':sub', self.cbus, canmessage.QUERY_UDF, self.udf)
         self.task = asyncio.create_task(self.run_task())
 
@@ -187,28 +195,20 @@ class sensor:
             msg = canmessage.message_from_tuple(self.query_message)
             self.cbus.send_cbus_message(msg)
 
-    def clear(self):
-        self.evt.clear()
-
     def dispose(self):
         self.sub.unsubscribe()
+        self.task.cancel()
 
-    async def wait(self, waitfor: int = WAIT_FOREVER) -> int:
-        self.clear()
-
-        if waitfor != WAIT_FOREVER:
-            self.timer.ms = waitfor
-            tt = asyncio.create_task(self.timer.one_shot())
-            r = await WaitAny((self.evt, self.timer)).wait()
-
-            if r is self.evt:
-                tt.cancel()
-                return self.state
-            elif r is self.timer:
-                return -1
-        else:
+    async def wait(self, timeout: int = WAIT_FOREVER) -> int:
+        if timeout == WAIT_FOREVER:
             await self.evt.wait()
-            return self.state
+        else:
+            x = await WaitAnyTimeout((self.evt,), timeout).wait()
+            if not x:
+                self.state = SENSOR_STATE_UNKNOWN
+
+        self.evt.clear()
+        return self.state
 
 
 class binary_sensor(sensor):
@@ -220,11 +220,17 @@ class binary_sensor(sensor):
 
     def interpret(self, msg: canmessage.cbusevent):
         t = tuple(msg)
-        new_state = 0 if t == self.feedback_events[0] else 1
+
+        if t == self.feedback_events[0]:
+            new_state = SENSOR_STATE_OFF
+        elif t == self.feedback_events[1]:
+            new_state = SENSOR_STATE_ON
+        else:
+            new_state = SENSOR_STATE_UNKNOWN
 
         if self.state != new_state:
+            self.logger.log(f'binary sensor {self.name}, changed state, from {self.state} to {new_state}')
             self.state = new_state
-            self.logger.log(f'binary sensor {self.name}, new state = {self.state}')
             self.evt.set()
 
     def dispose(self):
@@ -353,6 +359,8 @@ class base_cbus_layout_object:
         self.evt.clear()
         ret = True
 
+        self.logger.log(f'operate: current state = {self.state}, target state = {self.target_state}, wait for feedback = {self.wait_for_feedback} ')
+
         if self.must_lock and not self.lock.locked():
             raise RuntimeError(f'object {self.name}: object must be acquired before operating')
 
@@ -362,18 +370,19 @@ class base_cbus_layout_object:
                 self.state = OBJECT_STATE_UNKNOWN
                 ev = canmessage.event_from_tuple(self.cbus, self.control_events[target_state])
                 ev.send()
-                self.state = target_state
             else:
-                raise ValueError('unknown object type')
+                raise ValueError(f'operate: {self.name} unknown object type {self.objtype}')
 
             if self.has_sensor:
                 self.state = OBJECT_STATE_AWAITING_SENSOR
 
                 if self.wait_for_feedback:
-                    self.state = await self.sensor.wait(OP_TIMEOUT)
+                    self.logger.log(f'object {self.name} waiting for feedback sensor, current state = {self.state}')
+                    # self.state = await self.sensor.wait(OP_TIMEOUT)
+                    self.state = await self.wait()
 
                     if self.state == SENSOR_STATE_UNKNOWN:
-                        self.logger.log(f'{self.name}: operate timed out')
+                        self.logger.log(f'{self.name}: wait timed out, state = {self.state}')
                         ret = False
                     else:
                         if self.state == self.target_state:
@@ -382,44 +391,45 @@ class base_cbus_layout_object:
                             self.logger.log(f'{self.name}: operate feedback received, but unexpected state, new state = {self.state}')
 
                         self.evt.set()
+            else:
+                self.state = target_state
+                self.evt.set()
 
         return ret
 
     async def sensor_monitor_task(self) -> None:
         if self.has_sensor:
-            self.evt.clear()
-
             while True:
-                await self.sensor.wait()
-                self.evt.set()
                 self.evt.clear()
+                await self.sensor.wait(MAX_TIMEOUT)
                 self.state = self.sensor.state
                 if self.state == self.target_state:
-                    self.logger.log(f'object sensor {self.sensor.name} triggered, new state = {self.sensor.state}')
+                    self.logger.log(f'sensor_monitor_task: object sensor {self.sensor.name} triggered, new state = {self.sensor.state}')
+                    self.evt.set()
                 else:
-                    self.logger.log(f'object sensor {self.sensor.name} triggered, but unexpected state, new state = {self.sensor.state}')
+                    self.logger.log(f'sensor_monitor_task: object sensor {self.sensor.name} triggered, but unexpected state, target state = {self.target_state}, new state = {self.sensor.state}')
 
     async def wait(self, waitfor: int = WAIT_FOREVER) -> int:
+        # self.logger.log(f'object {self.name} wait: waitfor = {waitfor}')
+
         if self.has_sensor:
-            if waitfor != WAIT_FOREVER:
-                self.timer.ms = waitfor
-                tt = asyncio.create_task(self.timer.one_shot())
-                r = await WaitAny((self.evt, self.timer.evt)).wait()
+            if waitfor == WAIT_FOREVER:
+                await self.evt.wait()
+            else:
+                r = await WaitAnyTimeout((self.evt,), waitfor).wait()
 
                 if r is self.evt:
-                    tt.cancel()
                     return self.state
                 elif r is self.timer.evt:
                     return OBJECT_STATE_UNKNOWN
-            else:
-                await self.evt.wait()
 
         return self.state
 
-    async def lock_timeout_task(self, timeout: int = 30_000):
+    async def lock_timeout_task(self, timeout: int = RELEASE_TIMEOUT):
+        self.logger.log(f'lock_timeout_task: {self.name} sleeping for {timeout}')
         await asyncio.sleep_ms(timeout)
         self.lock.release()
-        self.logger.log(f'object {self.name} lock released')
+        self.logger.log(f'lock_timeout_task: {self.name} lock released')
 
 
 class turnout(base_cbus_layout_object):
