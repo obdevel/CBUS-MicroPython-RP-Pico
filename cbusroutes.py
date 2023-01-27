@@ -15,23 +15,21 @@ ROUTE_STATE_ACQUIRED = const(1)
 ROUTE_STATE_AWAITING_FEEDBACK = const(2)
 ROUTE_STATE_SET = const(3)
 
-NO_AUTO_RELEASE = const(-1)
-
-
-class routeobject:
-    def __init__(self, robject: cbusobjects.base_cbus_layout_object, target_state: int, when: int = cbusobjects.WHEN_DURING):
-        self.robject = robject
-        # self.target_state = target_state
-        self.robject.target_state = target_state
-        self.when = when
-
-
 ROUTE_ACQUIRE_EVENT = const(0)
 ROUTE_SET_EVENT = const(1)
 ROUTE_RELEASE_EVENT = const(2)
 ROUTE_OCCUPIED_EVENT = const(3)
 ROUTE_UNOCCUPIED_EVENT = const(4)
 ROUTE_ERROR_EVENT = const(5)
+
+NO_AUTO_RELEASE = const(-1)
+
+
+class routeobject:
+    def __init__(self, robject: cbusobjects.base_cbus_layout_object, target_state: int, when: int = cbusobjects.WHEN_DURING):
+        self.robject = robject
+        self.robject.target_state = target_state
+        self.when = when
 
 
 class route:
@@ -50,9 +48,9 @@ class route:
         self.state = ROUTE_STATE_UNSET
         self.release_timeout_task_handle = None
 
-        for o in self.robjects:
-            if not isinstance(o, routeobject):
-                raise TypeError('route component is not of type routeobject')
+        for i, obj in enumerate(self.robjects):
+            if not isinstance(obj, routeobject):
+                raise TypeError(f'route component {i} is not of type routeobject')
 
         # acquire, set, release, occupied, unoccupied, error
         self.producer_events = producer_events
@@ -64,13 +62,13 @@ class route:
         self.occupancy_task_handle = None
 
         if self.occupancy_events:
-            self.occupancy_states = [False] * len(self.occupancy_events)
             if len(self.occupancy_events) > 0:
+                self.occupancy_states = [False] * len(self.occupancy_events)
                 self.occupancy_sub = cbuspubsub.subscription('route:' + self.name + ':occ:sub', self.cbus, query_type=canmessage.QUERY_UDF, query=self.occ_sub_udf)
-                self.occupied_evt = asyncio.Event()
                 self.occupancy_task_handle = asyncio.create_task(self.occupancy_task())
 
         self.lock = asyncio.Lock()
+        self.locked_by = None
         self.locked_objects = []
         self.evt = asyncio.Event()
         self.acquire_time = None
@@ -96,21 +94,16 @@ class route:
         while True:
             msg = await self.occupancy_sub.wait()
             t = tuple(msg)
-            # self.logger.log(f'route {self.name}: got occupancy event = {t}')
 
             for i, e in enumerate(self.occupancy_events):
                 if t == e[0]:
-                    # self.logger.log(f'route:{self.name}: event {i} is off')
                     self.occupancy_states[i] = False
                     break
                 if t == e[1]:
-                    # self.logger.log(f'route:{self.name}: event {i} is on')
                     self.occupancy_states[i] = True
                     break
 
             self.occupied = True in self.occupancy_states
-            self.occupied_evt.set()
-            self.occupied_evt.clear()
 
             if last_state != self.occupied:
                 last_state = self.occupied
@@ -131,23 +124,25 @@ class route:
         all_objects_locked = True
 
         if self.lock.locked():
-            self.logger.log(f'route {self.name}: route is already locked')
+            self.logger.log(f'route {self.name}: route is already locked by {self.locked_by}')
             all_objects_locked = False
         else:
             await self.lock.acquire()
 
             for obj in self.robjects:
                 if obj.robject.lock.locked():
-                    self.logger.log(f'route {self.name}: object {obj.robject.name} is locked')
+                    self.logger.log(f'route {self.name}: object {obj.robject.name} is locked by {obj.robject.locked_by}')
                     all_objects_locked = False
                     break
                 else:
                     await obj.robject.acquire()
+                    obj.robject.locked_by = self.locked_by
                     self.locked_objects.append(obj)
 
             if not all_objects_locked:
                 for obj in self.locked_objects:
                     obj.robject.release()
+                    obj.robject.locked_by = None
                 self.lock.release()
 
         if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_ACQUIRE_EVENT):
@@ -180,7 +175,7 @@ class route:
 
             if self.sequential and robj.robject.has_sensor:
                 self.logger.log(f'set_route_objects_group: waiting for object, name = {robj.robject.name}')
-                x = await robj.robject.wait(2_000)
+                x = await robj.robject.wait(cbusobjects.WAIT_FOREVER)
                 self.logger.log(f'set_route_objects_group: wait returns {x}')
             else:
                 self.logger.log(f'set_route_objects_group: sleeping for delay = {self.delay}')
@@ -190,7 +185,7 @@ class route:
             self.logger.log(f'set_route_objects_group: collecting objects with sensors for group = {group}')
             wait_objects = []
             for robj in route_objects:
-                if robj.robject.has_sensor:
+                if robj.robject.has_sensor and robj.robject.state != robj.robject.target_state:
                     wait_objects.append(robj.robject)
 
             if len(wait_objects) > 0:
@@ -201,7 +196,7 @@ class route:
                 else:
                     self.logger.log(f'set_route_objects_group: all objects responded')
             else:
-                self.logger.log('set_route_objects_group: no objects with sensors')
+                self.logger.log('set_route_objects_group: no objects to wait for')
         else:
             self.logger.log(f'set_route_objects_group: not waiting for feedback for group = {group}, sequential = {self.sequential}, wait_for_feedback = {self.wait_for_feedback}')
 
@@ -283,6 +278,7 @@ class route:
         for obj in self.locked_objects:
             if obj.robject.lock.locked():
                 obj.robject.release()
+                obj.robject.locked_by = None
 
         self.locked_objects = []
         self.lock.release()
@@ -318,10 +314,10 @@ class route:
                 self.state = ROUTE_STATE_UNSET
                 self.logger.log(f'route wait: waiting for {len(objs)} objects = {objs}, current route state = {self.state}')
                 e = await cbusobjects.WaitAllTimeout(tuple(objs), timeout).wait()
-                self.logger.log(f'route wait: return is {e}')
+                self.logger.log(f'route wait: wait returns, e = {e}')
                 self.state = ROUTE_STATE_SET if e else ROUTE_STATE_ERROR
 
-                num_objects_unset, num_objects_with_sensor = self.calc_state()
+                self.calc_state()
                 self.logger.log(f'route wait: state now = {self.state}')
 
         if self.state == ROUTE_STATE_SET:

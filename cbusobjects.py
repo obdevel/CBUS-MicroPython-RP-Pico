@@ -339,6 +339,7 @@ class base_cbus_layout_object:
             self.lock_timeout_task_handle.cancel()
         if self.lock.locked():
             self.lock.release()
+            self.locked_by = None
 
     async def operate(self, target_state, wait_for_feedback: bool = True, force: bool = False) -> bool:
         self.target_state = target_state
