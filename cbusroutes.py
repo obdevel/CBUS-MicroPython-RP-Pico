@@ -28,6 +28,7 @@ NO_AUTO_RELEASE = const(-1)
 class routeobject:
     def __init__(self, robject: cbusobjects.base_cbus_layout_object, target_state: int, when: int = cbusobjects.WHEN_DURING):
         self.robject = robject
+        self.target_state = target_state
         self.robject.target_state = target_state
         self.when = when
 
@@ -68,7 +69,7 @@ class route:
                 self.occupancy_task_handle = asyncio.create_task(self.occupancy_task())
 
         self.lock = asyncio.Lock()
-        self.locked_by = None
+        self.acquired_by = None
         self.locked_objects = []
         self.evt = asyncio.Event()
         self.acquire_time = None
@@ -115,34 +116,35 @@ class route:
                     else:
                         evt.send_off()
 
-    async def acquire(self) -> bool:
+    async def acquire(self, acquirer: str = None) -> bool:
         if self.occupied:
             self.logger.log(f'route {self.name}: acquire, route is occupied {self.occupancy_states}')
             return False
 
         self.state = ROUTE_STATE_UNSET
+        self.acquired_by = acquirer
         all_objects_locked = True
 
         if self.lock.locked():
-            self.logger.log(f'route {self.name}: route is already locked by {self.locked_by}')
+            self.logger.log(f'route {self.name}: route is already locked by {self.acquired_by}')
             all_objects_locked = False
         else:
             await self.lock.acquire()
 
             for obj in self.robjects:
                 if obj.robject.lock.locked():
-                    self.logger.log(f'route {self.name}: object {obj.robject.name} is locked by {obj.robject.locked_by}')
+                    self.logger.log(f'route {self.name}: object {obj.robject.name} is locked by {obj.robject.acquired_by}')
                     all_objects_locked = False
                     break
                 else:
                     await obj.robject.acquire()
-                    obj.robject.locked_by = self.locked_by
+                    obj.robject.acquired_by = self.acquired_by
                     self.locked_objects.append(obj)
 
             if not all_objects_locked:
                 for obj in self.locked_objects:
                     obj.robject.release()
-                    obj.robject.locked_by = None
+                    obj.robject.acquired_by = None
                 self.lock.release()
 
         if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_ACQUIRE_EVENT):
@@ -169,9 +171,9 @@ class route:
         self.logger.log(f'set_route_objects_group: processing group = {group}')
 
         for robj in route_objects:
-            self.logger.log(f'set_route_object: object = {robj.robject.name}, state = {robj.robject.target_state}, when = {robj.when}')
+            self.logger.log(f'set_route_object: object = {robj.robject.name}, target state = {robj.target_state}, object state = {robj.robject.state}, when = {robj.when}')
 
-            await robj.robject.operate(robj.robject.target_state, wait_for_feedback=self.sequential, force=True)
+            await robj.robject.operate(robj.robject.target_state, wait_for_feedback=self.sequential, force=False)
 
             if self.sequential and robj.robject.has_sensor:
                 self.logger.log(f'set_route_objects_group: waiting for object, name = {robj.robject.name}')
@@ -185,7 +187,7 @@ class route:
             self.logger.log(f'set_route_objects_group: collecting objects with sensors for group = {group}')
             wait_objects = []
             for robj in route_objects:
-                if robj.robject.has_sensor and robj.robject.state != robj.robject.target_state:
+                if robj.robject.has_sensor and (robj.robject.state != robj.robject.target_state) or (robj.robject.state != robj.target_state):
                     wait_objects.append(robj.robject)
 
             if len(wait_objects) > 0:
@@ -223,7 +225,7 @@ class route:
         state_ok = False
         self.state = ROUTE_STATE_ACQUIRED
 
-        num_objects_unset, num_objects_with_sensor = self.calc_state()
+        num_objects_unset, num_objects_with_sensor = self.resync_states()
 
         if num_objects_unset > 0:
             if num_objects_with_sensor > 0:
@@ -240,25 +242,22 @@ class route:
                 msg.send()
 
         self.evt.set()
-
-        if self.state == ROUTE_STATE_SET:
-            if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_SET_EVENT):
-                msg = canmessage.event_from_tuple(self.cbus, t)
-                msg.send()
-
         self.logger.log(f'route set complete, overall state = {self.state}')
         return self.state
 
-    def calc_state(self) -> tuple[int, int]:
+    def resync_states(self) -> tuple[int, int]:
         num_objects_unset = 0
         num_objects_with_sensor = 0
 
         for obj in self.robjects:
-            if obj.robject.state == obj.robject.target_state:
-                self.logger.log(f'route wait: object {obj.robject.name} has correct state = {obj.robject.state}')
+            obj.robject.target_state = obj.target_state
+
+        for obj in self.robjects:
+            if obj.robject.state == obj.target_state:
+                self.logger.log(f'route: resync_states: object {obj.robject.name} has correct state = {obj.robject.state}')
                 self.state = ROUTE_STATE_SET
             else:
-                self.logger.log(f'route wait: object {obj.robject.name} has incorrect state, {obj.robject.state} != {obj.robject.target_state}')
+                self.logger.log(f'route: resync_states: object {obj.robject.name} has incorrect state, {obj.robject.state} != {obj.target_state}')
                 num_objects_unset += 1
                 if obj.robject.has_sensor:
                     num_objects_with_sensor += 1
@@ -271,17 +270,18 @@ class route:
         else:
             self.state = ROUTE_STATE_SET
 
-        self.logger.log(f'route: calc_state: state = {self.state}')
+        self.logger.log(f'route: resync_states: state = {self.state}')
         return num_objects_unset, num_objects_with_sensor
 
     def release(self) -> None:
         for obj in self.locked_objects:
             if obj.robject.lock.locked():
                 obj.robject.release()
-                obj.robject.locked_by = None
+                obj.robject.acquired_by = None
 
         self.locked_objects = []
         self.lock.release()
+        self.acquired_by = None
         self.evt.clear()
         self.state = ROUTE_STATE_UNSET
 
@@ -302,7 +302,7 @@ class route:
             raise RuntimeError('route not acquired')
 
         self.logger.log(f'route wait: current state = {self.state}')
-        num_objects_unset, num_objects_with_sensor = self.calc_state()
+        num_objects_unset, num_objects_with_sensor = self.resync_states()
 
         if timeout > 0 and num_objects_unset > 0:
             objs = []
@@ -317,7 +317,7 @@ class route:
                 self.logger.log(f'route wait: wait returns, e = {e}')
                 self.state = ROUTE_STATE_SET if e else ROUTE_STATE_ERROR
 
-                self.calc_state()
+                self.resync_states()
                 self.logger.log(f'route wait: state now = {self.state}')
 
         if self.state == ROUTE_STATE_SET:

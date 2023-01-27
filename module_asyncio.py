@@ -412,7 +412,7 @@ s2 = cbusobjects.semaphore_signal('s2',
                                   mod.cbus,
                                   control_events=((0, 22, 30), (1, 22, 30)))
 
-c1 = cbusobjects.colour_light_signal('c1', mod.cbus, 2, control_events=((0, 22, 40), (1, 22, 40)), initial_state=0, init=False)
+c1 = cbusobjects.colour_light_signal('c1', mod.cbus, num_aspects=3, control_events=((1, 22, 40), (1, 22, 41), (1, 22, 42)))
 
 import cbusroutes
 
@@ -427,8 +427,8 @@ ro = (((0, 22, 80), (1, 22, 80)), ((0, 22, 81), (1, 22, 81)), ((0, 22, 82), (1, 
 rp = ((0, 22, 70), (0, 22, 71), (0, 22, 72), (0, 22, 73), (0, 22, 74), (0, 22, 75))
 
 r = cbusroutes.route('r1', mod.cbus, (tobj1, tobj2, sobj1, sobj2, cobj1),
-                     occupancy_events=ro, producer_events=rp, sequential=False,
-                     delay=500, wait_for_feedback=False)
+                     occupancy_events=ro, producer_events=rp, sequential=True,
+                     delay=500, wait_for_feedback=True)
 
 # nx = None
 # load_data = []

@@ -301,7 +301,7 @@ class base_cbus_layout_object:
         self.sensor_monitor_task_handle = None
 
         self.lock = asyncio.Lock()
-        self.locked_by = None
+        self.acquired_by = None
         self.must_lock = LOCK_BEFORE_OPERATION
         self.auto_release = False
         self.lock_timeout_task_handle = None
@@ -339,7 +339,7 @@ class base_cbus_layout_object:
             self.lock_timeout_task_handle.cancel()
         if self.lock.locked():
             self.lock.release()
-            self.locked_by = None
+            self.acquired_by = None
 
     async def operate(self, target_state, wait_for_feedback: bool = True, force: bool = False) -> bool:
         self.target_state = target_state
@@ -347,7 +347,7 @@ class base_cbus_layout_object:
         self.evt.clear()
         ret = True
 
-        self.logger.log(f'operate: current state = {self.state}, target state = {self.target_state}, wait for feedback = {self.wait_for_feedback} ')
+        self.logger.log(f'{self.name}: operate: current state = {self.state}, target state = {self.target_state}, wait for feedback = {self.wait_for_feedback} ')
 
         if self.must_lock and not self.lock.locked():
             raise RuntimeError(f'object {self.name}: object must be acquired before operating')
@@ -444,8 +444,7 @@ class semaphore_signal(base_cbus_layout_object):
 
 
 class colour_light_signal(base_cbus_layout_object):
-    def __init__(self, name: str, cbus: cbus.cbus, num_aspects: int, control_events: tuple, initial_state: int,
-                 init: bool = False):
+    def __init__(self, name: str, cbus: cbus.cbus, num_aspects: int, control_events: tuple, initial_state: int = OBJECT_STATE_UNKNOWN, init: bool = False):
         super(colour_light_signal, self).__init__(OBJECT_TYPE_COLOUR_LIGHT_SIGNAL, name, cbus, control_events, initial_state)
         self.num_aspects = num_aspects
         self.control_events = control_events
