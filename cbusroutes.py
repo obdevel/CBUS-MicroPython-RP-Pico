@@ -21,7 +21,8 @@ NO_AUTO_RELEASE = const(-1)
 class routeobject:
     def __init__(self, robject: cbusobjects.base_cbus_layout_object, target_state: int, when: int = cbusobjects.WHEN_DURING):
         self.robject = robject
-        self.target_state = target_state
+        # self.target_state = target_state
+        self.robject.target_state = target_state
         self.when = when
 
 
@@ -165,17 +166,17 @@ class route:
         return all_objects_locked
 
     async def set_route_objects_group(self, route_objects: list[routeobject]) -> None:
-        group = route_objects[0].when
-        self.logger.log(f'set_route_objects_group: processing group = {group}')
-
         if len(route_objects) == 0:
             self.logger.log('set_route_objects_group: no objects in this group')
             return
 
-        for robj in route_objects:
-            self.logger.log(f'set_route_object: object = {robj.robject.name}, state = {robj.target_state}, when = {robj.when}')
+        group = route_objects[0].when
+        self.logger.log(f'set_route_objects_group: processing group = {group}')
 
-            await robj.robject.operate(robj.target_state, wait_for_feedback=self.sequential, force=True)
+        for robj in route_objects:
+            self.logger.log(f'set_route_object: object = {robj.robject.name}, state = {robj.robject.target_state}, when = {robj.when}')
+
+            await robj.robject.operate(robj.robject.target_state, wait_for_feedback=self.sequential, force=True)
 
             if self.sequential and robj.robject.has_sensor:
                 self.logger.log(f'set_route_objects_group: waiting for object, name = {robj.robject.name}')
@@ -202,7 +203,7 @@ class route:
             else:
                 self.logger.log('set_route_objects_group: no objects with sensors')
         else:
-            self.logger.log(f'set_route_objects_group: not waiting for feedback for group = {group}, seq = {self.sequential}, wait = {self.wait_for_feedback}')
+            self.logger.log(f'set_route_objects_group: not waiting for feedback for group = {group}, sequential = {self.sequential}, wait_for_feedback = {self.wait_for_feedback}')
 
         self.logger.log()
 
@@ -244,6 +245,12 @@ class route:
                 msg.send()
 
         self.evt.set()
+
+        if self.state == ROUTE_STATE_SET:
+            if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_SET_EVENT):
+                msg = canmessage.event_from_tuple(self.cbus, t)
+                msg.send()
+
         self.logger.log(f'route set complete, overall state = {self.state}')
         return self.state
 
@@ -261,6 +268,15 @@ class route:
                 if obj.robject.has_sensor:
                     num_objects_with_sensor += 1
 
+        if num_objects_unset > 0:
+            if num_objects_with_sensor > 0:
+                self.state = ROUTE_STATE_AWAITING_FEEDBACK
+            else:
+                self.state = ROUTE_STATE_UNSET
+        else:
+            self.state = ROUTE_STATE_SET
+
+        self.logger.log(f'route: calc_state: state = {self.state}')
         return num_objects_unset, num_objects_with_sensor
 
     def release(self) -> None:
@@ -292,14 +308,6 @@ class route:
         self.logger.log(f'route wait: current state = {self.state}')
         num_objects_unset, num_objects_with_sensor = self.calc_state()
 
-        if num_objects_unset > 0:
-            if num_objects_with_sensor > 0:
-                self.state = ROUTE_STATE_AWAITING_FEEDBACK
-            else:
-                self.state = ROUTE_STATE_UNSET
-        else:
-            self.state = ROUTE_STATE_SET
-
         if timeout > 0 and num_objects_unset > 0:
             objs = []
             for obj in self.robjects:
@@ -313,7 +321,8 @@ class route:
                 self.logger.log(f'route wait: return is {e}')
                 self.state = ROUTE_STATE_SET if e else ROUTE_STATE_ERROR
 
-        self.logger.log(f'route wait: state now = {self.state}')
+                num_objects_unset, num_objects_with_sensor = self.calc_state()
+                self.logger.log(f'route wait: state now = {self.state}')
 
         if self.state == ROUTE_STATE_SET:
             if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_SET_EVENT):

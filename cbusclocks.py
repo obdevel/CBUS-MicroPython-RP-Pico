@@ -8,6 +8,7 @@ import uasyncio as asyncio
 from micropython import const
 
 import canmessage
+import cbus
 import logger
 
 WALLCLOCK = const(0)
@@ -59,14 +60,20 @@ def time_today(hours: int, minutes: int, seconds: int) -> int:
 
 
 class time_subscription:
-    def __init__(self, sub_time: int, evt: asyncio.Event, repeat=False) -> None:
+    def __init__(self, sub_time: int, evt: asyncio.Event = None, repeat: bool = False) -> None:
         self.sub_time = sub_time
-        self.evt = evt
+        if evt is None:
+            self.evt = asyncio.Event()
+        else:
+            self.evt = evt
         self.repeat = repeat
 
+    async def wait(self):
+        return await self.evt.wait()
 
-class cbusclock:
-    def __init__(self, cbus, clock_type=WALLCLOCK, init_time=0, use_ntp=False, ntp_server=None) -> None:
+
+class clock:
+    def __init__(self, cbus: cbus.cbus, clock_type: int = WALLCLOCK, init_time: int = 0, use_ntp: bool = False, ntp_server: str = None) -> None:
         self.logger = logger.logger()
         self.cbus = cbus
         self.clock_type = clock_type
@@ -82,7 +89,7 @@ class cbusclock:
         self.last_ntp_update = time.ticks_ms()
         self.tz_offset = 0
         self.dst_offset = 0
-        self.cbus_event = None
+        self.cbus_event: canmessage.cbusevent = None
         self.event_freq = 0
         self.event_last_sent = 0
         self.has_temp_sensor = False
@@ -102,14 +109,21 @@ class cbusclock:
         else:
             self.current_time = init_time
 
-        asyncio.create_task(self.run())
+        self.run_task_handle = asyncio.create_task(self.run())
 
-    def set_time(self, new_time) -> None:
+    def dispose(self):
+        self.run_task_handle.cancel()
+        self.subscriptions = []
+        self.tick_funcs = []
+
+    def set_time(self, new_time: int | tuple) -> None:
         nt = new_time - (self.tz_offset + self.dst_offset)
         if self.clock_type == WALLCLOCK:
-            lt = time.gmtime(nt)
-            tt = (lt[0], lt[1], lt[2], 4, lt[3], lt[4], lt[5], lt[6])
-            self.rtc.datetime(tt)
+            if isinstance(new_time, tuple):
+                self.rtc.datetime(new_time)
+            else:
+                lt = time.gmtime(nt)
+                self.rtc.datetime((lt[0], lt[1], lt[2], 4, lt[3], lt[4], lt[5], lt[6]))
             self.current_time = time.time()
         else:
             self.current_time = nt
@@ -123,16 +137,18 @@ class cbusclock:
             ntptime.host = self.ntp_server
             ntp_time = ntptime.time()
             if ntp_time > 0:
-                lt = time.gmtime(ntp_time)
-                tt = (lt[0], lt[1], lt[2], 4, lt[3], lt[4], lt[5], lt[6])
-                self.rtc.datetime(tt)
-                self.current_time = time.time()
+                # lt = time.gmtime(ntp_time)
+                # tt = (lt[0], lt[1], lt[2], 4, lt[3], lt[4], lt[5], lt[6])
+                # self.rtc.datetime(tt)
+                # self.current_time = time.time()
+                self.set_time(ntp_time)
                 self.last_ntp_update = time.ticks_ms()
                 del ntptime
 
     def set_multiplier(self, multiplier: int) -> None:
-        self.multiplier = multiplier
-        self.clock_update_interval = int(1000 / self.multiplier)
+        if self.clock_type == FASTCLOCK:
+            self.multiplier = multiplier
+            self.clock_update_interval = int(1000 / self.multiplier)
 
     def pause(self) -> None:
         self.paused = True
@@ -161,8 +177,9 @@ class cbusclock:
             if t.task == task:
                 del self.tick_funcs[i]
 
-    def read_temperature(self) -> None:
+    def read_temperature(self) -> float:
         self.last_temp_reading = time.ticks_ms()
+
         if self.has_temp_sensor:
             v_zero = 400
             tc = 19.53
@@ -175,13 +192,16 @@ class cbusclock:
             mv = a * (3300 / 65535)
             ta = (mv - v_zero) / tc
             self.current_temperature = ta
-        else:
-            self.current_temperature = 0.0
+
+        return self.current_temperature
 
     async def run(self) -> None:
+        last_run = time.ticks_ms()
+
         while True:
             await asyncio.sleep_ms(self.clock_update_interval)
             now = time.ticks_ms()
+            last_run = now
 
             if not self.paused:
                 if self.use_rtc:
