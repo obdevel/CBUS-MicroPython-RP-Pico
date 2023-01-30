@@ -200,9 +200,9 @@ class canmessage:
         elif query_type == QUERY_EXT:
             return self.ext
         elif query_type == QUERY_EVENTS:
-            return True
+            return self.data[0] in query
         elif query_type == QUERY_ALL_EVENTS:
-            return self.data[0] in event_opcodes
+            return self.is_event()
         elif query_type == QUERY_LONG_MESSAGES:
             return self.data[0] == cbusdefs.OPC_DTXC
         elif query_type == QUERY_UDF:

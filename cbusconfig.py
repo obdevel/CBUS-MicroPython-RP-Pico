@@ -341,12 +341,10 @@ class cbusconfig:
         return True
 
     def read_event_ev(self, idx: int, evnum: int) -> int:
-        offset = (idx * self.event_size) + 4 + (evnum - 1)
-        return self.events[offset]
+        return self.events[(idx * self.event_size) + 4 + (evnum - 1)]
 
     def write_event_ev(self, idx, evnum: int, evval: int) -> None:
-        offset = (idx * self.event_size) + 4 + (evnum - 1)
-        self.events[offset] = evval
+        self.events[(idx * self.event_size) + 4 + (evnum - 1)] = evval
         self.backend.store_events(self.events)
 
     def clear_event(self, nn: int, en: int) -> bool:

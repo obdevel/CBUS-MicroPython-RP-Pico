@@ -396,6 +396,7 @@ t1 = cbusobjects.turnout('t1',
                          mod.cbus,
                          control_events=((0, 22, 25), (1, 22, 25)),
                          feedback_events=((0, 22, 26), (1, 22, 26)),
+                         query_message=([cbusdefs.OPC_AREQ, 0, 22, 0, 100]),
                          wait_for_feedback=False)
 
 t2 = cbusobjects.turnout('t2',
@@ -416,15 +417,15 @@ c1 = cbusobjects.colour_light_signal('c1', mod.cbus, num_aspects=3, control_even
 
 import cbusroutes
 
-tobj1 = cbusroutes.routeobject(t1, target_state=cbusobjects.TURNOUT_STATE_CLOSED, when=cbusobjects.WHEN_DURING)
-tobj2 = cbusroutes.routeobject(t2, target_state=cbusobjects.TURNOUT_STATE_THROWN, when=cbusobjects.WHEN_DURING)
-sobj1 = cbusroutes.routeobject(s1, target_state=cbusobjects.SIGNAL_STATE_SET, when=cbusobjects.WHEN_BEFORE)
-sobj2 = cbusroutes.routeobject(s2, target_state=cbusobjects.SIGNAL_STATE_CLEAR, when=cbusobjects.WHEN_AFTER)
-cobj1 = cbusroutes.routeobject(c1, target_state=cbusobjects.SIGNAL_COLOUR_GREEN, when=cbusobjects.WHEN_AFTER)
+tobj1 = cbusroutes.routeobject(t1, target_state=cbusobjects.OBJECT_STATE_OFF, when=cbusroutes.WHEN_DURING)
+tobj2 = cbusroutes.routeobject(t2, target_state=cbusobjects.OBJECT_STATE_ON, when=cbusroutes.WHEN_DURING)
+sobj1 = cbusroutes.routeobject(s1, target_state=cbusobjects.OBJECT_STATE_ON, when=cbusroutes.WHEN_BEFORE)
+sobj2 = cbusroutes.routeobject(s2, target_state=cbusobjects.OBJECT_STATE_OFF, when=cbusroutes.WHEN_AFTER)
+cobj1 = cbusroutes.routeobject(c1, target_state=cbusobjects.SIGNAL_COLOUR_GREEN, when=cbusroutes.WHEN_AFTER)
 
 ro = (((0, 22, 80), (1, 22, 80)), ((0, 22, 81), (1, 22, 81)), ((0, 22, 82), (1, 22, 82)), ((0, 22, 83), (1, 22, 83)), ((0, 22, 84), (1, 22, 84)))
-# acquire, set, release, occupied, unoccupied, error
-rp = ((0, 22, 70), (0, 22, 71), (0, 22, 72), (0, 22, 73), (0, 22, 74), (0, 22, 75))
+# acquired, set, released, (un)occupied, error
+rp = ((0, 22, 70), (0, 22, 71), (0, 22, 72), (0, 22, 73), (0, 22, 74))
 
 r = cbusroutes.route('r1', mod.cbus, (tobj1, tobj2, sobj1, sobj2, cobj1),
                      occupancy_events=ro, producer_events=rp, sequential=True,

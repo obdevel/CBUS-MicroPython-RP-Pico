@@ -15,42 +15,11 @@ OBJECT_STATE_OFF = const(0)
 OBJECT_STATE_ON = const(1)
 OBJECT_STATE_VALID = const(99)
 
-WHEN_BEFORE = const(0)
-WHEN_DURING = const(1)
-WHEN_AFTER = const(2)
-
-sensor_states = {
-    OBJECT_STATE_UNKNOWN: 'Unknown',
-    OBJECT_STATE_OFF: 'Off',
-    OBJECT_STATE_ON: 'On',
-    OBJECT_STATE_VALID: 'Valid'
-}
-
 OBJECT_TYPE_UNKNOWN = const(-1)
 OBJECT_TYPE_TURNOUT = const(0)
 OBJECT_TYPE_SEMAPHORE_SIGNAL = const(1)
 OBJECT_TYPE_COLOUR_LIGHT_SIGNAL = const(2)
 OBJECT_TYPE_SERVO = const(3)
-
-TURNOUT_STATE_UNKNOWN = const(OBJECT_STATE_UNKNOWN)
-TURNOUT_STATE_CLOSED = const(OBJECT_STATE_OFF)
-TURNOUT_STATE_THROWN = const(OBJECT_STATE_ON)
-
-turnout_states = {
-    TURNOUT_STATE_UNKNOWN: 'Unknown',
-    TURNOUT_STATE_CLOSED: 'Closed',
-    TURNOUT_STATE_THROWN: 'Thrown'
-}
-
-SIGNAL_STATE_UNKNOWN = const(OBJECT_STATE_UNKNOWN)
-SIGNAL_STATE_CLEAR = const(OBJECT_STATE_OFF)
-SIGNAL_STATE_SET = const(OBJECT_STATE_ON)
-
-signal_states = {
-    SIGNAL_STATE_UNKNOWN: 'Unknown',
-    SIGNAL_STATE_CLEAR: 'Clear',
-    SIGNAL_STATE_SET: 'Set'
-}
 
 SIGNAL_TYPE_UNKNOWN = const(-1)
 SIGNAL_TYPE_HOME = const(0)
@@ -64,10 +33,10 @@ signal_types = {
     SIGNAL_TYPE_STARTER: 'Starter'
 }
 
-SIGNAL_COLOUR_RED = const(0)
-SIGNAL_COLOUR_GREEN = const(1)
-SIGNAL_COLOUR_YELLOW = const(2)
-SIGNAL_COLOUR_DOUBLE_YELLOW = const(3)
+SIGNAL_COLOUR_GREEN = const(0)
+SIGNAL_COLOUR_RED = const(1)
+SIGNAL_COLOUR_DOUBLE_YELLOW = const(2)
+SIGNAL_COLOUR_YELLOW = const(3)
 
 LOCK_BEFORE_OPERATION = False
 MAX_TIMEOUT = const(1_000_000)
@@ -103,8 +72,6 @@ class timeout:
 class WaitAnyTimeout:
     def __init__(self, objects: tuple, ms: int = 0) -> None:
         self.logger = logger.logger()
-        # self.logger.log(f'WaitAnyTimeout: objects = {objects}, timeout = {ms}')
-
         self.objects = objects
         self.ms = ms
         self.timer = timeout(self.ms)
@@ -116,14 +83,11 @@ class WaitAnyTimeout:
         else:
             self.objects = (self.objects, self.timer)
 
-        # self.logger.log(f'WaitAnyTimeout: wait: objects = {self.objects}')
         e = await WaitAny(self.objects).wait()
 
         if e is self.timer:
-            # self.logger.log(f'WaitAnyTimeout: wait: timed out, returning None')
             return None
         else:
-            # self.logger.log(f'WaitAnyTimeout: wait: returning event = {e}')
             self.timer_task_handle.cancel()
             return e
 
@@ -131,8 +95,6 @@ class WaitAnyTimeout:
 class WaitAllTimeout:
     def __init__(self, objects: tuple, ms: int = 0) -> None:
         self.logger = logger.logger()
-        # self.logger.log(f'WaitAllTimeout: objects = {objects}, timeout = {ms}')
-
         self.objects = objects
         self.ms = ms
 
@@ -140,9 +102,7 @@ class WaitAllTimeout:
         if not isinstance(self.objects, tuple):
             self.objects = (self.objects,)
 
-        # self.logger.log(f'WaitAllTimeout: wait objects = {self.objects}, timeout = {self.ms}')
         e = await WaitAnyTimeout(WaitAll(self.objects), self.ms).wait()
-        # self.logger.log(f'WaitAllTimeout: returning = {e}')
         return e
 
 
@@ -158,7 +118,7 @@ class sensor:
         self.cbus = cbus
         self.feedback_events = feedback_events
         self.query_message = query_message
-        self.state = OBJECT_STATE_UNKNOWN
+        self.state = OBJECT_STATE_AWAITING_SENSOR
         self.sub = None
 
         self.evt = asyncio.Event()
@@ -205,18 +165,12 @@ class binary_sensor(sensor):
     def __init__(self, name: str, cbus: cbus.cbus, feedback_events: tuple, query_message: tuple = None):
         super(binary_sensor, self).__init__(name, cbus, feedback_events, query_message)
 
-    def udf(self, msg):
+    def udf(self, msg: canmessage.cbusevent):
         return tuple(msg) in self.feedback_events
 
     def interpret(self, msg: canmessage.cbusevent):
         t = tuple(msg)
-
-        if t == self.feedback_events[0]:
-            new_state = OBJECT_STATE_OFF
-        elif t == self.feedback_events[1]:
-            new_state = OBJECT_STATE_ON
-        else:
-            new_state = OBJECT_STATE_UNKNOWN
+        new_state = OBJECT_STATE_OFF if msg.data[0] & 1 else OBJECT_STATE_ON
 
         if self.state != new_state:
             self.logger.log(f'binary sensor {self.name}, changed state, from {self.state} to {new_state}')
@@ -245,8 +199,8 @@ class multi_sensor(sensor):
                 break
 
         if self.state != new_state:
+            self.logger.log(f'multi sensor {self.name}, from {self.state} to state {new_state}')
             self.state = new_state
-            self.logger.log(f'binary sensor {self.name}, new state = {self.state}')
             self.evt.set()
 
     def dispose(self) -> None:
@@ -272,12 +226,11 @@ class value_sensor(sensor):
 
 
 class base_cbus_layout_object:
-    def __init__(self, objtype: int, name: str, cbus: cbus.cbus, control_events: tuple,
+    def __init__(self, name: str, cbus: cbus.cbus, control_events: tuple,
                  initial_state: int = OBJECT_STATE_UNKNOWN, feedback_events: tuple = None, query_message: tuple = None,
                  init: bool = False, wait_for_feedback: bool = True):
 
         self.logger = logger.logger()
-        self.objtype = objtype
         self.name = name
         self.cbus = cbus
         self.control_events = control_events
@@ -289,10 +242,12 @@ class base_cbus_layout_object:
         self.target_state = initial_state
         self.evt = asyncio.Event()
 
-        if self.objtype == OBJECT_TYPE_TURNOUT:
+        if isinstance(self, turnout):
             self.objtypename = 'turnout'
-        elif self.objtype == OBJECT_TYPE_SEMAPHORE_SIGNAL:
+        elif isinstance(self, semaphore_signal):
             self.objtypename = 'semaphore signal'
+        elif isinstance(self, colour_light_signal):
+            self.objtypename = 'colour light signal'
         else:
             self.objtypename = 'unknown'
 
@@ -353,13 +308,9 @@ class base_cbus_layout_object:
             raise RuntimeError(f'object {self.name}: object must be acquired before operating')
 
         if (self.target_state != self.state) or force:
-
-            if self.objtype == OBJECT_TYPE_TURNOUT or self.objtype == OBJECT_TYPE_SEMAPHORE_SIGNAL:
-                self.state = OBJECT_STATE_UNKNOWN
-                ev = canmessage.event_from_tuple(self.cbus, self.control_events[target_state])
-                ev.send()
-            else:
-                raise ValueError(f'operate: {self.name} unknown object type {self.objtype}')
+            self.state = OBJECT_STATE_UNKNOWN
+            ev = canmessage.event_from_tuple(self.cbus, self.control_events[target_state])
+            ev.send()
 
             if self.has_sensor:
                 self.state = OBJECT_STATE_AWAITING_SENSOR
@@ -416,39 +367,38 @@ class base_cbus_layout_object:
 
 
 class turnout(base_cbus_layout_object):
-    def __init__(self, name, cbus: cbus.cbus, control_events: tuple, initial_state: int = TURNOUT_STATE_UNKNOWN,
+    def __init__(self, name, cbus: cbus.cbus, control_events: tuple, initial_state: int = OBJECT_STATE_UNKNOWN,
                  feedback_events: tuple = None, query_message: tuple = None, init: bool = False,
                  wait_for_feedback: bool = True):
-        super(turnout, self).__init__(OBJECT_TYPE_TURNOUT, name, cbus, control_events, initial_state,
+        super(turnout, self).__init__(name, cbus, control_events, initial_state,
                                       feedback_events, query_message, init, wait_for_feedback)
 
     async def close(self, wait_for_feedback: bool = True, force: bool = False) -> bool:
-        return await self.operate(TURNOUT_STATE_CLOSED, wait_for_feedback, force)
+        return await self.operate(OBJECT_STATE_OFF, wait_for_feedback, force)
 
     async def throw(self, wait_for_feedback: bool = True, force: bool = False) -> bool:
-        return await self.operate(TURNOUT_STATE_THROWN, wait_for_feedback, force)
+        return await self.operate(OBJECT_STATE_ON, wait_for_feedback, force)
 
 
 class semaphore_signal(base_cbus_layout_object):
     def __init__(self, name: str, cbus: cbus.cbus, control_events: tuple, query_message: tuple = None,
-                 initial_state: int = SIGNAL_STATE_UNKNOWN, feedback_events: tuple = None, init: bool = False,
+                 initial_state: int = OBJECT_STATE_UNKNOWN, feedback_events: tuple = None, init: bool = False,
                  wait_for_feedback: bool = True):
-        super(semaphore_signal, self).__init__(OBJECT_TYPE_SEMAPHORE_SIGNAL, name, cbus, control_events, initial_state,
-                                               feedback_events, query_message, init, wait_for_feedback)
+        super(semaphore_signal, self).__init__(name, cbus, control_events, initial_state, feedback_events, query_message, init, wait_for_feedback)
 
     async def clear(self, wait_for_feedback: bool = True, force: bool = False) -> bool:
-        return await self.operate(SIGNAL_STATE_CLEAR, wait_for_feedback, force)
+        return await self.operate(OBJECT_STATE_OFF, wait_for_feedback, force)
 
     async def set(self, wait_for_feedback: bool = True, force: bool = False) -> bool:
-        return await self.operate(SIGNAL_STATE_SET, wait_for_feedback, force)
+        return await self.operate(OBJECT_STATE_ON, wait_for_feedback, force)
 
 
 class colour_light_signal(base_cbus_layout_object):
     def __init__(self, name: str, cbus: cbus.cbus, num_aspects: int, control_events: tuple, initial_state: int = OBJECT_STATE_UNKNOWN, init: bool = False):
-        super(colour_light_signal, self).__init__(OBJECT_TYPE_COLOUR_LIGHT_SIGNAL, name, cbus, control_events, initial_state)
+        super(colour_light_signal, self).__init__(name, cbus, control_events, initial_state)
         self.num_aspects = num_aspects
         self.control_events = control_events
-        self.state = initial_state if init else SIGNAL_STATE_UNKNOWN
+        self.state = initial_state if init else OBJECT_STATE_UNKNOWN
         self.has_sensor = False
         self.target_state = initial_state
         self.lock = asyncio.Lock()
