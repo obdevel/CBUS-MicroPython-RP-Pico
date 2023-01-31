@@ -317,10 +317,12 @@ class route:
                 obj.robject.acquired_by = None
 
         self.locked_objects = []
-        self.lock.release()
         self.acquired_by = None
         self.evt.clear()
         self.state = ROUTE_STATE_UNSET
+
+        if self.lock.locked():
+            self.lock.release()
 
         if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_RELEASE_EVENT):
             msg = canmessage.event_from_tuple(self.cbus, t)
