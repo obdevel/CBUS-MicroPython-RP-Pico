@@ -425,7 +425,7 @@ cobj1 = cbusroutes.routeobject(c1, target_state=cbusobjects.SIGNAL_COLOUR_GREEN,
 
 ro = (((0, 22, 80), (1, 22, 80)), ((0, 22, 81), (1, 22, 81)), ((0, 22, 82), (1, 22, 82)), ((0, 22, 83), (1, 22, 83)), ((0, 22, 84), (1, 22, 84)))
 # acquired, set, released, (un)occupied, error
-rp = ((0, 22, 70), (0, 22, 71), (0, 22, 72), (0, 22, 73), (0, 22, 74))
+rp = ((1, 22, 70), (1, 22, 71), (0, 22, 70), (-1, 22, 73), (1, 22, 74))
 
 r = cbusroutes.route('r1', mod.cbus, (tobj1, tobj2, sobj1, sobj2, cobj1),
                      occupancy_events=ro, producer_events=rp, sequential=True,

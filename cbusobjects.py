@@ -277,9 +277,6 @@ class base_cbus_layout_object:
         if self.lock_timeout_task_handle is not None:
             self.lock_timeout_task_handle.cancel()
 
-    def __call__(self):
-        return self.state
-
     async def acquire(self) -> bool:
         if self.lock.locked():
             return False
@@ -406,16 +403,14 @@ class colour_light_signal(base_cbus_layout_object):
         if init:
             self.operate(initial_state)
 
-    def __call__(self):
-        return self.state
-
     async def operate(self, target_state, wait_for_feedback: bool = True, force: bool = False) -> bool:
         self.target_state = target_state
 
         if target_state < self.num_aspects:
-            ev = canmessage.event_from_tuple(self.cbus, self.control_events[target_state])
-            ev.send()
-            self.state = target_state
+            if self.state != self.target_state or force:
+                ev = canmessage.event_from_tuple(self.cbus, self.control_events[target_state])
+                ev.send()
+                self.state = target_state
         else:
             raise ValueError('invalid aspect')
 

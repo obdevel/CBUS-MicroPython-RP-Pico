@@ -57,7 +57,7 @@ class route:
             if not isinstance(obj, routeobject):
                 raise TypeError(f'route component {i} is not of type routeobject')
 
-        # acquire, set, release, occupied, unoccupied, error
+        # acquired, set, released, (un)occupied, error
         self.producer_events = producer_events
 
         self.occupancy_events = occupancy_events
