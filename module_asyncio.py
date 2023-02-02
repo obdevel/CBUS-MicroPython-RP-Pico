@@ -467,15 +467,15 @@ def seq_test(timer):
     import cbussequence
     global seq
 
-    st1 = cbussequence.step(t1, cbussequence.STEP_TURNOUT, None, 0)
-    st2 = cbussequence.step(s1, cbussequence.STEP_SIGNAL_HOME, None, 0)
-    st3 = cbussequence.step(sensor1, cbussequence.STEP_SENSOR, None, 0)
-    st4 = cbussequence.step(r, cbussequence.STEP_ROUTE, None, 0)
-    st5 = cbussequence.step(None, cbussequence.STEP_EVENT_WAITFOR, ((0, 22, 30),), 0)
-    st6 = cbussequence.step(None, cbussequence.STEP_HISTORY_SEQUENCE_WAITFOR, (((0, 22, 31), (1, 22, 31)),), 0)
+    st1 = cbussequence.step(t1, cbussequence.STEP_LAYOUT_OBJECT, None, cbusobjects.OBJECT_STATE_OFF)
+    # st2 = cbussequence.step(s1, cbussequence.STEP_LAYOUT_OBJECT, None, cbusobjects.OBJECT_STATE_OFF)
+    st3 = cbussequence.step(sensor1, cbussequence.STEP_SENSOR, None, cbusobjects.OBJECT_STATE_ON)
+    st4 = cbussequence.step(r, cbussequence.STEP_ROUTE, None, cbusroutes.ROUTE_STATE_SET)
+    st5 = cbussequence.step(None, cbussequence.STEP_EVENT_WAITFOR, (0, 22, 30), 0)
+    st6 = cbussequence.step(None, cbussequence.STEP_HISTORY_SEQUENCE_WAITFOR, ((0, 22, 31), (1, 22, 31)), 0)
     st7 = cbussequence.step(None, cbussequence.STEP_TIME_WAITFOR, timer, 0)
 
-    steps = (st1, st2, st3, st7,)
+    steps = (st1, st3, st4, st5, st6, st7,)
     seq = cbussequence.sequence('seq1', mod.cbus, steps)
 
 

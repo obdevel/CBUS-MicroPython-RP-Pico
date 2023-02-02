@@ -180,10 +180,10 @@ class canmessage:
     def matches(self, query_type: int = QUERY_ALL, query=None) -> bool:
         if query_type in (QUERY_TUPLES, QUERY_TUPLE):
             if isinstance(query, tuple):
-                if len(query) == 1:
-                    return tuple(self) == query
-                else:
+                if isinstance(query[0], tuple):
                     return tuple(self) in query
+                else:
+                    return tuple(self) == query
             else:
                 self.logger.log(f'matches: expected tuple as query, query = {query}')
                 return False

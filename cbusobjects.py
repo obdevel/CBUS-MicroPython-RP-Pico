@@ -51,12 +51,15 @@ def objects_must_be_locked(arg: bool = True):
 
 class timeout:
     def __init__(self, ms: int):
-        self.ms = ms if ms >= 0 else MAX_TIMEOUT
+        self.ms = ms
         self.evt = asyncio.Event()
 
     async def one_shot(self) -> None:
         self.evt.clear()
-        await asyncio.sleep_ms(self.ms)
+        if self.ms >= 0:
+            await asyncio.sleep_ms(self.ms)
+        else:
+            await asyncio.sleep(MAX_TIMEOUT)
         self.evt.set()
 
     async def recurrent(self) -> None:
@@ -418,3 +421,16 @@ class colour_light_signal(base_cbus_layout_object):
 
     async def wait(self, waitfor: int = WAIT_FOREVER) -> int:
         return True
+
+
+class signalgroup:
+    def __init__(self, name: str, cbus: cbus.cbus, objects: tuple[base_cbus_layout_object, ...]):
+        self.name = name
+        self.cbus = cbus
+        self.objects = objects
+
+    async def operate(self):
+        pass
+
+    async def wait(self):
+        pass

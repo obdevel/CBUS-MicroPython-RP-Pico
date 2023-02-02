@@ -294,6 +294,11 @@ MCP_8MHz_125kBPS_CFG1 = const(0x01)
 MCP_8MHz_125kBPS_CFG2 = const(0xB1)
 MCP_8MHz_125kBPS_CFG3 = const(0x85)
 
+# speed 12M
+MCP_12MHz_125kBPS_CFG1 = const(0x01)
+MCP_12MHz_125kBPS_CFG2 = const(0xBF)
+MCP_12MHz_125kBPS_CFG3 = const(0x06)
+
 # speed 16M
 MCP_16MHz_125kBPS_CFG1 = const(0x03)
 MCP_16MHz_125kBPS_CFG2 = const(0xF0)
@@ -638,6 +643,10 @@ class mcp2515(canio.canio):
             cfg1 = MCP_16MHz_125kBPS_CFG1
             cfg2 = MCP_16MHz_125kBPS_CFG2
             cfg3 = MCP_16MHz_125kBPS_CFG3
+        elif self.osc == 12_000_000:
+            cfg1 = MCP_12MHz_125kBPS_CFG1
+            cfg2 = MCP_12MHz_125kBPS_CFG2
+            cfg3 = MCP_12MHz_125kBPS_CFG3
         elif self.osc == 8_000_000:
             cfg1 = MCP_8MHz_125kBPS_CFG1
             cfg2 = MCP_8MHz_125kBPS_CFG2

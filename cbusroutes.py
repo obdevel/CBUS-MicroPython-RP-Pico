@@ -212,6 +212,7 @@ class route:
 
         self.logger.log('route set begins')
 
+        self.evt.clear()
         self.check_target_states(correct_states)
 
         for rgroup in (WHEN_BEFORE, WHEN_DURING, WHEN_AFTER):
@@ -360,6 +361,7 @@ class route:
                 self.logger.log(f'route wait: state now = {self.state}')
 
         if self.state == ROUTE_STATE_SET:
+            self.evt.set()
             if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_SET_EVENT):
                 msg = canmessage.event_from_tuple(self.cbus, t)
                 msg.send()
