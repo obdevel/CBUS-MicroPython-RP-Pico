@@ -6,6 +6,14 @@ import cbus
 import cbusdefs
 import logger
 
+# 2.1.2 Event checks
+# If the bits of the opcode equal 1xx10000 then the message is an ON long event.
+# If the bits of the opcode equal 1xx10001 then the message is an OFF long event.
+# If the bits of the opcode equal 1xx11000 then the message is an ON short event.
+# If the bits of the opcode equal 1xx11001 then the message is an OFF short event.
+# 2.1.3 Extension Checks
+# If the bits of the opcode equal xxx11111 with the exception of  00011111 (0x1F) then the opcode is an Extension Opcode.
+
 NO_OPCODE = const(0)
 
 POLARITY_UNKNOWN = const(-1)
