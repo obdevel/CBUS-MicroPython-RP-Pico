@@ -327,8 +327,8 @@ CAN_ERR_MASK = const(0x1FFFFFFF)  # omit EFF, RTR, ERR flags
 # CAN_EFF_ID_BITS = const(29)
 
 # CAN payload length and DLC definitions according to ISO 11898-1
-CAN_MAX_DLC = const(8)
-CAN_MAX_DLEN = const(8)
+# CAN_MAX_DLC = const(8)
+# CAN_MAX_DLEN = const(8)
 
 # CAN ID length
 CAN_IDLEN = const(4)
@@ -679,7 +679,8 @@ class mcp2515(canio.canio):
     #
     #     return ERROR.ERROR_OK
 
-    def prepare_id(self, ext: bool, id_: int) -> bytearray:
+    @staticmethod
+    def prepare_id(ext: bool, id_: int) -> bytearray:
         canid = id_ & 0xffff
         buffer = bytearray(CAN_IDLEN)
 

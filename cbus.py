@@ -194,20 +194,20 @@ class cbus:
             await self.callback_flag.wait()
 
             if self.in_transition and time.ticks_diff(time.ticks_ms(), self.timeout_timer) >= 30000:
-                self.logger.log('cbus: mode change timeout')
+                # self.logger.log('cbus: mode change timeout')
                 self.in_transition = False
                 self.indicate_mode(self.config.mode)
                 self.timeout_timer = time.ticks_ms()
 
             if self.enumeration_required:
-                self.logger.log('cbus: enumeration required')
+                # self.logger.log('cbus: enumeration required')
                 self.begin_enumeration()
 
             if self.enumerating and time.ticks_diff(time.ticks_ms(), self.enum_start_time) >= 100:
-                self.logger.log('cbus: end of enumeration cycle')
+                # self.logger.log('cbus: end of enumeration cycle')
                 self.enumerating = False
                 self.process_enumeration_responses()
-                self.logger.log(f'cbus: canid is now {self.config.canid}')
+                # self.logger.log(f'cbus: canid is now {self.config.canid}')
 
             if self.has_ui:
                 if self.switch.is_pressed() and self.switch.current_state_duration() >= 6000:
@@ -216,7 +216,7 @@ class cbus:
                 if self.switch.state_changed and not self.switch.is_pressed():
 
                     if self.switch.previous_state_duration >= 6000:
-                        self.logger.log('cbus: long switch press = change mode')
+                        # self.logger.log('cbus: long switch press = change mode')
                         self.in_transition = True
 
                         if self.config.mode == MODE_SLIM:
@@ -225,18 +225,19 @@ class cbus:
                             self.revert_slim()
 
                     if 2000 >= self.switch.previous_state_duration >= 1000:
-                        self.logger.log('cbus: medium switch press = renegotiate')
+                        # self.logger.log('cbus: medium switch press = renegotiate')
                         if self.config.mode == MODE_FLIM:
                             self.in_transition = True
                             self.init_flim()
 
                     if 1000 >= self.switch.previous_state_duration >= 250:
-                        self.logger.log('cbus: short switch press = enumerate')
+                        # self.logger.log('cbus: short switch press = enumerate')
                         if self.config.mode == MODE_FLIM:
                             self.begin_enumeration()
 
-                    if self.switch.previous_state_duration < 250:
-                        self.logger.log('cbus: switch press too short')
+                    # if self.switch.previous_state_duration < 250:
+                    #     self.logger.log('cbus: switch press too short')
+                    #     pass
 
                     self.switch.reset()
 
@@ -246,7 +247,7 @@ class cbus:
                 avail = await self.can.available()
 
                 if avail and processed_msgs < max_msgs:
-                    msg = await self.can.get_next_message()
+                    msg: canmessage.canmessage = await self.can.get_next_message()
 
                     if msg:
                         self.num_messages_received += 1
@@ -257,7 +258,7 @@ class cbus:
                         for sub in self.subscriptions:
                             sub.publish(msg)
 
-                        if self.gridconnect_server is not None:
+                        if self.gridconnect_server:
                             self.gridconnect_server.output_queue.enqueue(msg)
 
                         if self.config.mode == MODE_FLIM and self.has_ui:
@@ -278,6 +279,7 @@ class cbus:
 
                         if msg.dlc > 0:
                             try:
+                                # self.logger.log(f'cbus: handling opcode = {msg.data[0]:#x}')
                                 self.func_dict.get(msg.data[0])(msg)
                             except TypeError:
                                 self.logger.log(f'cbus: unhandled opcode = {msg.data[0]:#x}')
@@ -286,7 +288,7 @@ class cbus:
                             if msg.rtr and not self.enumerating:
                                 self.respond_to_enum_request()
                             elif self.enumerating:
-                                self.enum_responses[msg.get_canid()] = True
+                                self.enum_responses.append(msg.get_canid())
 
                         processed_msgs += 1
 
@@ -332,8 +334,8 @@ class cbus:
             if paran <= self.params[0] and paran < len(self.params):
                 omsg = canmessage.canmessage(self.config.canid, 5)
                 omsg.data[0] = cbusdefs.OPC_PARAN
-                omsg.data[1] = int(self.config.node_number >> 8)
-                omsg.data[2] = self.config.node_number & 0xff
+                omsg.data[1] = msg.data[1]
+                omsg.data[2] = msg.data[2]
                 omsg.data[3] = paran
                 omsg.data[4] = self.params[paran]
                 self.send_cbus_message(omsg)
@@ -363,7 +365,7 @@ class cbus:
                 self.send_nn_ack()
 
     def handle_enum(self, msg: canmessage.canmessage) -> None:
-        self.logger.log('cbus: ENUM')
+        # self.logger.log('cbus: ENUM')
 
         if (msg.get_node_number() == self.config.node_number
                 and msg.get_canid() != self.config.canid
@@ -416,8 +418,8 @@ class cbus:
             num_events = self.config.count_events()
             omsg = canmessage.canmessage(self.config.canid, 4)
             omsg.data[0] = cbusdefs.OPC_NUMEV
-            omsg.data[1] = int(self.config.node_number >> 8)
-            omsg.data[2] = self.config.node_number & 0xff
+            omsg.data[1] = msg.data[1]
+            omsg.data[2] = msg.data[2]
             omsg.data[3] = num_events
             self.send_cbus_message(omsg)
 
@@ -427,8 +429,8 @@ class cbus:
         if msg.get_node_number() == self.config.node_number:
             omsg = canmessage.canmessage(canid=self.config.canid, dlc=8)
             omsg.data[0] = cbusdefs.OPC_ENRSP
-            omsg.data[1] = self.config.node_number >> 8
-            omsg.data[2] = self.config.node_number & 0xff
+            omsg.data[1] = msg.data[1]
+            omsg.data[2] = msg.data[2]
 
             for i in range(self.config.num_events):
                 event = self.config.read_event(i)
@@ -454,8 +456,8 @@ class cbus:
         if msg.get_node_number() == self.config.node_number:
             omsg = canmessage.canmessage(canid=self.config.canid, dlc=6)
             omsg.data[0] = cbusdefs.OPC_NEVAL
-            omsg.data[1] = int(self.config.node_number >> 8)
-            omsg.data[2] = self.config.node_number & 0xff
+            omsg.data[1] = msg.data[1]
+            omsg.data[2] = msg.data[2]
             omsg.data[3] = msg.data[3]
             omsg.data[4] = msg.data[4]
             omsg.data[5] = self.config.read_event_ev(msg.data[3], msg.data[4])
@@ -477,8 +479,8 @@ class cbus:
         if msg.get_node_number() == self.config.node_number:
             omsg = canmessage.canmessage(self.config.canid, 4)
             omsg.data[0] = cbusdefs.OPC_EVNLF
-            omsg.data[1] = int(self.config.node_number >> 8)
-            omsg.data[2] = self.config.node_number & 0xff
+            omsg.data[1] = msg.data[1]
+            omsg.data[2] = msg.data[2]
             omsg.data[3] = self.config.num_events - self.config.count_events()
             self.send_cbus_message(omsg)
 
@@ -570,7 +572,7 @@ class cbus:
         self.enumeration_required = False
         if self.config.mode == MODE_FLIM:
             omsg = canmessage.canmessage(self.config.canid, 0, rtr=True)
-            self.enum_responses = [False] * 128
+            self.enum_responses = []
             self.enumerating = True
             self.send_cbus_message(omsg)
             self.enum_start_time = time.ticks_ms()
@@ -583,13 +585,15 @@ class cbus:
         self.enumerating = False
         new_id = self.config.canid
 
-        if True not in self.enum_responses:
+        if len(self.enum_responses) < 1:
             self.logger.log('cbus: no enumeration responses received')
 
-        for i, r in enumerate(self.enum_responses, start=1):
-            if not r:
+        for i in range(1, 100):
+            if i not in self.enum_responses:
                 new_id = i
                 break
+
+        self.enum_responses = []
 
         if new_id > 0:
             self.logger.log(f'cbus: took unused can id = {new_id}')

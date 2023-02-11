@@ -42,7 +42,7 @@ class cbusswitch:
                     self.previous_state = self.state
                     self.previous_state_duration = time.ticks_diff(time.ticks_ms(), self.previous_state_change_at)
                     self.previous_state_change_at = time.ticks_ms()
-                    self.logger.log(f"switch state changed, state = {self.state}, last duration = {self.previous_state_duration}")
+                    # self.logger.log(f"switch state changed, state = {self.state}, last duration = {self.previous_state_duration}")
 
                     if self.switch_changed_state_flag is not None:
                         self.switch_changed_state_flag.set()
@@ -57,6 +57,4 @@ class cbusswitch:
 
     def reset(self) -> None:
         self.state = 1
-        # self.previous_state_change_at = 0
-        # self.previous_state_duration = 0
         self.state_changed = False

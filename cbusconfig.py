@@ -1,7 +1,6 @@
 # cbusconfig.py
 
 import gc
-import json
 
 from micropython import const
 
@@ -12,12 +11,14 @@ import logger
 FILES_NVS_FILENAME = const('/nvs.dat')
 FILES_EVENTS_FILENAME = const('/events.dat')
 
-JSON_NVS_FILENAME = const('/nvs.json')
-JSON_EVENTS_FILE_NAME = const('/events.json')
+# JSON_NVS_FILENAME = const('/nvs.json')
+# JSON_EVENTS_FILE_NAME = const('/events.json')
 
 CONFIG_TYPE_FILES = const(0)
-CONFIG_TYPE_JSON = const(1)
-CONFIG_TYPE_I2C_EEPROM = const(2)
+
+
+# CONFIG_TYPE_JSON = const(1)
+# CONFIG_TYPE_I2C_EEPROM = const(2)
 
 
 class storage_backend:
@@ -56,13 +57,13 @@ class files_backend(storage_backend):
         super().__init__(ev_offset)
 
     def init_events(self, events):
-        f = open(FILES_EVENTS_FILENAME, 'w')
+        f = open(FILES_EVENTS_FILENAME, 'wb')
         f.write(bytearray(events))
         f.close()
 
     def load_events(self, ev_size):
         try:
-            f = open(FILES_EVENTS_FILENAME, 'r')
+            f = open(FILES_EVENTS_FILENAME, 'rb')
         except OSError:
             return None
 
@@ -72,21 +73,22 @@ class files_backend(storage_backend):
             return None
 
         f.close()
-        return bytearray(data.encode('ascii'))
+        # return bytearray(data.encode('ascii'))
+        return bytearray(data)
 
     def store_events(self, events):
-        f = open(FILES_EVENTS_FILENAME, 'w')
+        f = open(FILES_EVENTS_FILENAME, 'wb')
         f.write(bytearray(events))
         f.close()
 
     def init_nvs(self, nvs):
-        f = open(FILES_NVS_FILENAME, 'w')
+        f = open(FILES_NVS_FILENAME, 'wb')
         f.write(bytearray(nvs))
         f.close()
 
     def load_nvs(self, num_nvs):
         try:
-            f = open(FILES_NVS_FILENAME, 'r')
+            f = open(FILES_NVS_FILENAME, 'rb')
         except OSError:
             return None
 
@@ -96,87 +98,88 @@ class files_backend(storage_backend):
             return None
 
         f.close()
-        return bytearray(data.encode('ascii'))
+        # return bytearray(data.encode('ascii'))
+        return bytearray(data)
 
     def store_nvs(self, nvs):
-        f = open(FILES_NVS_FILENAME, 'w')
+        f = open(FILES_NVS_FILENAME, 'wb')
         f.write(bytearray(nvs))
         f.close()
 
 
 # backend using json text files
 
-class json_backend(storage_backend):
-
-    def __init__(self, ev_offset: int = 0):
-        self.logger = logger.logger()
-        super(json_backend, self).__init__(ev_offset)
-
-    @staticmethod
-    def dict_from_array(a: list) -> dict:
-        d = dict([(key, value) for key, value in enumerate(a)])
-        return d
-
-    def init_events(self, events):
-        f = open(JSON_EVENTS_FILE_NAME, 'w')
-        d = self.dict_from_array(events)
-        s = json.dumps(d)
-        f.write(bytearray(s))
-        f.close()
-
-    def load_events(self, ev_size):
-        try:
-            f = open(JSON_EVENTS_FILE_NAME, 'r')
-        except OSError:
-            return None
-
-        try:
-            data = f.read()
-        except UnicodeError:
-            return None
-
-        f.close()
-        s = data.encode('ascii')
-        d = json.loads(s)
-        b = bytearray(d.values())
-        return bytearray(b)
-
-    def store_events(self, events):
-        f = open(JSON_EVENTS_FILE_NAME, 'w')
-        d = self.dict_from_array(events)
-        s = json.dumps(d)
-        f.write(bytearray(s))
-        f.close()
-
-    def init_nvs(self, nvs):
-        with open(JSON_NVS_FILENAME, 'w') as f:
-            d = self.dict_from_array(nvs)
-            s = json.dumps(d)
-            f.write(bytearray(s))
-
-    def load_nvs(self, num_nvs):
-        try:
-            f = open(JSON_NVS_FILENAME, 'r')
-        except OSError:
-            return None
-
-        try:
-            data = f.read()
-        except UnicodeError:
-            return None
-
-        f.close()
-        s = data.encode('ascii')
-        d = json.loads(s)
-        b = bytearray(d.values())
-        return bytearray(b)
-
-    def store_nvs(self, nvs):
-        f = open(JSON_NVS_FILENAME, 'w')
-        d = self.dict_from_array(nvs)
-        s = json.dumps(d)
-        f.write(bytearray(s))
-        f.close()
+# class json_backend(storage_backend):
+#
+#     def __init__(self, ev_offset: int = 0):
+#         self.logger = logger.logger()
+#         super(json_backend, self).__init__(ev_offset)
+#
+#     @staticmethod
+#     def dict_from_array(a: list) -> dict:
+#         d = dict([(key, value) for key, value in enumerate(a)])
+#         return d
+#
+#     def init_events(self, events):
+#         f = open(JSON_EVENTS_FILE_NAME, 'w')
+#         d = self.dict_from_array(events)
+#         s = json.dumps(d)
+#         f.write(bytearray(s))
+#         f.close()
+#
+#     def load_events(self, ev_size):
+#         try:
+#             f = open(JSON_EVENTS_FILE_NAME, 'r')
+#         except OSError:
+#             return None
+#
+#         try:
+#             data = f.read()
+#         except UnicodeError:
+#             return None
+#
+#         f.close()
+#         s = data.encode('ascii')
+#         d = json.loads(s)
+#         b = bytearray(d.values())
+#         return bytearray(b)
+#
+#     def store_events(self, events):
+#         f = open(JSON_EVENTS_FILE_NAME, 'w')
+#         d = self.dict_from_array(events)
+#         s = json.dumps(d)
+#         f.write(bytearray(s))
+#         f.close()
+#
+#     def init_nvs(self, nvs):
+#         with open(JSON_NVS_FILENAME, 'w') as f:
+#             d = self.dict_from_array(nvs)
+#             s = json.dumps(d)
+#             f.write(bytearray(s))
+#
+#     def load_nvs(self, num_nvs):
+#         try:
+#             f = open(JSON_NVS_FILENAME, 'r')
+#         except OSError:
+#             return None
+#
+#         try:
+#             data = f.read()
+#         except UnicodeError:
+#             return None
+#
+#         f.close()
+#         s = data.encode('ascii')
+#         d = json.loads(s)
+#         b = bytearray(d.values())
+#         return bytearray(b)
+#
+#     def store_nvs(self, nvs):
+#         f = open(JSON_NVS_FILENAME, 'w')
+#         d = self.dict_from_array(nvs)
+#         s = json.dumps(d)
+#         f.write(bytearray(s))
+#         f.close()
 
 
 # class eeprom_backend(storage_backend):
@@ -228,8 +231,8 @@ class cbusconfig:
 
         if self.storage_type == CONFIG_TYPE_FILES:
             self.backend = files_backend(0)
-        elif self.storage_type == CONFIG_TYPE_JSON:
-            self.backend = json_backend(0)
+        # elif self.storage_type == CONFIG_TYPE_JSON:
+        #     self.backend = json_backend(0)
         else:
             raise ValueError('unknown storage type')
 
@@ -271,6 +274,10 @@ class cbusconfig:
         self.nvs[3] = node_number & 0xff
         self.backend.store_nvs(self.nvs)
         self.node_number = node_number
+
+    def set_reset_flag(self, state: bool) -> None:
+        self.nvs[4] = state
+        self.backend.store_nvs(self.nvs)
 
     def find_existing_event(self, nn: int, en: int) -> int:
         for i in range(self.num_events):
@@ -323,10 +330,8 @@ class cbusconfig:
         idx = self.find_existing_event(nn, en)
 
         if idx < 0:
-            # self.logger.log('event not found')
             idx = self.find_event_space()
             if idx < 0:
-                # self.logger.log('no free event space')
                 return False
 
         offset = idx * self.event_size
@@ -337,7 +342,6 @@ class cbusconfig:
         self.events[offset + 4 + (evnum - 1)] = evval
 
         self.backend.store_events(self.events)
-        # self.logger.log('wrote event ok')
         return True
 
     def read_event_ev(self, idx: int, evnum: int) -> int:
@@ -372,16 +376,13 @@ class cbusconfig:
         return count
 
     def clear_all_events(self) -> None:
-        # for x in range((self.event_size) * self.num_events):
-        #     self.events[x] = 0xff
-
         self.events = bytearray([0xff] * (self.num_events * self.event_size))
         self.backend.store_events(self.events)
 
     def read_nv(self, nvnum: int) -> int:
         return self.nvs[nvnum + 9]
 
-    def write_nv(self, nvnum, value):
+    def write_nv(self, nvnum: int, value: int) -> None:
         self.nvs[nvnum + 9] = value
         self.backend.store_nvs(self.nvs)
 
@@ -428,7 +429,3 @@ class cbusconfig:
             self.reboot()
         else:
             self.logger.log('set module to SLiM before resetting')
-
-    def set_reset_flag(self, state: bool) -> None:
-        self.nvs[4] = state
-        self.backend.store_nvs(self.nvs)
