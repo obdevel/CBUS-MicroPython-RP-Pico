@@ -259,7 +259,7 @@ class cbus:
                             sub.publish(msg)
 
                         if self.gridconnect_server:
-                            self.gridconnect_server.output_queue.enqueue(msg)
+                            self.gridconnect_server.output_queue.put_nowait(msg)
 
                         if self.config.mode == MODE_FLIM and self.has_ui:
                             self.led_grn.pulse()

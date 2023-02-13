@@ -4,8 +4,8 @@
 import uasyncio as asyncio
 
 import canmessage
-import circularQueue
 import logger
+from primitives import Queue
 
 
 class qmsg:
@@ -15,12 +15,6 @@ class qmsg:
 
 
 class gcserver:
-
-    #     def __new__(cls):
-    #         if not hasattr(cls, 'instance'):
-    #             cls.instance = super(gcserver, cls).__new__(cls)
-    #         return cls.instance
-
     def __init__(self, bus=None, host='', port=5550):
         self.logger = logger.logger()
         self.host = host
@@ -29,8 +23,8 @@ class gcserver:
         self.server = None
         self.gc = ''
         self.clients = []
-        self.output_queue = circularQueue.circularQueue(16)
-        self.peer_queue = circularQueue.circularQueue(4)
+        self.output_queue = Queue()
+        self.peer_queue = Queue()
         self.bus = bus
         self.tq = asyncio.create_task(self.queue_manager())
         self.bus.set_gcserver(self)
@@ -71,20 +65,17 @@ class gcserver:
                         m = self.GCtoCAN(currgc)
                         self.logger.log(f'gcserver: converted GC msg to {m.__str__()}')
                         self.bus.send_cbus_message_no_header_update(m)
-                        self.peer_queue.enqueue(qmsg(cport, currgc))
+                        await self.peer_queue.put(qmsg(cport, currgc))
                         if self.bus.consume_own_messages:
-                            self.bus.can.rx_queue.enqueue(m)
+                            await self.bus.can.rx_queue.enqueue(m)
             else:
                 self.logger.log(f'gcserver: client idx = {idx} disconnected, closing stream')
                 break
 
-        # for i in range(len(self.clients)):
-        #     if self.clients[i] == writer:
-        #         break
-
         for i, cl in enumerate(self.clients):
             if cl == writer:
-                del self.clients[i]
+                # del self.clients[i]
+                break
 
         writer.close()
         await writer.wait_closed()
@@ -92,15 +83,29 @@ class gcserver:
 
     async def queue_manager(self) -> None:
         while True:
-            while self.output_queue.available():
-                self.logger.log('gcserver: message(s) available to send')
-                msg = self.output_queue.dequeue()
-                await self.send_message(msg)
+
+            # output queue from main CBUS process
+            while not self.output_queue.empty():
+                self.logger.log('gcserver: output queue message(s) available to send')
+                msg = await self.output_queue.get()
+                # await self.send_message(msg)
+                gc = self.CANtoGC(msg)
+                count = 0
+
+                for idx in range(len(self.clients)):
+                    if self.clients[idx] is not None:
+                        self.clients[idx].write(gc)
+                        await self.clients[idx].drain()
+                        count += 1
+                        await asyncio.sleep_ms(5)
+
+                self.logger.log(f'gcserver: sent message to {count} client(s)')
                 await asyncio.sleep_ms(5)
 
-            while self.peer_queue.available():
-                self.logger.log('gcserver: message(s) available to send to peers')
-                pmsg = self.peer_queue.dequeue()
+            # peer-to-peer message queue
+            while not self.peer_queue.empty():
+                self.logger.log('gcserver: peer queue message(s) available to send')
+                pmsg = await self.peer_queue.get()
                 for idx in range(len(self.clients) - 1):
                     cport = self.clients[idx].get_extra_info('peername')
                     if cport != pmsg.source:
@@ -110,18 +115,18 @@ class gcserver:
 
             await asyncio.sleep_ms(20)
 
-    async def send_message(self, msg: canmessage.canmessage) -> None:
-        gc = self.CANtoGC(msg)
-        count = 0
-
-        for idx in range(len(self.clients)):
-            if self.clients[idx] is not None:
-                self.clients[idx].write(gc)
-                await self.clients[idx].drain()
-                count += 1
-                await asyncio.sleep_ms(5)
-
-        self.logger.log(f'gcserver: sent message to {count} client(s)')
+    # async def send_message(self, msg: canmessage.canmessage) -> None:
+    #     gc = self.CANtoGC(msg)
+    #     count = 0
+    #
+    #     for idx in range(len(self.clients)):
+    #         if self.clients[idx] is not None:
+    #             self.clients[idx].write(gc)
+    #             await self.clients[idx].drain()
+    #             count += 1
+    #             await asyncio.sleep_ms(5)
+    #
+    #     self.logger.log(f'gcserver: sent message to {count} client(s)')
 
     def print_clients(self) -> None:
         for i, c in enumerate(self.clients):

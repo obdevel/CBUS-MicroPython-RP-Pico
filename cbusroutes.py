@@ -298,36 +298,35 @@ class route:
         return num_objects_unset, num_objects_with_sensor
 
     def reverse(self):
-        for x in self.robjects:
-            if x.when == WHEN_BEFORE:
-                x.when = WHEN_AFTER
-            elif x.when == WHEN_AFTER:
-                x.when = WHEN_BEFORE
+        for robj in self.robjects:
+            if robj.when == WHEN_BEFORE:
+                robj.when = WHEN_AFTER
+            elif robj.when == WHEN_AFTER:
+                robj.when = WHEN_BEFORE
 
-            if x.target_state == cbusobjects.OBJECT_STATE_OFF:
-                x.target_state = x.robject.target_state = cbusobjects.OBJECT_STATE_ON
-            elif x.target_state == cbusobjects.OBJECT_STATE_ON:
-                x.target_state = x.robject.target_state = cbusobjects.OBJECT_STATE_OFF
+            if robj.target_state == cbusobjects.OBJECT_STATE_OFF:
+                robj.target_state = robj.robject.target_state = cbusobjects.OBJECT_STATE_ON
+            elif robj.target_state == cbusobjects.OBJECT_STATE_ON:
+                robj.target_state = robj.robject.target_state = cbusobjects.OBJECT_STATE_OFF
 
         self.state = ROUTE_STATE_UNSET
 
     def release(self) -> None:
-        for obj in self.locked_objects:
-            if obj.robject.lock.locked():
-                obj.robject.release()
-                obj.robject.acquired_by = None
-
-        self.locked_objects = []
-        self.acquired_by = None
-        self.evt.clear()
-        self.state = ROUTE_STATE_UNSET
-
         if self.lock.locked():
+            for obj in self.locked_objects:
+                if obj.robject.lock.locked():
+                    obj.robject.release()
+                    obj.robject.acquired_by = None
+
+            self.locked_objects = []
+            self.acquired_by = None
+            self.evt.clear()
+            self.state = ROUTE_STATE_UNSET
             self.lock.release()
 
-        if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_RELEASE_EVENT):
-            msg = canmessage.event_from_tuple(self.cbus, t)
-            msg.send()
+            if t := canmessage.tuple_from_tuples(self.producer_events, ROUTE_RELEASE_EVENT):
+                msg = canmessage.event_from_tuple(self.cbus, t)
+                msg.send()
 
     def release_timeout_task(self) -> None:
         self.logger.log(f'route: release_timeout_task: sleeping at {time.ticks_ms()}')

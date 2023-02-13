@@ -139,7 +139,7 @@ class mymodule(cbusmodule.cbusmodule):
         self.cbus.set_received_message_handler(self.received_message_handler)
         self.cbus.set_sent_message_handler(self.sent_message_handler)
 
-        self.cbus.begin(freq=20, max_msgs=1)
+        self.cbus.begin(max_msgs=1)
 
         # ***
         # *** end of bare minimum init
