@@ -89,7 +89,7 @@ class clock:
         self.last_ntp_update = time.ticks_ms()
         self.tz_offset = 0
         self.dst_offset = 0
-        self.cbus_event: canmessage.cbusevent = None
+        self.cbus_event = None
         self.event_freq = 0
         self.event_last_sent = 0
         self.has_temp_sensor = False
@@ -98,6 +98,7 @@ class clock:
         self.last_temp_reading = time.ticks_ms()
         self.subscriptions = []
         self.tick_funcs = []
+        self.last_run = None
 
         self.set_multiplier(1)
 
@@ -196,12 +197,14 @@ class clock:
         return self.current_temperature
 
     async def run(self) -> None:
-        last_run = time.ticks_ms()
+        self.last_run = time.ticks_ms()
+        update_interval = self.clock_update_interval
 
         while True:
-            await asyncio.sleep_ms(self.clock_update_interval)
+            await asyncio.sleep_ms(update_interval)
             now = time.ticks_ms()
-            last_run = now
+            update_interval = self.clock_update_interval - (time.ticks_diff(time.ticks_add(self.last_run, self.clock_update_interval), now))
+            self.last_run = now
 
             if not self.paused:
                 if self.use_rtc:

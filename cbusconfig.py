@@ -8,6 +8,7 @@ import cbus
 # import i2ceeprom
 import logger
 
+FILES_CONFIG_FILENAME = const('/config.dat')
 FILES_NVS_FILENAME = const('/nvs.dat')
 FILES_EVENTS_FILENAME = const('/events.dat')
 
@@ -29,6 +30,15 @@ class storage_backend:
         self.logger = logger.logger()
         self.storage_type = storage_type
         self.ev_offset = ev_offset
+
+    def init_config(self, config):
+        pass
+
+    def load_config(self, data_len):
+        pass
+
+    def store_config(self, config):
+        pass
 
     def init_events(self, events):
         pass
@@ -56,6 +66,30 @@ class files_backend(storage_backend):
         self.logger = logger.logger()
         super().__init__(ev_offset)
 
+    def init_config(self, config):
+        f = open(FILES_CONFIG_FILENAME, 'wb')
+        f.write(bytearray(config))
+        f.close()
+
+    def load_config(self, data_len):
+        try:
+            f = open(FILES_CONFIG_FILENAME, 'rb')
+        except OSError:
+            return None
+
+        try:
+            data = f.read()
+        except UnicodeError:
+            return None
+
+        f.close()
+        return bytearray(data)
+
+    def store_config(self, config):
+        f = open(FILES_CONFIG_FILENAME, 'wb')
+        f.write(bytearray(config))
+        f.close()
+
     def init_events(self, events):
         f = open(FILES_EVENTS_FILENAME, 'wb')
         f.write(bytearray(events))
@@ -73,7 +107,6 @@ class files_backend(storage_backend):
             return None
 
         f.close()
-        # return bytearray(data.encode('ascii'))
         return bytearray(data)
 
     def store_events(self, events):
@@ -98,7 +131,6 @@ class files_backend(storage_backend):
             return None
 
         f.close()
-        # return bytearray(data.encode('ascii'))
         return bytearray(data)
 
     def store_nvs(self, nvs):
@@ -226,13 +258,14 @@ class cbusconfig:
         self.num_evs = num_evs
         self.event_size = self.num_evs + 4
 
-        self.nvs = bytearray([0] * (10 + self.num_nvs))
+        self.config_data = bytearray([0] * 10)
+        self.nvs = bytearray([0] * self.num_nvs)
         self.events = bytearray([255] * (self.num_events * self.event_size))
 
         if self.storage_type == CONFIG_TYPE_FILES:
-            self.backend = files_backend(0)
+            self.backend = files_backend()
         # elif self.storage_type == CONFIG_TYPE_JSON:
-        #     self.backend = json_backend(0)
+        #     self.backend = json_backend()
         else:
             raise ValueError('unknown storage type')
 
@@ -242,6 +275,20 @@ class cbusconfig:
         self.was_reset = False
 
     def begin(self) -> None:
+        # load module config data
+        data = self.backend.load_config(10)
+
+        if not data:
+            self.backend.init_config(self.config_data)
+            data = self.backend.load_config(10)
+
+        self.config_data = data
+        self.mode = self.config_data[0]
+        self.canid = self.config_data[1]
+        self.node_number = (self.config_data[2] << 8) + self.config_data[3]
+        self.was_reset = self.config_data[4]
+
+        # load events
         data = self.backend.load_events(len(self.events))
 
         if not data:
@@ -249,35 +296,35 @@ class cbusconfig:
             data = self.backend.load_events(self.num_events)
 
         self.events = data
-        data = self.backend.load_nvs(self.num_nvs + 10)
+
+        # load NVs
+        data = self.backend.load_nvs(self.num_nvs)
 
         if not data:
             self.backend.init_nvs(self.nvs)
-            data = self.backend.load_nvs(self.num_nvs + 10)
+            data = self.backend.load_nvs(self.num_nvs)
 
         self.nvs = data
-        self.load_module_info()
-        self.was_reset = self.nvs[4]
 
     def set_mode(self, mode: int) -> None:
-        self.nvs[0] = mode
-        self.backend.store_nvs(self.nvs)
+        self.config_data[0] = mode
+        self.backend.store_config(self.config_data)
         self.mode = mode
 
     def set_canid(self, canid: int) -> None:
-        self.nvs[1] = canid
-        self.backend.store_nvs(self.nvs)
+        self.config_data[1] = canid
+        self.backend.store_config(self.config_data)
         self.canid = canid
 
     def set_node_number(self, node_number: int) -> None:
-        self.nvs[2] = int(node_number << 8)
-        self.nvs[3] = node_number & 0xff
-        self.backend.store_nvs(self.nvs)
+        self.config_data[2] = int(node_number << 8)
+        self.config_data[3] = node_number & 0xff
+        self.backend.store_config(self.config_data)
         self.node_number = node_number
 
     def set_reset_flag(self, state: bool) -> None:
-        self.nvs[4] = state
-        self.backend.store_nvs(self.nvs)
+        self.config_data[4] = state
+        self.backend.store_config(self.config_data)
 
     def find_existing_event(self, nn: int, en: int) -> int:
         for i in range(self.num_events):
@@ -380,16 +427,11 @@ class cbusconfig:
         self.backend.store_events(self.events)
 
     def read_nv(self, nvnum: int) -> int:
-        return self.nvs[nvnum + 9]
+        return self.nvs[nvnum - 1]
 
     def write_nv(self, nvnum: int, value: int) -> None:
-        self.nvs[nvnum + 9] = value
+        self.nvs[nvnum - 1] = value
         self.backend.store_nvs(self.nvs)
-
-    def load_module_info(self) -> None:
-        self.mode = self.nvs[0]
-        self.canid = self.nvs[1]
-        self.node_number = (self.nvs[2] << 8) + self.nvs[3]
 
     def print_event_table(self, hex: bool = True, print_all: bool = False) -> None:
         for i in range(self.num_events):
@@ -403,10 +445,26 @@ class cbusconfig:
                 print()
 
     def print_nvs(self) -> None:
-        for i in range(self.num_nvs + 10):
-            if i == 10:
-                print('---------------')
-            print(f'{i:3} = {self.nvs[i]:03} 0x{self.nvs[i]:02x}')
+        for i, nv in enumerate(self.nvs):
+            print(f'{i + 1:3} = {nv:03} 0x{nv:02x}')
+
+    def print_config(self) -> None:
+        for i, cf in enumerate(self.config_data):
+            print(f'{i:3} = {cf:03} 0x{cf:02x}')
+
+    def reset_module(self) -> None:
+        if self.mode == cbus.MODE_SLIM:
+            self.logger.log('reset_module')
+            self.config_data = bytearray([0] * 10)
+            self.nvs = bytearray([0] * 10)
+            self.events = bytearray([0xff] * ((self.num_evs + 4) * self.num_events))
+            self.backend.store_config(self.config_data)
+            self.backend.store_nvs(self.nvs)
+            self.backend.store_events(self.events)
+            self.set_reset_flag(True)
+            self.reboot()
+        else:
+            self.logger.log('set module to SLiM before resetting')
 
     @staticmethod
     def reboot() -> None:
@@ -417,15 +475,3 @@ class cbusconfig:
     def free_memory() -> int:
         gc.collect()
         return gc.mem_free()
-
-    def reset_module(self) -> None:
-        if self.mode == cbus.MODE_SLIM:
-            self.logger.log('reset_module')
-            self.nvs = bytearray([0] * (10 + self.num_nvs))
-            self.events = bytearray([0xff] * ((self.num_evs + 4) * self.num_events))
-            self.backend.store_nvs(self.nvs)
-            self.backend.store_events(self.events)
-            self.set_reset_flag(True)
-            self.reboot()
-        else:
-            self.logger.log('set module to SLiM before resetting')

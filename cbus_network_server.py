@@ -4,7 +4,7 @@
 import json
 import time
 
-import network
+# import network
 import uasyncio as asyncio
 from machine import Pin
 
@@ -185,15 +185,20 @@ class mymodule(cbusmodule.cbusmodule):
     # ***
 
     def create_ap(self):
-        self.logger.log('creating AP')
-        self.wlan = network.WLAN(network.AP_IF)
-        self.wlan.config(essid='CBUS', password='thereisnospoon')
-        self.wlan.active(True)
+        try:
+            import network
+            self.logger.log('creating AP')
+            self.wlan = network.WLAN(network.AP_IF)
+            self.wlan.config(essid='CBUS', password='thereisnospoon')
+            self.wlan.active(True)
 
-        self.ip = self.wlan.ifconfig()[0]
-        self.channel = self.wlan.config('channel')
-        self.logger.log(f'created AP, channel = {self.channel}, address = {self.ip}')
-        self.host = self.ip
+            self.ip = self.wlan.ifconfig()[0]
+            self.channel = self.wlan.config('channel')
+            self.logger.log(f'created AP, channel = {self.channel}, address = {self.ip}')
+            self.host = self.ip
+        except ImportError:
+            self.logger.log('import failed; device is not Pico W')
+            self.is_picow = False
 
     def connect_to_wifi(self, ssid, pwd) -> None:
         try:
