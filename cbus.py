@@ -138,6 +138,12 @@ class cbus:
 
         asyncio.create_task(self.process(max_msgs))
 
+    def set_can(self, can: canio.canio) -> None:
+        self.can = can
+
+    def set_config(self, config: cbusconfig.cbusconfig) -> None:
+        self.config = config
+
     def set_switch(self, pin: int) -> None:
         self.switch = cbusswitch.cbusswitch(pin)
         self.has_ui = True
@@ -183,15 +189,13 @@ class cbus:
             if msg.matches(self.consume_query_type, self.consume_query):
                 self.can.rx_queue.enqueue(msg)
 
-    def set_can(self, can: canio.canio) -> None:
-        self.can = can
-
-    def set_config(self, config: cbusconfig.cbusconfig) -> None:
-        self.config = config
-
     async def process(self, max_msgs: int = 10) -> None:
         while True:
-            await self.callback_flag.wait()
+
+            if not self.in_transition:
+                await self.callback_flag.wait()
+            else:
+                await asyncio.sleep_ms(10)
 
             if self.in_transition and time.ticks_diff(time.ticks_ms(), self.timeout_timer) >= 30000:
                 # self.logger.log('cbus: mode change timeout')

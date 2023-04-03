@@ -258,9 +258,12 @@ class cbusconfig:
         self.num_evs = num_evs
         self.event_size = self.num_evs + 4
 
-        self.config_data = bytearray([0] * 10)
-        self.nvs = bytearray([0] * self.num_nvs)
-        self.events = bytearray([255] * (self.num_events * self.event_size))
+        # self.config_data = bytearray([0] * 10)
+        self.config_data = bytearray(0x0 for _ in range(10))
+        # self.nvs = bytearray([0] * self.num_nvs)
+        self.nvs = bytearray(0x0 for _ in range(self.num_nvs))
+        # self.events = bytearray([255] * (self.num_events * self.event_size))
+        self.events = bytearray(0xff for _ in range(self.num_events * self.event_size))
 
         if self.storage_type == CONFIG_TYPE_FILES:
             self.backend = files_backend()
@@ -455,9 +458,12 @@ class cbusconfig:
     def reset_module(self) -> None:
         if self.mode == cbus.MODE_SLIM:
             self.logger.log('reset_module')
-            self.config_data = bytearray([0] * 10)
-            self.nvs = bytearray([0] * 10)
-            self.events = bytearray([0xff] * ((self.num_evs + 4) * self.num_events))
+            # self.config_data = bytearray([0] * 10)
+            self.config_data = bytearray(0x0 for _ in range(10))
+            # self.nvs = bytearray([0] * 10)
+            self.nvs = bytearray(0x0 for _ in range(self.num_nvs))
+            # self.events = bytearray([0xff] * ((self.num_evs + 4) * self.num_events))
+            self.events = bytearray(0xff for _ in range(self.num_events * self.event_size))
             self.backend.store_config(self.config_data)
             self.backend.store_nvs(self.nvs)
             self.backend.store_events(self.events)
