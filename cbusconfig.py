@@ -320,7 +320,7 @@ class cbusconfig:
         self.canid = canid
 
     def set_node_number(self, node_number: int) -> None:
-        self.config_data[2] = int(node_number << 8)
+        self.config_data[2] = int(node_number >> 8)
         self.config_data[3] = node_number & 0xff
         self.backend.store_config(self.config_data)
         self.node_number = node_number
