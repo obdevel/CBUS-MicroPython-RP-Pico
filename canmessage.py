@@ -139,6 +139,9 @@ class canmessage:
     def is_event(self) -> bool:
         return self.data[0] in event_opcodes
 
+    def is_short_event(self) -> bool:
+        return self.is_event and self.data[0] & (1 << 3)
+
     def as_shortcode(self, either=False) -> str:
         nn = self.get_node_number()
         en = self.get_event_number()
@@ -232,19 +235,18 @@ class cbusevent(canmessage):
         self.nn = nn
         self.en = en
         self.polarity = polarity
-        self.sync_data(0)
+        self.is_short_event = (self.nn == 0)
 
         if send_now:
             self.send()
-
-    def sync_data(self, opcode: int) -> None:
-        self.data = bytearray([opcode, self.nn >> 8, self.nn & 0xff, self.en >> 8, self.en & 0xff])
 
     def send(self) -> None:
         if self.polarity == POLARITY_ON:
             self.send_on()
         elif self.polarity == POLARITY_OFF:
             self.send_off()
+        else:
+            raise ValueError('event polarity not set')
 
     def send_on(self) -> None:
         self.polarity = POLARITY_ON
@@ -258,9 +260,14 @@ class cbusevent(canmessage):
 
     def calc_opcode(self) -> int:
         add_bytes = self.dlc - 5
-        evt_length = self.nn == 0
-        return event_opcodes_lookup[add_bytes][evt_length][self.polarity]
+        # evt_length = self.nn == 0
+        return event_opcodes_lookup[add_bytes][self.is_short_event][self.polarity]
 
+    def sync_data(self, opcode: int) -> None:
+        if self.is_short_event:
+            self.nn = self.cbus.config.node_number
+
+        self.data = bytearray([opcode, self.nn >> 8, self.nn & 0xff, self.en >> 8, self.en & 0xff])
 
 def message_from_tuple(t: tuple) -> canmessage:
     msg = canmessage()

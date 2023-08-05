@@ -329,7 +329,11 @@ class cbusconfig:
         self.config_data[4] = state
         self.backend.store_config(self.config_data)
 
-    def find_existing_event(self, nn: int, en: int) -> int:
+    def find_existing_event(self, nn: int, en: int, opcode: int=0) -> int:
+        if opcode & (1 << 3):
+            # zero the NN for short events
+            nn = 0
+
         for i in range(self.num_events):
             offset = i * self.event_size
 

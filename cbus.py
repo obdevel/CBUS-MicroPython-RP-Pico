@@ -309,7 +309,8 @@ class cbus:
     def handle_accessory_event(self, msg: canmessage.canmessage) -> None:
         if self.event_handler is not None:
             node_number, event_number = msg.get_node_and_event_numbers()
-            idx = self.config.find_existing_event(node_number, event_number)
+            opcode = msg.data[0]
+            idx = self.config.find_existing_event(node_number, event_number, opcode)
 
             if idx >= 0:
                 self.event_handler(msg, idx)
