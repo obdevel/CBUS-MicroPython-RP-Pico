@@ -74,6 +74,7 @@ event_opcodes = (
     cbusdefs.OPC_ARSOF3
 )
 
+
 event_opcodes_lookup = (
     ((cbusdefs.OPC_ACOF, cbusdefs.OPC_ACON), (cbusdefs.OPC_ASOF, cbusdefs.OPC_ASON)),
     ((cbusdefs.OPC_ACOF1, cbusdefs.OPC_ACON1), (cbusdefs.OPC_ASOF1, cbusdefs.OPC_ASON1)),
@@ -260,7 +261,6 @@ class cbusevent(canmessage):
 
     def calc_opcode(self) -> int:
         add_bytes = self.dlc - 5
-        # evt_length = self.nn == 0
         return event_opcodes_lookup[add_bytes][self.is_short_event][self.polarity]
 
     def sync_data(self, opcode: int) -> None:
