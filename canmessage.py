@@ -141,7 +141,7 @@ class canmessage:
         return self.data[0] in event_opcodes
 
     def is_short_event(self) -> bool:
-        return self.is_event and self.data[0] & (1 << 3)
+        return True if self.is_event() and self.data[0] & (1 << 3) else False
 
     def as_shortcode(self, either=False) -> str:
         nn = self.get_node_number()
@@ -236,7 +236,7 @@ class cbusevent(canmessage):
         self.nn = nn
         self.en = en
         self.polarity = polarity
-        self.is_short_event = (self.nn == 0)
+        self.is_short = (self.nn == 0)
 
         if send_now:
             self.send()
@@ -261,10 +261,10 @@ class cbusevent(canmessage):
 
     def calc_opcode(self) -> int:
         add_bytes = self.dlc - 5
-        return event_opcodes_lookup[add_bytes][self.is_short_event][self.polarity]
+        return event_opcodes_lookup[add_bytes][self.is_short][self.polarity]
 
     def sync_data(self, opcode: int) -> None:
-        if self.is_short_event:
+        if self.is_short:
             self.nn = self.cbus.config.node_number
 
         self.data = bytearray([opcode, self.nn >> 8, self.nn & 0xff, self.en >> 8, self.en & 0xff])

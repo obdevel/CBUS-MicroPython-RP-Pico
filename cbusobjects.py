@@ -139,8 +139,11 @@ class sensor:
     def interpret(self, msg):
         pass
 
-    def udf(self, msg):
-        pass
+    def udf(self, msg: canmessage.cbusevent):
+        t = tuple(msg)
+        if msg.is_short_event():
+            t = (t[0], 0, t[2])
+        return t in self.feedback_events
 
     def sync_state(self):
         if self.query_message:
@@ -168,11 +171,7 @@ class binary_sensor(sensor):
     def __init__(self, name: str, cbus: cbus.cbus, feedback_events: tuple, query_message: tuple = None):
         super(binary_sensor, self).__init__(name, cbus, feedback_events, query_message)
 
-    def udf(self, msg: canmessage.cbusevent):
-        return tuple(msg) in self.feedback_events
-
     def interpret(self, msg: canmessage.cbusevent):
-        t = tuple(msg)
         new_state = OBJECT_STATE_OFF if msg.data[0] & 1 else OBJECT_STATE_ON
 
         if self.state != new_state:
@@ -187,10 +186,6 @@ class binary_sensor(sensor):
 class multi_sensor(sensor):
     def __init__(self, name: str, cbus: cbus.cbus, feedback_events: tuple, query_message: tuple = None):
         super(multi_sensor, self).__init__(name, cbus, feedback_events, query_message)
-
-    def udf(self, msg: canmessage.canmessage) -> bool:
-        if tuple(msg) in self.feedback_events:
-            return True
 
     def interpret(self, msg: canmessage.canmessage) -> None:
         t = tuple(msg)
@@ -220,9 +215,6 @@ class value_sensor(sensor):
         self.value = 99
         self.state = OBJECT_STATE_VALID
         self.evt.set()
-
-    def udf(self, msg):
-        return msg in self.feedback_events
 
     def dispose(self):
         super().dispose()
