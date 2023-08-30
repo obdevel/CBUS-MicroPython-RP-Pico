@@ -38,8 +38,12 @@ class subscription:
         # self.logger.log(f'subscription: publish, query_type = {self.query_type}, query = {self.query}')
 
         if msg.matches(self.query_type, self.query):
+            # self.logger.log(f'subscription: match ok')
             self.queue.put_nowait(msg)
             self.evt.set()
+        else:
+            # self.logger.log('no match')
+            pass
 
     async def wait(self):
         self.evt.clear()

@@ -69,6 +69,7 @@ class cbus:
         self.consume_own_messages = False
         self.consume_query_type = canmessage.QUERY_ALL
         self.consume_query = None
+        self.has_messages_to_consume = False
 
         self.histories = []
         self.subscriptions = []
@@ -169,33 +170,43 @@ class cbus:
     def set_sent_message_handler(self, sent_message_handler) -> None:
         self.sent_message_handler = sent_message_handler
 
-    def send_cbus_message(self, msg: canmessage.canmessage) -> None:
+    async def send_cbus_message(self, msg: canmessage.canmessage) -> None:
         # self.logger.log(f'cbus: send_cbus_message: sending {msg}')
         msg.canid = self.config.canid
         msg.make_header()
         # self.logger.log(f'cbus: send_cbus_message: calling send_cbus_message_no_header_update')
-        self.send_cbus_message_no_header_update(msg)
+        await self.send_cbus_message_no_header_update(msg)
 
-    def send_cbus_message_no_header_update(self, msg) -> None:
+    async def send_cbus_message_no_header_update(self, msg) -> None:
         # self.logger.log(f'cbus: send_cbus_message_no_header_update: sending {msg}')
         self.can.send_message__(msg)
         self.has_ui and self.config.mode == MODE_FLIM and self.led_grn.pulse()
         self.num_messages_sent += 1
 
-        if self.sent_message_handler is not None:
-            self.sent_message_handler(msg)
-
         if self.consume_own_messages:
             if msg.matches(self.consume_query_type, self.consume_query):
-                self.can.rx_queue.enqueue(msg)
+                # self.logger.log('cbus: enqueuing message for self')
+                msg.canid = 0
+                await self.can.rx_queue.enqueue(msg)
+                self.has_messages_to_consume = True
+                self.callback_flag.set()
+                # print(f'cbus: rx queue size = {self.can.rx_queue.size}')
+
+        if self.sent_message_handler is not None:
+            self.sent_message_handler(msg)
 
     async def process(self, max_msgs: int = 10) -> None:
         while True:
 
-            if not self.in_transition:
-                await self.callback_flag.wait()
-            else:
+            if self.in_transition:
                 await asyncio.sleep_ms(10)
+            elif self.has_messages_to_consume:
+                # self.logger.log('cbus: have own messages')
+                self.has_messages_to_consume = False
+            else:
+                # self.logger.log('cbus: blocking on callback flag')
+                await self.callback_flag.wait()
+                # self.logger.log('cbus: unblocked')
 
             if self.in_transition and time.ticks_diff(time.ticks_ms(), self.timeout_timer) >= 30000:
                 # self.logger.log('cbus: mode change timeout')
@@ -252,6 +263,7 @@ class cbus:
 
                 if avail and processed_msgs < max_msgs:
                     msg: canmessage.canmessage = await self.can.get_next_message()
+                    # self.logger.log('cbus: got incoming message')
 
                     if msg:
                         self.num_messages_received += 1
@@ -260,6 +272,7 @@ class cbus:
                             h.add(msg)
 
                         for sub in self.subscriptions:
+                            # self.logger.log(f'cbus: publishing to {sub.name}')
                             sub.publish(msg)
 
                         if self.gridconnect_server:

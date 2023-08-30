@@ -123,7 +123,8 @@ class dccpp:
         self.response = None
         self.evc = asyncio.Event()
         self.evt = asyncio.Event()
-        self.timer = cbusobjects.timeout(self.timeout, self.evt)
+        # self.timer = cbusobjects.timeout(self.timeout, self.evt)
+        self.timer = cbusobjects.timeout(self.timeout)
         self.active_sessions = {}  # decoder_id: loco object
 
         self.connection.connect()
@@ -204,8 +205,8 @@ class dccpp:
         else:
             self.logger.log('dccpp: no response')
 
-    def emergency_stop(self, decoder_id: int) -> None:
-        pass
+    def emergency_stop(self, loco: loco) -> None:
+        self.set_speed(loco, 1)
 
     def emergency_stop_all(self) -> None:
         self.request = '<!>'

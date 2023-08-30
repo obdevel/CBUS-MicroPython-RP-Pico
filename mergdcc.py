@@ -182,6 +182,9 @@ class merg_cab:
         self.cbus.send_cbus_message(msg)
         self.logger.log('e-stop all')
 
+    def status(self) -> None:
+        pass
+
     async def keepalive(self) -> None:
         try:
             while True:

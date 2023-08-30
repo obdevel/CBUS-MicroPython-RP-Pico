@@ -36,6 +36,7 @@ class circularQueue:
             self.hwm = self.hwm + 1 if self.size > self.hwm else self.hwm
             self.puts += 1
             self.lock.release()
+            # print('enqueued new message')
 
     async def dequeue(self) -> canmessage.canmessage | None:
         if self.size == 0:

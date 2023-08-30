@@ -15,6 +15,9 @@ OBJECT_STATE_OFF = const(0)
 OBJECT_STATE_ON = const(1)
 OBJECT_STATE_VALID = const(99)
 
+SIGNAL_STATE_CLEAR = const(0)
+SIGNAL_STATE_SET = const(1)
+
 OBJECT_TYPE_UNKNOWN = const(-1)
 OBJECT_TYPE_TURNOUT = const(0)
 OBJECT_TYPE_SEMAPHORE_SIGNAL = const(1)
@@ -129,7 +132,8 @@ class sensor:
         self.sub = cbuspubsub.subscription(name + ':sub', self.cbus, canmessage.QUERY_UDF, self.udf)
         self.task_handle = asyncio.create_task(self.run_task())
 
-        self.sync_state()
+        # self.sync_state()
+        asyncio.create_task(self.sync_state())
 
     async def run_task(self) -> None:
         while True:
@@ -140,15 +144,16 @@ class sensor:
         pass
 
     def udf(self, msg: canmessage.cbusevent):
+        # self.logger.log(f'sensor:udf, event = {tuple(msg)}')
         t = tuple(msg)
         if msg.is_short_event():
             t = (t[0], 0, t[2])
         return t in self.feedback_events
 
-    def sync_state(self):
+    async def sync_state(self):
         if self.query_message:
             msg = canmessage.message_from_tuple(self.query_message)
-            self.cbus.send_cbus_message(msg)
+            await self.cbus.send_cbus_message(msg)
 
     def dispose(self):
         self.evt.set()
@@ -172,6 +177,7 @@ class binary_sensor(sensor):
         super(binary_sensor, self).__init__(name, cbus, feedback_events, query_message)
 
     def interpret(self, msg: canmessage.cbusevent):
+        # self.logger.log(f'binary_sensor {self.name}, got {msg}')
         new_state = OBJECT_STATE_OFF if msg.data[0] & 1 else OBJECT_STATE_ON
 
         if self.state != new_state:
@@ -276,7 +282,7 @@ class base_cbus_layout_object:
         if self.lock.locked():
             return False
         else:
-            await self.lock.acquire()
+            await self.lock.acquire()      # blocks until lock succeeds
             if self.auto_release:
                 self.lock_timeout_task_handle = asyncio.create_task(self.lock_timeout_task(self.release_timeout))
             return True
