@@ -81,12 +81,12 @@ class mymodule(cbusmodule.cbusmodule):
         # *** end of bare minimum init
 
         # ***
-        # *** setup output pins for switches
+        # *** setup input pins for switches
         # *** pin numbers could be configured using NVs rather than being hardcoded
         # ***
 
         self.switches = [None] * 8
-        pins = [8, 9, 10, 11, 12, 13, 14, 15]
+        pins = (8, 9, 10, 11, 12, 13, 14, 15)
 
         for n, p in enumerate(pins):
             p = (Pin(p, Pin.IN, Pin.PULL_UP))

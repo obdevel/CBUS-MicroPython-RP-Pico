@@ -85,11 +85,11 @@ class mymodule(cbusmodule.cbusmodule):
         # *** pin numbers could be configured using NVs rather than being hardcoded
         # ***
 
-        self.pins = []
+        self.pins = [None] * 8
 
-        for p in (8, 9, 10, 11, 12, 13, 14, 15):
-            self.pins.append(Pin(p, Pin.OUT))
-            Pin(p).off()
+        for i, p in enumerate((8, 9, 10, 11, 12, 13, 14, 15)):
+            self.pins[i] = Pin(p, Pin.OUT)
+            self.pins[i].off()
 
         # ***
         # *** module initialisation complete
