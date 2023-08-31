@@ -69,7 +69,7 @@ class cbus:
         self.consume_own_messages = False
         self.consume_query_type = canmessage.QUERY_ALL
         self.consume_query = None
-        self.has_messages_to_consume = False
+        # self.has_messages_to_consume = False
 
         self.histories = []
         self.subscriptions = []
@@ -188,7 +188,7 @@ class cbus:
                 # self.logger.log('cbus: enqueuing message for self')
                 msg.canid = 0
                 await self.can.rx_queue.enqueue(msg)
-                self.has_messages_to_consume = True
+                # self.has_messages_to_consume = True
                 self.callback_flag.set()
                 # print(f'cbus: rx queue size = {self.can.rx_queue.size}')
 
@@ -200,9 +200,9 @@ class cbus:
 
             if self.in_transition:
                 await asyncio.sleep_ms(10)
-            elif self.has_messages_to_consume:
+            # elif self.has_messages_to_consume:
                 # self.logger.log('cbus: have own messages')
-                self.has_messages_to_consume = False
+                # self.has_messages_to_consume = False
             else:
                 # self.logger.log('cbus: blocking on callback flag')
                 await self.callback_flag.wait()

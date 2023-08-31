@@ -1,13 +1,13 @@
-# example CBUS consumer module - controls 8 LEDs
-# use FCU to teach events
-# set EV1 to the number of the LED to control, values 0-7
-# other EVs are not used
+# example CBUS producer module - controls 8 switches
+# uses hardcoded events
 #
 
 import uasyncio as asyncio
 from machine import Pin
+from primitives import Switch
 
 import aiorepl
+import canmessage
 import cbus
 import cbusconfig
 import cbusdefs
@@ -38,8 +38,8 @@ class mymodule(cbusmodule.cbusmodule):
         config = cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4)
         self.cbus = cbus.cbus(can, config)
 
-        self.module_id = 107
-        self.module_name = bytes('PYCONS ', 'ascii')
+        self.module_id = 108
+        self.module_name = bytes('PYPROD ', 'ascii')
         self.module_params = [
             20,
             cbusdefs.MANU_MERG,
@@ -81,15 +81,18 @@ class mymodule(cbusmodule.cbusmodule):
         # *** end of bare minimum init
 
         # ***
-        # *** setup output pins for LEDs
+        # *** setup output pins for switches
         # *** pin numbers could be configured using NVs rather than being hardcoded
         # ***
 
-        self.pins = []
+        self.switches = [None] * 8
+        pins = [8, 9, 10, 11, 12, 13, 14, 15]
 
-        for p in (8, 9, 10, 11, 12, 13, 14, 15):
-            self.pins.append(Pin(p, Pin.OUT))
-            Pin(p).off()
+        for n, p in enumerate(pins):
+            p = (Pin(p, Pin.IN, Pin.PULL_UP))
+            self.switches[n] = Switch(p)
+            self.switches[n].open_func(self.switch_handler, (n, False))
+            self.switches[n].close_func(self.switch_handler, (n, True))
 
         # ***
         # *** module initialisation complete
@@ -100,24 +103,20 @@ class mymodule(cbusmodule.cbusmodule):
         # *** end of initialise method
 
     # ***
-    # *** CBUS event handler -- called whenever a previously taught event has been received
+    # *** switch change handler - send a CBUS event depending on switch number and state
+    # *** edit to change event number, emit short events, etc
     # ***
-    
-    def event_handler(self, msg: canmessage, idx: int) -> None:
-        self.logger.log(f'-- event handler: idx = {idx}: {msg}')
-        
-        # lookup the value of the 1st EV
-        ev1 = self.cbus.config.read_event_ev(idx, 1)
-        self.logger.log(f'** idx = {idx}, ev1 = {ev1}')
 
-        # switch the LED on or off according to the event opcode
-        if ev1 < 8:
-            if msg.data[0] & 1:        # off event
-                self.logger.log(f'** LED {ev1} off')
-                self.pins[ev1].off()
-            else:                      # on event
-                self.logger.log(f'** LED {ev1} on')
-                self.pins[ev1].on()
+    async def switch_handler(self, switch: int, state: bool) -> None:
+        self.logger.log(f'** switch_handler: switch = {switch}, state = {state}')
+
+        t = (-1, self.cbus.config.node_number, switch)
+        ev = canmessage.event_from_tuple(self.cbus, t)
+
+        if (state):
+            await ev.send_on()
+        else:
+            await ev.send_off()
 
     # ***
     # *** coroutines that run in parallel
