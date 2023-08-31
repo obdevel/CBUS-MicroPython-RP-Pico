@@ -86,8 +86,9 @@ class mymodule(cbusmodule.cbusmodule):
         # ***
 
         self.pins = [None] * 8
+        pin_numbers = (8, 9, 10, 11, 12, 13, 14, 15)
 
-        for i, p in enumerate((8, 9, 10, 11, 12, 13, 14, 15)):
+        for i, p in enumerate(pin_numbers):
             self.pins[i] = Pin(p, Pin.OUT)
             self.pins[i].off()
 
@@ -101,14 +102,15 @@ class mymodule(cbusmodule.cbusmodule):
 
     # ***
     # *** CBUS event handler -- called whenever a previously taught event has been received
+    # *** when teaching, set the value of EV1 to select the LED pin to control
     # ***
-    
+
     def event_handler(self, msg: canmessage, idx: int) -> None:
         self.logger.log(f'-- event handler: idx = {idx}: {msg}')
-        
+
         # lookup the value of the 1st EV
         ev1 = self.cbus.config.read_event_ev(idx, 1)
-        self.logger.log(f'** idx = {idx}, ev1 = {ev1}')
+        self.logger.log(f'** idx = {idx}, opcode = {msg.data[0]}, polarity = {"OFF" if msg.data[0] & 1 else "ON"}, ev1 = {ev1}')
 
         # switch the LED on or off according to the event opcode
         if ev1 < 8:

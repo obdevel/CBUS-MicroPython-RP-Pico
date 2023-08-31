@@ -86,11 +86,11 @@ class mymodule(cbusmodule.cbusmodule):
         # ***
 
         self.switches = [None] * 8
-        pins = (8, 9, 10, 11, 12, 13, 14, 15)
+        pin_numbers = (8, 9, 10, 11, 12, 13, 14, 15)
 
-        for n, p in enumerate(pins):
-            p = (Pin(p, Pin.IN, Pin.PULL_UP))
-            self.switches[n] = Switch(p)
+        for n, p in enumerate(pin_numbers):
+            pin_object = Pin(p, Pin.IN, Pin.PULL_UP)
+            self.switches[n] = Switch(pin_object)
             self.switches[n].open_func(self.switch_handler, (n, False))
             self.switches[n].close_func(self.switch_handler, (n, True))
 
@@ -103,20 +103,14 @@ class mymodule(cbusmodule.cbusmodule):
         # *** end of initialise method
 
     # ***
-    # *** switch change handler - send a CBUS event depending on switch number and state
+    # *** switch change handler - sends a CBUS event depending on switch number and state
     # *** edit to change event number, emit short events, etc
     # ***
 
-    async def switch_handler(self, switch: int, state: bool) -> None:
-        self.logger.log(f'** switch_handler: switch = {switch}, state = {state}')
-
-        t = (-1, self.cbus.config.node_number, switch)
-        ev = canmessage.event_from_tuple(self.cbus, t)
-
-        if (state):
-            await ev.send_on()
-        else:
-            await ev.send_off()
+    async def switch_handler(self, switch: int, switch_state: bool) -> None:
+        self.logger.log(f'** switch_handler: switch = {switch}, state = {"ON" if switch_state else "OFF"}')
+        ev = canmessage.cbusevent(mod.cbus, canmessage.POLARITY_UNKNOWN, self.cbus.config.node_number, switch)
+        await ev.send_on() if switch_state else await ev.send_off()
 
     # ***
     # *** coroutines that run in parallel
