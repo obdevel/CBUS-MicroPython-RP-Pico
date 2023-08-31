@@ -24,20 +24,19 @@ POLARITY_EITHER = const(2)
 QUERY_UNKNOWN = const(-1)
 QUERY_TUPLE = const(20)
 QUERY_TUPLES = const(0)
-QUERY_SHORTCODES = const(1)
-QUERY_OPCODES = const(2)
-QUERY_REGEX = const(3)
-QUERY_CANID = const(4)
-QUERY_RTR = const(5)
-QUERY_EXT = const(6)
-QUERY_EVENTS = const(7)
-QUERY_ALL_EVENTS = const(8)
-QUERY_LONG_MESSAGES = const(9)
-QUERY_UDF = const(10)
-QUERY_ALL = const(11)
-QUERY_NONE = const(12)
-QUERY_NN = const(13)
-QUERY_DN = const(14)
+QUERY_OPCODES = const(1)
+QUERY_REGEX = const(2)
+QUERY_CANID = const(3)
+QUERY_RTR = const(4)
+QUERY_EXT = const(5)
+QUERY_EVENTS = const(6)
+QUERY_ALL_EVENTS = const(7)
+QUERY_LONG_MESSAGES = const(8)
+QUERY_UDF = const(9)
+QUERY_ALL = const(10)
+QUERY_NONE = const(11)
+QUERY_NN = const(12)
+QUERY_DN = const(13)
 
 event_opcodes = (
     cbusdefs.OPC_ACON,
@@ -81,21 +80,6 @@ event_opcodes_lookup = (
     ((cbusdefs.OPC_ACOF2, cbusdefs.OPC_ACON2), (cbusdefs.OPC_ASOF2, cbusdefs.OPC_ASON2)),
     ((cbusdefs.OPC_ACOF3, cbusdefs.OPC_ACON3), (cbusdefs.OPC_ASOF3, cbusdefs.OPC_ASON3))
 )
-
-polarity_lookup = {
-    "*": POLARITY_EITHER,
-    "+": POLARITY_ON,
-    "-": POLARITY_OFF,
-    "?": POLARITY_UNKNOWN
-}
-
-
-def shortcode_to_tuple(code) -> tuple:
-    polarity = polarity_lookup.get(code[0])
-    e = code.find("e")
-    nn = int(code[2:e])
-    en = int(code[e + 1:])
-    return polarity, nn, en
 
 
 class canmessage:
@@ -143,16 +127,6 @@ class canmessage:
     def is_short_event(self) -> bool:
         return True if self.is_event() and self.data[0] & (1 << 3) else False
 
-    def as_shortcode(self, either=False) -> str:
-        nn = self.get_node_number()
-        en = self.get_event_number()
-        if either:
-            code = "*n"
-        else:
-            code = "-n" if (self.data[0] & 1) else "+n"
-        code += str(nn) + "e" + str(en)
-        return code
-
     def get_node_number(self) -> int:
         return (self.data[1] << 8) + (self.data[2] & 0xff)
 
@@ -199,8 +173,6 @@ class canmessage:
             else:
                 self.logger.log(f'matches: expected tuple as query, query = {query}')
                 return False
-        elif query_type == QUERY_SHORTCODES:
-            return self.as_shortcode() in query
         elif query_type == QUERY_OPCODES:
             return self.data[0] in query
         elif query_type == QUERY_REGEX:
