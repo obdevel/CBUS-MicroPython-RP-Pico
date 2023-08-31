@@ -306,6 +306,7 @@ def event_from_message(cbus: cbus.cbus, msg: canmessage) -> cbusevent:
     evt.data[0] = evt.calc_opcode()
     evt.nn = msg.get_node_number()
     evt.en = msg.get_event_number()
+    evt.is_short = evt.nn == 0
     # print(f'event_from_message: created {msg}')
 
     return evt
@@ -338,6 +339,7 @@ def event_from_table(cbus: cbus.cbus, idx: int) -> canmessage:
     evt.polarity = POLARITY_UNKNOWN
     evt.nn = evt.get_node_number()
     evt.en = evt.get_event_number()
+    evt.is_short = evt.nn == 0
 
     return evt
 
