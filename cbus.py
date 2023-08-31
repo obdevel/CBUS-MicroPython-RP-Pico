@@ -172,7 +172,8 @@ class cbus:
 
     async def send_cbus_message(self, msg: canmessage.canmessage) -> None:
         # self.logger.log(f'cbus: send_cbus_message: sending {msg}')
-        msg.canid = self.config.canid
+        if msg.canid == 0:
+            msg.canid = self.config.canid
         msg.make_header()
         # self.logger.log(f'cbus: send_cbus_message: calling send_cbus_message_no_header_update')
         await self.send_cbus_message_no_header_update(msg)

@@ -132,7 +132,7 @@ class canmessage:
                     yield x
 
     def make_header(self, priority=0x0b) -> None:
-        self.canid = (priority << 7) + self.get_canid()
+        self.canid = (priority << 7) + (self.canid & 0x7f)
 
     def get_canid(self) -> int:
         return self.canid & 0x7f
@@ -302,10 +302,20 @@ def message_from_tuple(t: tuple) -> canmessage:
 
 def event_from_message(cbus: cbus.cbus, msg: canmessage) -> cbusevent:
     evt = cbusevent(cbus)
-    evt.polarity = POLARITY_OFF if msg.data[0] & 1 else POLARITY_ON
+
+    if msg.data[0] == -1:
+        evt.polarity = -1
+    else:
+        if msg.data[0] & 1:
+            evt.polarity = POLARITY_OFF
+        else:
+            evt.polarity = POLARITY_ON
+
     for i in range(evt.dlc):
         evt.data[i] = msg.data[i]
+
     evt.data[0] = evt.calc_opcode()
+
     evt.nn = msg.get_node_number()
     evt.en = msg.get_event_number()
     evt.is_short = evt.nn == 0
