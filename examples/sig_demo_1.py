@@ -77,7 +77,7 @@ class mymodule(cbusmodule.cbusmodule):
         self.cbus.set_sent_message_handler(self.sent_message_handler)
 
         self.cbus.consume_own_messages = True
-        self.cbus.consume_query_type = canmessage.QUERY_ALL
+        self.cbus.consume_query_type = canmessage.QUERY
 
         self.cbus.begin()
 

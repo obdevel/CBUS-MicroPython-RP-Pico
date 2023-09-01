@@ -185,13 +185,20 @@ class merg_cab:
     async def status(self) -> None:
         pass
     
-    async def track_power(self, on: int) -> None:
-        pass
+    async def track_power(self, power_on: int) -> None:
+        self.logger.log(f'power = {power_on}')
+
+        if power_on:
+            msg = canmessage.canmessage(0, 1, (cbusdefs.OPC_TON))
+        else:
+            msg = canmessage.canmessage(0, 1, (cbusdefs.OPC_TON))
+
+        await self.cbus.send_cbus_message(msg)
 
     async def keepalive(self) -> None:
         try:
             while True:
-                await asyncio.sleep(4)
+                await asyncio.sleep_ms(3900)
                 for loco in self.active_sessions.values():
                     msg = canmessage.canmessage(0, 2, (cbusdefs.OPC_DKEEP, loco.session))
                     await self.cbus.send_cbus_message(msg)

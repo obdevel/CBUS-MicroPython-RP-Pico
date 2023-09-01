@@ -74,10 +74,10 @@ class mymodule(cbusmodule.cbusmodule):
         self.cbus.set_params(self.module_params)
         self.cbus.set_event_handler(self.event_handler)
         self.cbus.set_received_message_handler(self.received_message_handler)
-        # self.cbus.set_sent_message_handler(self.sent_message_handler)
+        self.cbus.set_sent_message_handler(self.sent_message_handler)
 
         self.cbus.consume_own_messages = True
-        self.cbus.consume_query_type = canmessage.QUERY_ALL_EVENTS
+        self.cbus.consume_query_type = canmessage.QUERY_ALL
 
         self.cbus.begin()
 
@@ -124,26 +124,29 @@ class mymodule(cbusmodule.cbusmodule):
     async def movement1(self, decoder_id: int, speed: int) -> None:
 
         # use type 1 for DCC++ or 0 for MERG DCC
-        dcc_type = 1
+        dcc_type = 0
 
         # create throttle connection
         self.logger.log('** creating throttle')
         if dcc_type == 1:
+            self.logger.log('** using DCC++')
             import dcc
             self.port = UART(0, baudrate=115200, tx=Pin(12), rx=Pin(13))
             self.conn = dcc.dccpp_serial_connection(self.port)
             self.throttle = dcc.dccpp(self.conn)
+            self.loco = dcc.loco(decoder_id)
         else:
+            self.logger.log('** using MERG DCC')
             import mergdcc
-            self.throttle = mergdcc.merg_cab
+            self.throttle = mergdcc.merg_cab(self.cbus)
+            self.loco = mergdcc.loco(decoder_id)
 
         # acquire loco and initialise
         self.logger.log('** acquiring loco')
-        self.loco = dcc.loco(decoder_id)
-        self.throttle.acquire(self.loco)
-        self.throttle.track_power(1)
-        self.throttle.status()
-        self.throttle.set_speed(self.loco, 0)
+        await self.throttle.acquire(self.loco)
+        await self.throttle.track_power(1)
+        await self.throttle.status()
+        await self.throttle.set_speed(self.loco, 0)
 
         # create layout objects
         self.sensor1 = cbusobjects.binary_sensor('start_sensor', self.cbus, ((0, 66, 1), (1, 66, 1)), (cbusdefs.OPC_AREQ, 0, 66, 0, 1))
@@ -153,8 +156,8 @@ class mymodule(cbusmodule.cbusmodule):
         try:
             # move off ...
             self.logger.log('** starting')
-            self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)
-            self.throttle.set_speed(self.loco, speed)
+            await self.throttle.set_direction(self.loco, mergdcc.DIRECTION_FORWARD)
+            await self.throttle.set_speed(self.loco, speed)
 
             # ... until we are near the junction
             self.logger.log('** waiting for sensor')
@@ -170,7 +173,6 @@ class mymodule(cbusmodule.cbusmodule):
                 if self.loco.speed > 0:
                     self.throttle.set_speed(self.loco, 0)
                 await asyncio.sleep_ms(500)
-                # await self.signal1.wait()
 
             self.logger.log('** signal is clear')
 
@@ -187,16 +189,16 @@ class mymodule(cbusmodule.cbusmodule):
 
             # proceed for 30 secs
             self.logger.log('** proceeding')        
-            self.throttle.set_speed(self.loco, speed)
+            await self.throttle.set_speed(self.loco, speed)
             await asyncio.sleep_ms(30000)
-            self.throttle.set_speed(self.loco, 0)
+            await self.throttle.set_speed(self.loco, 0)
 
             self.logger.log('*** end of movement')
 
         except asyncio.CancelledError as e:
             self.logger.log(f'** task cancelled, exception = {e.__qualname__}')
             self.logger.log('** power off')
-            self.throttle.track_power(0)
+            await self.throttle.track_power(0)
 
 
     # ***

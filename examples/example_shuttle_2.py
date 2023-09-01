@@ -74,10 +74,10 @@ class mymodule(cbusmodule.cbusmodule):
         self.cbus.set_params(self.module_params)
         self.cbus.set_event_handler(self.event_handler)
         self.cbus.set_received_message_handler(self.received_message_handler)
-        # self.cbus.set_sent_message_handler(self.sent_message_handler)
+        self.cbus.set_sent_message_handler(self.sent_message_handler)
 
         self.cbus.consume_own_messages = True
-        self.cbus.consume_query_type = canmessage.QUERY_ALL_EVENTS
+        self.cbus.consume_query_type = canmessage.QUERY_ALL
 
         self.cbus.begin()
 
@@ -126,26 +126,28 @@ class mymodule(cbusmodule.cbusmodule):
         self.logger.log('** using event-driven implementation')
 
         # use type 1 for DCC++ or 0 for MERG DCC
-        dcc_type = 1
+        dcc_type = 0
 
         # create throttle connection
         self.logger.log('** creating throttle')
         if dcc_type == 1:
+            self.logger.log('** using DCC++')
             import dcc
             self.port = UART(0, baudrate=115200, tx=Pin(12), rx=Pin(13))
             self.conn = dcc.dccpp_serial_connection(self.port)
             self.throttle = dcc.dccpp(self.conn)
         else:
+            self.logger.log('** using MERG DCC')
             import mergdcc
-            self.throttle = mergdcc.merg_cab
+            self.throttle = mergdcc.merg_cab(self.cbus)
 
         # acquire loco and initialise
         self.logger.log('** acquiring loco')
-        self.loco = dcc.loco(decoder_id)
-        self.throttle.acquire(self.loco)
-        self.throttle.track_power(1)
-        self.throttle.status()
-        self.throttle.set_speed(self.loco, 0)
+        await self.loco = dcc.loco(decoder_id)
+        await self.throttle.acquire(self.loco)
+        await self.throttle.track_power(1)
+        await self.throttle.status()
+        await self.throttle.set_speed(self.loco, 0)
 
         # create sensor objects to represent the three IR detectors
         self.sensor1 = cbusobjects.binary_sensor('start_sensor', self.cbus, ((0, 66, 1), (1, 66, 1)), (cbusdefs.OPC_AREQ, 0, 66, 0, 1))
@@ -165,8 +167,8 @@ class mymodule(cbusmodule.cbusmodule):
             asyncio.sleep_ms(delay)
 
             self.logger.log('** proceed forward from start')
-            self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)
-            self.throttle.set_speed(self.loco, speed)
+            await self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)
+            await self.throttle.set_speed(self.loco, speed)
 
             while True:
                 self.logger.log('** waiting for a sensor to activate')
@@ -177,73 +179,27 @@ class mymodule(cbusmodule.cbusmodule):
                     self.logger.log(f'** train is at {s.name}')
 
                     self.logger.log('** stop train')
-                    self.throttle.set_speed(self.loco, 0)
+                    await self.throttle.set_speed(self.loco, 0)
 
                     self.logger.log(f'** wait for {delay}')
                     await asyncio.sleep_ms(delay)
 
                     if s is self.sensor1:
                         self.logger.log('** proceed forward')
-                        self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)
-                        self.throttle.set_speed(self.loco, speed)
+                        await self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)
+                        await self.throttle.set_speed(self.loco, speed)
                     elif s is self.sensor2:
                         self.logger.log('** continue')
-                        self.throttle.set_speed(self.loco, speed)
+                        await self.throttle.set_speed(self.loco, speed)
                     elif s is self.sensor3:
                         self.logger.log('** proceed reverse')
-                        self.throttle.set_direction(self.loco, dcc.DIRECTION_REVERSE)
-                        self.throttle.set_speed(self.loco, speed)
+                        await self.throttle.set_direction(self.loco, dcc.DIRECTION_REVERSE)
+                        await self.throttle.set_speed(self.loco, speed)
 
         except asyncio.CancelledError as e:
             self.logger.log(f'** task cancelled, exception = {e.__qualname__}')
             self.logger.log('** power off')
-            self.throttle.track_power(0)
-
-    async def movement1(self) -> None:
-        import dcc
-
-        self.turnout1 = cbusobjects.turnout('turnout1', self.cbus, ((0, 90, 0), (1, 90, 0)))
-        self.signal1 = cbusobjects.semaphore_signal('signal1', mod.cbus, ((0, 0, 0), (0, 0, 0)))
-
-        # move off ...
-        self.logger.log('** starting')
-        self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)
-        self.throttle.set_speed(self.loco, 10)
-
-        # ... until we are near the junction
-        while self.sensor1.state != cbusobjects.OBJECT_STATE_ON:
-            await self.sensor1.wait()
-
-        self.logger.log('** close to junction')
-
-        # stop and wait if the signal is against us -- external signaller
-        self.logger.log('** waiting for signal')
-
-        while self.signal1.state != cbusobjects.SIGNAL_STATE_CLEAR:
-            if self.loco.speed > 0:
-                self.throttle.set_speed(self.loco, 0)
-            await asyncio.sleep_ms(1000)
-
-        self.logger.log('** signal is clear')
-
-        # operate the turnout ourselves
-        self.logger.log('** acquiring turnout')
-        self.turnout1.auto_release = True
-        self.turnout1.release_timeout = 10000
-        await self.turnout1.acquire()
-
-        if self.turnout1.state == cbusobjects.OBJECT_STATE_OFF:
-            self.logger.log(' ** operating turnout')
-            self.turnout.close()
-            await self.turnout.wait()
-
-        # proceed for 30 secs
-        self.logger.log('** proceeding')        
-        self.throttle.set_speed(self.loco, 10)
-        await asyncio.sleep_ms(30000)
-        self.throttle.set_speed(self.loco, 0)
-
-        self.logger.log('*** end of movement')
+            await self.throttle.track_power(0)
 
     # ***
     # *** module main entry point - like Arduino setup()
