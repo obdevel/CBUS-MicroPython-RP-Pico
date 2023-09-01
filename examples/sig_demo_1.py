@@ -74,10 +74,10 @@ class mymodule(cbusmodule.cbusmodule):
         self.cbus.set_params(self.module_params)
         self.cbus.set_event_handler(self.event_handler)
         self.cbus.set_received_message_handler(self.received_message_handler)
-        # self.cbus.set_sent_message_handler(self.sent_message_handler)
+        self.cbus.set_sent_message_handler(self.sent_message_handler)
 
         self.cbus.consume_own_messages = True
-        self.cbus.consume_query_type = canmessage.QUERY_ALL_EVENTS
+        self.cbus.consume_query_type = canmessage.QUERY_ALL
 
         self.cbus.begin()
 
@@ -124,24 +124,27 @@ class mymodule(cbusmodule.cbusmodule):
     async def shuttle(self, decoder_id: int, speed: int=10, delay: int=10000, implementation: int=1) -> None:
         self.logger.log('** shuttle example start')
 
-        dcc_type = 1
+        dcc_type = 0
 
         # create throttle connection
         if dcc_type == 1:
+            self.logger.log('** using DCC++')
             import dcc
             self.port = UART(0, baudrate=115200, tx=Pin(12), rx=Pin(13))
             self.conn = dcc.dccpp_serial_connection(self.port)
             self.throttle = dcc.dccpp(self.conn)
+            self.loco = dcc.loco(decoder_id)
         else:
+            self.logger.log('** using MERG DCC')
             import mergdcc
-            self.throttle = mergdcc.merg_cab
+            self.throttle = mergdcc.merg_cab(self.cbus)
+            self.loco = mergdcc.loco(decoder_id)
 
         # acquire loco and initialise
-        self.loco = dcc.loco(decoder_id)
-        self.throttle.acquire(self.loco)
-        self.throttle.track_power(1)
-        self.throttle.status()
-        self.throttle.set_speed(self.loco, 0)
+        await self.throttle.acquire(self.loco)
+        await self.throttle.track_power(1)
+        await self.throttle.status()
+        await self.throttle.set_speed(self.loco, 0)
 
         self.logger.log(f'** using implementation type: {implementation}')
 
@@ -174,39 +177,39 @@ class mymodule(cbusmodule.cbusmodule):
                     self.logger.log(f'** start of sequence: {num_loops}')
 
                     await asyncio.sleep_ms(delay)                                                 # wait n secs
-                    self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)                      # forward direction
-                    self.throttle.set_speed(self.loco, speed)                                     # move off
+                    await self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)                      # forward direction
+                    await self.throttle.set_speed(self.loco, speed)                                     # move off
 
                     while self.sensor2.state != cbusobjects.OBJECT_STATE_ON:
                         state = await self.sensor2.wait()                                         # wait for mid point sensor
                         self.logger.log(f'{self.sensor2.name} = {state}')
 
-                    self.throttle.set_speed(self.loco, 0)                                              # stop
+                    await self.throttle.set_speed(self.loco, 0)                                              # stop
                     await asyncio.sleep_ms(delay)                                                 # wait n secs
-                    self.throttle.set_speed(self.loco, speed)                                          # move off
+                    await self.throttle.set_speed(self.loco, speed)                                          # move off
 
                     while self.sensor3.state != cbusobjects.OBJECT_STATE_ON:
                         state = await self.sensor3.wait()                                         # wait for end point sensor
                         self.logger.log(f'{self.sensor3.name} = {state}')
 
-                    self.throttle.set_speed(self.loco, 0)                                              # stop
+                    await self.throttle.set_speed(self.loco, 0)                                              # stop
                     await asyncio.sleep_ms(delay)                                                 # wait n secs    
-                    self.throttle.set_direction(self.loco, dcc.DIRECTION_REVERSE)                      # reverse direction
-                    self.throttle.set_speed(self.loco, speed)                                          # move off
+                    await self.throttle.set_direction(self.loco, dcc.DIRECTION_REVERSE)                      # reverse direction
+                    await self.throttle.set_speed(self.loco, speed)                                          # move off
 
                     while self.sensor2.state != cbusobjects.OBJECT_STATE_ON:
                         state = await self.sensor2.wait()                                         # wait for midpoint sensor
                         self.logger.log(f'{self.sensor2.name} = {state}')
 
-                    self.throttle.set_speed(self.loco, 0)                                              # stop
+                    await self.throttle.set_speed(self.loco, 0)                                              # stop
                     await asyncio.sleep_ms(delay)                                                 # wait n secs
-                    self.throttle.set_speed(self.loco, speed)                                          # move off
+                    await self.throttle.set_speed(self.loco, speed)                                          # move off
 
                     while self.sensor1.state != cbusobjects.OBJECT_STATE_ON:
                         state = await self.sensor1.wait()                                         # wait for start point sensor
                         self.logger.log(f'{self.sensor1.name} = {state}')
 
-                    self.throttle.set_speed(self.loco, 0)                                              # stop
+                    await self.throttle.set_speed(self.loco, 0)                                              # stop
 
                     num_loops += 1
 
@@ -217,8 +220,8 @@ class mymodule(cbusmodule.cbusmodule):
                 asyncio.sleep_ms(delay)
 
                 self.logger.log('** proceed forward from start')
-                self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)
-                self.throttle.set_speed(self.loco, speed)
+                await self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)
+                await self.throttle.set_speed(self.loco, speed)
 
                 while True:
                     self.logger.log('** waiting for a sensor')
@@ -228,22 +231,22 @@ class mymodule(cbusmodule.cbusmodule):
                     if s.state == cbusobjects.OBJECT_STATE_ON:                                    # if a sensor has triggered on
                         self.logger.log('** sensor is ON')
                         self.logger.log('** stop train')
-                        self.throttle.set_speed(self.loco, 0)                                          # stop
+                        await self.throttle.set_speed(self.loco, 0)                                          # stop
                         
                         self.logger.log(f'** wait for {delay}')
                         await asyncio.sleep_ms(delay)                                             # wait n secs
 
                         if s is self.sensor1:
                             self.logger.log('** proceed forward')
-                            self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)              # forward
-                            self.throttle.set_speed(self.loco, speed)                                  # move off
+                            await self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)              # forward
+                            await self.throttle.set_speed(self.loco, speed)                                  # move off
                         elif s is self.sensor2:
                             self.logger.log('** continue')
-                            self.throttle.set_speed(self.loco, speed)                                  # move off
+                            await self.throttle.set_speed(self.loco, speed)                                  # move off
                         elif s is self.sensor3:
                             self.logger.log('** proceed reverse')
-                            self.throttle.set_direction(self.loco, dcc.DIRECTION_REVERSE)              # reverse
-                            self.throttle.set_speed(self.loco, speed)                                  # move off
+                            await self.throttle.set_direction(self.loco, dcc.DIRECTION_REVERSE)              # reverse
+                            await self.throttle.set_speed(self.loco, speed)                                  # move off
 
         except asyncio.CancelledError as e:
             self.logger.log(f'** task cancelled, exception = {e}')
@@ -257,8 +260,8 @@ class mymodule(cbusmodule.cbusmodule):
 
         # move off ...
         self.logger.log('** starting')
-        self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)
-        self.throttle.set_speed(self.loco, 10)
+        await self.throttle.set_direction(self.loco, dcc.DIRECTION_FORWARD)
+        await self.throttle.set_speed(self.loco, 10)
 
         # ... until we are near the junction
         while self.sensor1.state != cbusobjects.OBJECT_STATE_ON:
@@ -271,7 +274,7 @@ class mymodule(cbusmodule.cbusmodule):
 
         while self.signal1.state != cbusobjects.SIGNAL_STATE_CLEAR:
             if self.loco.speed > 0:
-                self.throttle.set_speed(self.loco, 0)
+                await self.throttle.set_speed(self.loco, 0)
             await asyncio.sleep_ms(1000)
 
         self.logger.log('** signal is clear')
@@ -289,9 +292,9 @@ class mymodule(cbusmodule.cbusmodule):
 
         # proceed for 30 secs
         self.logger.log('** proceeding')        
-        self.throttle.set_speed(self.loco, 10)
+        await self.throttle.set_speed(self.loco, 10)
         await asyncio.sleep_ms(30000)
-        self.throttle.set_speed(self.loco, 0)
+        await self.throttle.set_speed(self.loco, 0)
 
         self.logger.log('*** end of movement')
 

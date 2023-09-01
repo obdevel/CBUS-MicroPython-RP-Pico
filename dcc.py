@@ -138,7 +138,7 @@ class dccpp:
         if data and len(data) > 0:
             self.response = data.decode()
 
-    def acquire(self, loco: loco) -> bool:
+    async def acquire(self, loco: loco) -> bool:
         self.request = f'<t -1 {loco.decoder_id} 0 1>'
         await self.send_request()
 
@@ -155,7 +155,7 @@ class dccpp:
     def dispatch(self, loco: loco) -> None:
         del self.active_sessions[loco.decoder_id]
 
-    def set_speed(self, loco: loco, speed: int) -> None:
+    async def set_speed(self, loco: loco, speed: int) -> None:
         self.request = f'<t -1 {loco.decoder_id} {speed} {loco.direction}>'
         await self.send_request()
 
@@ -165,7 +165,7 @@ class dccpp:
         else:
             self.logger.log('dccpp: invalid response')
 
-    def set_direction(self, loco: loco, direction: int) -> None:
+    async def set_direction(self, loco: loco, direction: int) -> None:
         self.request = f'<t -1 {loco.decoder_id} {loco.speed} {direction}>'
         await self.send_request()
 
@@ -175,7 +175,7 @@ class dccpp:
         else:
             self.logger.log('dccpp: invalid response')
 
-    def function(self, loco: loco, function: int, polarity: int) -> None:
+    async def function(self, loco: loco, function: int, polarity: int) -> None:
         self.request = f'<F {loco.decoder_id} {function} {polarity}>'
         await self.send_request()
 
@@ -185,7 +185,7 @@ class dccpp:
         else:
             self.logger.log('dccpp: no response')
 
-    def status(self) -> bool:
+    async def status(self) -> bool:
         self.request = '<s>'
         await self.send_request()
 
@@ -196,7 +196,7 @@ class dccpp:
             self.logger.log('dccpp: no response')
             return False
 
-    def track_power(self, state: int) -> None:
+    async def track_power(self, state: int) -> None:
         self.request = f'<{state}>'
         await self.send_request()
 
@@ -205,10 +205,10 @@ class dccpp:
         else:
             self.logger.log('dccpp: no response')
 
-    def emergency_stop(self, loco: loco) -> None:
+    async def emergency_stop(self, loco: loco) -> None:
         self.set_speed(loco, 1)
 
-    def emergency_stop_all(self) -> None:
+    async def emergency_stop_all(self) -> None:
         self.request = '<!>'
         await self.send_request()
 

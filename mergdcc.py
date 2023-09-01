@@ -53,20 +53,20 @@ class merg_cab:
         self.active_sessions = {}  # decoder_id: loco object
 
         self.timeout_evt = asyncio.Event()
-        self.timer = cbusobjects.timeout(self.timeout, self.timeout_evt)
+        self.timer = cbusobjects.timeout(self.timeout)
         self.sub = None
 
         self.ka = asyncio.create_task(self.keepalive())
         self.et = asyncio.create_task(self.err_task())
 
-    def dispose(self, stop=False):
+    async def dispose(self, stop=False):
         self.ka.cancel()
         self.et.cancel()
         for loco in self.active_sessions.values():
             if stop:
-                self.emergency_stop(loco)
+                await self.emergency_stop(loco)
             else:
-                self.dispatch(loco)
+                await self.dispatch(loco)
             del loco
             del self.active_sessions
 
@@ -89,7 +89,7 @@ class merg_cab:
 
         # self.logger.log(f'acquire: id = {loco.decoder_id}{loco.address_flag}, upper = {nmra_id_upper}, lower = {nmra_id_lower}')
         msg = canmessage.canmessage(0, 3, (cbusdefs.OPC_RLOC, nmra_id_upper, nmra_id_lower))
-        self.cbus.send_cbus_message(msg)
+        await self.cbus.send_cbus_message(msg)
 
         acquired_loco_ok = False
         start_time = time.ticks_ms()
@@ -140,9 +140,9 @@ class merg_cab:
 
         return response
 
-    def dispatch(self, loco: loco) -> None:
+    async def dispatch(self, loco: loco) -> None:
         msg = canmessage.canmessage(0, 2, (cbusdefs.OPC_KLOC, loco.session))
-        self.cbus.send_cbus_message(msg)
+        await self.cbus.send_cbus_message(msg)
         loco.session = -1
         try:
             del self.active_sessions[loco.decoder_id]
@@ -151,38 +151,41 @@ class merg_cab:
         finally:
             self.logger.log(f'dispatch: id = {loco.decoder_id}{loco.address_flag}')
 
-    def set_speed_and_direction(self, loco: loco) -> None:
+    async def set_speed_and_direction(self, loco: loco) -> None:
         msg = canmessage.canmessage(0, 3, (cbusdefs.OPC_DSPD, loco.session, loco.speed + (loco.direction << 7)))
-        self.cbus.send_cbus_message(msg)
+        await self.cbus.send_cbus_message(msg)
         self.logger.log(
             f'set_speed_and_direction: id = {loco.decoder_id}{loco.address_flag}, speed = {loco.speed}, direction = {loco.direction}')
 
-    def set_speed(self, loco: loco, speed: int) -> None:
+    async def set_speed(self, loco: loco, speed: int) -> None:
         loco.speed = speed
-        self.set_speed_and_direction(loco)
+        await self.set_speed_and_direction(loco)
         self.logger.log(f'set_speed, id = {loco.decoder_id}{loco.address_flag}, speed = {loco.speed}')
 
-    def set_direction(self, loco: loco, direction: int) -> None:
+    async def set_direction(self, loco: loco, direction: int) -> None:
         loco.direction = direction
-        self.set_speed_and_direction(loco)
+        await self.set_speed_and_direction(loco)
         self.logger.log(f'set_direction, id = {loco.decoder_id}{loco.address_flag}, direction = {loco.direction}')
 
-    def function(self, loco: loco, function: int, polarity: int) -> None:
+    async def function(self, loco: loco, function: int, polarity: int) -> None:
         opc = cbusdefs.OPC_DFNON if polarity else cbusdefs.OPC_DFNOF
         msg = canmessage.canmessage(0, 3, (opc, loco.session, function))
-        self.cbus.send_cbus_message(msg)
+        await self.cbus.send_cbus_message(msg)
         self.logger.log(f'set function, id = {loco.decoder_id}{loco.address_flag}, function {function} = {polarity}')
 
-    def emergency_stop(self, loco: loco) -> None:
-        self.set_speed(loco, 1)
+    async def emergency_stop(self, loco: loco) -> None:
+        await self.set_speed(loco, 1)
         self.logger.log(f'e-stop, id = {loco.decoder_id}{loco.address_flag}')
 
-    def emergency_stop_all(self) -> None:
+    async def emergency_stop_all(self) -> None:
         msg = canmessage.canmessage(0, 1, (cbusdefs.OPC_RESTP,))
-        self.cbus.send_cbus_message(msg)
+        await self.cbus.send_cbus_message(msg)
         self.logger.log('e-stop all')
 
-    def status(self) -> None:
+    async def status(self) -> None:
+        pass
+    
+    async def track_power(self, on: int) -> None:
         pass
 
     async def keepalive(self) -> None:
@@ -191,7 +194,7 @@ class merg_cab:
                 await asyncio.sleep(4)
                 for loco in self.active_sessions.values():
                     msg = canmessage.canmessage(0, 2, (cbusdefs.OPC_DKEEP, loco.session))
-                    self.cbus.send_cbus_message(msg)
+                    await self.cbus.send_cbus_message(msg)
         except asyncio.CancelledError:
             self.logger.log('keepalive coro cancelled')
 
