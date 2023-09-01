@@ -49,7 +49,7 @@ class mymodule(cbusmodule.cbusmodule):
             self.cbus.config.num_evs,
             self.cbus.config.num_nvs,
             1,
-            7,
+            cbusdefs.PF_COMBI | cbusdefs.PF_FLiM,
             0,
             cbusdefs.PB_CAN,
             0,
@@ -73,7 +73,9 @@ class mymodule(cbusmodule.cbusmodule):
         self.cbus.set_event_handler(self.event_handler)
         self.cbus.set_received_message_handler(self.received_message_handler)
         self.cbus.set_sent_message_handler(self.sent_message_handler)
-        self.cbus.consume_own_messages = False
+
+        if self.module_params[8] & cbusdefs.PF_COE:
+            self.cbus.consume_own_messages = True
 
         self.cbus.begin()
 

@@ -69,7 +69,6 @@ class cbus:
         self.consume_own_messages = False
         self.consume_query_type = canmessage.QUERY_ALL
         self.consume_query = None
-        # self.has_messages_to_consume = False
 
         self.histories = []
         self.subscriptions = []
@@ -175,7 +174,6 @@ class cbus:
         if msg.canid == 0:
             msg.canid = self.config.canid
         msg.make_header()
-        # self.logger.log(f'cbus: send_cbus_message: calling send_cbus_message_no_header_update')
         await self.send_cbus_message_no_header_update(msg)
 
     async def send_cbus_message_no_header_update(self, msg) -> None:
@@ -186,12 +184,9 @@ class cbus:
 
         if self.consume_own_messages:
             if msg.matches(self.consume_query_type, self.consume_query):
-                # self.logger.log('cbus: enqueuing message for self')
                 msg.canid = 0
                 await self.can.rx_queue.enqueue(msg)
-                # self.has_messages_to_consume = True
                 self.callback_flag.set()
-                # print(f'cbus: rx queue size = {self.can.rx_queue.size}')
 
         if self.sent_message_handler is not None:
             self.sent_message_handler(msg)
@@ -201,9 +196,6 @@ class cbus:
 
             if self.in_transition:
                 await asyncio.sleep_ms(10)
-            # elif self.has_messages_to_consume:
-                # self.logger.log('cbus: have own messages')
-                # self.has_messages_to_consume = False
             else:
                 # self.logger.log('cbus: blocking on callback flag')
                 await self.callback_flag.wait()
@@ -269,6 +261,15 @@ class cbus:
                     if msg:
                         self.num_messages_received += 1
 
+                        if msg.ext:
+                            continue
+
+                        if self.received_message_handler is not None:
+                            if self.opcodes is not None and len(self.opcodes) > 0 and msg.data[0] in self.opcodes:
+                                self.received_message_handler(msg)
+                            else:
+                                self.received_message_handler(msg)
+
                         for h in self.histories:
                             h.add(msg)
 
@@ -286,15 +287,6 @@ class cbus:
                             self.logger.log('cbus: can id clash')
                             self.enumeration_required = True
 
-                        if self.received_message_handler is not None:
-                            if self.opcodes is not None and len(self.opcodes) > 0 and msg.data[0] in self.opcodes:
-                                self.received_message_handler(msg)
-                            else:
-                                self.received_message_handler(msg)
-
-                        if msg.ext:
-                            continue
-
                         if msg.dlc > 0:
                             try:
                                 # self.logger.log(f'cbus: handling opcode = {msg.data[0]:#x}')
@@ -304,10 +296,11 @@ class cbus:
                                 pass
 
                         else:
-                            if msg.rtr and not self.enumerating:
-                                await self.respond_to_enum_request()
-                            elif self.enumerating:
-                                self.enum_responses.append(msg.get_canid())
+                            if self.config.node_number > 0:
+                                if msg.rtr and not self.enumerating:
+                                    await self.respond_to_enum_request()
+                                elif self.enumerating:
+                                    self.enum_responses.append(msg.get_canid())
 
                         processed_msgs += 1
 
