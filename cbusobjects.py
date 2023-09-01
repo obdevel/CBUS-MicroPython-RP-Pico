@@ -132,7 +132,6 @@ class sensor:
         self.sub = cbuspubsub.subscription(name + ':sub', self.cbus, canmessage.QUERY_UDF, self.udf)
         self.task_handle = asyncio.create_task(self.run_task())
 
-        # self.sync_state()
         asyncio.create_task(self.sync_state())
 
     async def run_task(self) -> None:
@@ -144,7 +143,6 @@ class sensor:
         pass
 
     def udf(self, msg: canmessage.cbusevent):
-        # self.logger.log(f'sensor:udf, event = {tuple(msg)}')
         t = tuple(msg)
         if msg.is_short_event():
             t = (t[0], 0, t[2])
@@ -188,6 +186,7 @@ class binary_sensor(sensor):
     def dispose(self):
         super().dispose()
 
+# has more than two distinct states
 
 class multi_sensor(sensor):
     def __init__(self, name: str, cbus: cbus.cbus, feedback_events: tuple, query_message: tuple = None):
@@ -197,12 +196,12 @@ class multi_sensor(sensor):
         t = tuple(msg)
         new_state = -1
 
-        for x in self.feedback_events:
+        for n, x in enumerate(self.feedback_events):
             if t == x:
-                new_state = t[2]
+                new_state = n
                 break
 
-        if self.state != new_state:
+        if self.state != new_state and new_state != -1:
             self.logger.log(f'-- multi sensor: {self.name}, from {self.state} to state {new_state}')
             self.state = new_state
             self.evt.set()
