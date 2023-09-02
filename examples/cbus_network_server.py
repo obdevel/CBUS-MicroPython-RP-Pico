@@ -4,7 +4,6 @@
 import json
 import time
 
-# import network
 import uasyncio as asyncio
 from machine import Pin
 
@@ -95,7 +94,7 @@ class mymodule(cbusmodule.cbusmodule):
         self.is_picow = None
         self.gcserver = None
 
-    def initialise(self) -> None:
+    def initialise(self) -> bool:
 
         # ***
         # *** bare minimum module init
@@ -105,8 +104,8 @@ class mymodule(cbusmodule.cbusmodule):
 
         self.cbus = cbus.cbus(mcp2515.mcp2515(), cbusconfig.cbusconfig())
 
-        self.module_id = 110
-        self.module_name = bytes('NETSVR ', 'ascii')
+        self.module_id = 112
+        self.module_name = bytes('PYNETSV', 'ascii')
         self.module_params = [
             20,
             cbusdefs.MANU_MERG,
@@ -116,7 +115,7 @@ class mymodule(cbusmodule.cbusmodule):
             self.cbus.config.num_evs,
             self.cbus.config.num_nvs,
             1,
-            7,
+            0,
             0,
             cbusdefs.PB_CAN,
             0,
@@ -147,7 +146,7 @@ class mymodule(cbusmodule.cbusmodule):
 
         # read config file
         config_dict = None
-        self.logger.log('reading config file')
+        self.logger.log('** reading config file')
 
         try:
             f = open(CONFIG_FILE, 'r')
@@ -155,17 +154,19 @@ class mymodule(cbusmodule.cbusmodule):
             f.close()
             config_dict = json.loads(data)
         except OSError:
-            self.logger.log('config file not found')
+            self.logger.log('** config file not found')
         except ValueError:
-            self.logger.log('invalid config')
+            self.logger.log('** invalid config')
 
         if config_dict:
-            self.logger.log(f'config: ssid = {config_dict["ssid"]}, password = {config_dict["pwd"]}')
+            self.logger.log(f'** config: ssid = {config_dict["ssid"]}, password = {config_dict["pwd"]}')
             self.connect_to_wifi(config_dict['ssid'], config_dict['pwd'])
             self.run_gc_server()
         else:
-            self.create_ap()
+            if not self.create_ap():
+                return False
 
+        return True
         # ***
         # *** module initialisation complete
         # ***
@@ -184,45 +185,47 @@ class mymodule(cbusmodule.cbusmodule):
     # *** network-related methods
     # ***
 
-    def create_ap(self):
+    def create_ap(self) -> bool:
         try:
             import network
-            self.logger.log('creating AP')
+            self.logger.log('** creating AP')
             self.wlan = network.WLAN(network.AP_IF)
             self.wlan.config(essid='CBUS', password='thereisnospoon')
             self.wlan.active(True)
 
             self.ip = self.wlan.ifconfig()[0]
             self.channel = self.wlan.config('channel')
-            self.logger.log(f'created AP, channel = {self.channel}, address = {self.ip}')
+            self.logger.log(f'** created AP, channel = {self.channel}, address = {self.ip}')
             self.host = self.ip
+            return True
         except ImportError:
-            self.logger.log('import failed; device is not Pico W')
+            self.logger.log('** import failed; device is not a Pico W')
             self.is_picow = False
+            return False
 
     def connect_to_wifi(self, ssid, pwd) -> None:
         try:
             import network
-            self.logger.log('device is Pico W')
+            self.logger.log('** device is Pico W')
             self.wlan = network.WLAN(network.STA_IF)
             self.wlan.active(True)
             self.wlan.connect(ssid, pwd)
-            self.logger.log('waiting for wifi...')
+            self.logger.log('** waiting for wifi...')
             tt = time.ticks_ms()
 
-            while not self.wlan.isconnected() and time.ticks_diff(time.ticks_ms(), tt) < 5000:
+            while not self.wlan.isconnected() and time.ticks_diff(time.ticks_ms(), tt) < 10000:
                 time.sleep_ms(500)
 
             if self.wlan.isconnected():
                 self.ip = self.wlan.ifconfig()[0]
                 self.channel = self.wlan.config('channel')
-                self.logger.log(f'connected to wifi, channel = {self.channel}, address = {self.ip}')
+                self.logger.log(f'** connected to wifi, channel = {self.channel}, address = {self.ip}')
                 self.host = self.ip
             else:
-                self.logger.log('unable to connect to wifi')
+                self.logger.log('** unable to connect to wifi')
 
         except ImportError:
-            self.logger.log('import failed; device is not Pico W')
+            self.logger.log('** import failed; device is not a Pico W')
             self.is_picow = False
 
     def run_gc_server(self) -> None:
@@ -231,9 +234,9 @@ class mymodule(cbusmodule.cbusmodule):
             self.gcserver = gcserver.gcserver(self.cbus, self.host, 5550)
             asyncio.create_task(
                 asyncio.start_server(self.gcserver.client_connected_cb, self.gcserver.host, self.gcserver.port))
-            self.logger.log('Gridconnect server is running')
+            self.logger.log('** Gridconnect server is now running')
         except ImportError:
-            self.logger.log('import failed; device is not Pico W')
+            self.logger.log('** import failed; device is not a Pico W')
 
     # ***
     # *** coroutines that run in parallel
@@ -261,7 +264,7 @@ class mymodule(cbusmodule.cbusmodule):
 
         _ = asyncio.create_task(self.blink_led_coro())
         _ = asyncio.create_task(webapp.serve())
-        self.logger.log('asyncio is now running the module main loop and co-routines')
+        self.logger.log('asyncio is now running')
 
         # start async REPL and wait for exit
         repl = asyncio.create_task(aiorepl.task(globals()))
@@ -274,10 +277,13 @@ class mymodule(cbusmodule.cbusmodule):
 
 # create an instance of our application class
 mod = mymodule()
-mod.initialise()
+ret = mod.initialise()
 
-# *** start the scheduler and run the app class main method
-asyncio.run(mod.run())
+if not ret:
+    mod.logger.log('*** initialisation failed')
+else:
+    # *** start the scheduler and run the app class main method
+    asyncio.run(mod.run())
 
-# *** the asyncio scheduler is now in control
-# *** no code after this line is executed
+    # *** the asyncio scheduler is now in control
+    # *** no code after this line is executed

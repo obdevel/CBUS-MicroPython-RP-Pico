@@ -86,7 +86,7 @@ class gcserver:
 
             # output queue from main CBUS process
             while not self.output_queue.empty():
-                self.logger.log('gcserver: output queue message(s) available to send')
+                # self.logger.log('gcserver: output queue message(s) available to send')
                 msg = await self.output_queue.get()
                 # await self.send_message(msg)
                 gc = self.CANtoGC(msg)
@@ -99,12 +99,12 @@ class gcserver:
                         count += 1
                         await asyncio.sleep_ms(5)
 
-                self.logger.log(f'gcserver: sent message to {count} client(s)')
+                # self.logger.log(f'gcserver: sent message to {count} client(s)')
                 await asyncio.sleep_ms(5)
 
             # peer-to-peer message queue
             while not self.peer_queue.empty():
-                self.logger.log('gcserver: peer queue message(s) available to send')
+                # self.logger.log('gcserver: peer queue message(s) available to send')
                 pmsg = await self.peer_queue.get()
                 for idx in range(len(self.clients) - 1):
                     cport = self.clients[idx].get_extra_info('peername')
@@ -146,26 +146,34 @@ class gcserver:
         gc += ';'
         return gc
 
-    def GCtoCAN(self, gc: str) -> canmessage.canmessage:
-        msg = canmessage.canmessage()
-        msg.ext = True if (gc[1] == 'X') else False
-        pos = gc.find('N')
+    def GCtoCAN(self, gc: str) -> canmessage.canmessage | None:
+        # self.logger.log(f'** GCtoCAN {gc}')
+        try:
+            msg = canmessage.canmessage()
+            msg.ext = True if (gc[1] == 'X') else False
+            pos = gc.find('N')
 
-        if pos == -1:
-            msg.rtr = True
-            pos = gc.find('R')
-        else:
-            msg.rtr = False
+            if pos == -1:
+                msg.rtr = True
+                pos = gc.find('R')
+            else:
+                msg.rtr = False
 
-        id = '0X' + gc[2:pos]
-        msg.canid = int(id) >> 5
+            id = '0X' + gc[2:pos]
+            msg.canid = int(id) >> 5
 
-        data = gc[pos + 1: -1]
-        msg.dlc = int(len(data) / 2)
+            data = gc[pos + 1: -1]
+            msg.dlc = int(len(data) / 2)
 
-        for i in range(msg.dlc):
-            j = int(i)
-            t = '0x' + data[j * 2: (j * 2) + 2]
-            msg.data[i] = int(t)
+            for i in range(msg.dlc):
+                j = int(i)
+                t = '0x' + data[j * 2: (j * 2) + 2]
+                msg.data[i] = int(t)
+
+            # self.logger.log('convert ok')
+
+        except:
+            # self.logger.log('** GCtoCAN invalid string')
+            msg = None
 
         return msg
