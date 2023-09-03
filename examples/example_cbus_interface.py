@@ -147,7 +147,6 @@ class mymodule(cbusmodule.cbusmodule):
             if len(input_string) > 24:     # message is too long; discard it and restart parser
                 input_string = ''
                 got_som = False
-                ccount = 0
                 continue
 
             if c == ':':        # colon at an time resets string
@@ -158,8 +157,7 @@ class mymodule(cbusmodule.cbusmodule):
                     if c == ';':    # semicolon = end of message
                         input_string += c
                         got_som = False
-                        msg = self.svr.GCtoCAN(input_string)
-                        if msg:
+                        if msg := self.svr.GCtoCAN(input_string):
                             await self.cbus.send_cbus_message_no_header_update(msg)
                     else:           # any other valid character
                         input_string += c

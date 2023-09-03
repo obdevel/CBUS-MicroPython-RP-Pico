@@ -8,6 +8,7 @@ import uasyncio as asyncio
 from machine import Pin
 
 import aiorepl
+import boards
 import cbus
 import cbusconfig
 import cbusdefs
@@ -15,6 +16,7 @@ import cbusmodule
 import logger
 import mcp2515
 
+from boards import dgboard
 
 class mymodule(cbusmodule.cbusmodule):
     def __init__(self):
@@ -33,8 +35,10 @@ class mymodule(cbusmodule.cbusmodule):
         # ** and the number of events, EVs and NVs
 
         from machine import SPI
-        bus = SPI(0, baudrate=10_000_000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=Pin(2), mosi=Pin(3), miso=Pin(4))
-        can = mcp2515.mcp2515(osc=16_000_000, cs_pin=5, interrupt_pin=1, bus=bus)
+        # bus = SPI(0, baudrate=10_000_000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=Pin(2), mosi=Pin(3), miso=Pin(4))
+        # can = mcp2515.mcp2515(osc=16_000_000, cs_pin=5, interrupt_pin=1, bus=bus)
+        board = boards.dgboard()
+        can = board.can
         config = cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4)
         self.cbus = cbus.cbus(can, config)
 
@@ -65,8 +69,10 @@ class mymodule(cbusmodule.cbusmodule):
         ]
 
         # ** change these pins if desired to suit your hardware
-        self.cbus.set_leds(21, 20)
-        self.cbus.set_switch(22)
+        # self.cbus.set_leds(21, 20)
+        # self.cbus.set_switch(22)
+        self.cbus.set_leds(board.green_led_pin_number, board.yellow_led_pin_number)
+        self.cbus.set_switch(board.switch_pin_number)
 
         self.cbus.set_name(self.module_name)
         self.cbus.set_params(self.module_params)
