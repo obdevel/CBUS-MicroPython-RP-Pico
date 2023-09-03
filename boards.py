@@ -25,7 +25,7 @@ class dgboard(cbus_board):
         self.yellow_led_pin_number = 20
 
 #implemenation of IH board
-class npboard(cbus_board):
+class ihboard(cbus_board):
     def __init__(self):
         super().__init__()
         self.bus = SPI(0, baudrate=10_000_000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=Pin(2), mosi=Pin(3), miso=Pin(4))
