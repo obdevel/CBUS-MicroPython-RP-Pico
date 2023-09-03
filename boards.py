@@ -23,3 +23,23 @@ class dgboard(cbus_board):
         self.switch_pin_number = 22
         self.green_led_pin_number = 21
         self.yellow_led_pin_number = 20
+
+#implemenation of IH board
+class npboard(cbus_board):
+    def __init__(self):
+        super().__init__()
+        self.bus = SPI(0, baudrate=10_000_000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=Pin(2), mosi=Pin(3), miso=Pin(4))
+        self.can = mcp2515.mcp2515(osc=16_000_000, cs_pin=5, interrupt_pin=1, bus=self.bus)
+        self.switch_pin_number = 22
+        self.green_led_pin_number = 21
+        self.yellow_led_pin_number = 20
+
+# a 3rd board example
+class another_board(cbus_board):
+    def __init__(self):
+        super().__init__()
+        self.bus = SPI(0, baudrate=10_000_000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=Pin(2), mosi=Pin(3), miso=Pin(4))
+        self.can = mcp2515.mcp2515(osc=16_000_000, cs_pin=5, interrupt_pin=1, bus=self.bus)
+        self.switch_pin_number = 22
+        self.green_led_pin_number = 21
+        self.yellow_led_pin_number = 20
