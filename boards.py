@@ -1,6 +1,6 @@
 # classes to represent various hardware implementations
 # saves time by not having to specific individual pins in
-# application program
+# the application program initialisation
 
 from machine import SPI, Pin
 import mcp2515
@@ -24,7 +24,7 @@ class dgboard(cbus_board):
         self.green_led_pin_number = 21
         self.yellow_led_pin_number = 20
 
-#implemenation of IH board
+# implemenation of IH board
 class ihboard(cbus_board):
     def __init__(self):
         super().__init__()

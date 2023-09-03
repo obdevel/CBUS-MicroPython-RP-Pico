@@ -498,7 +498,7 @@ class cbus:
             await self.send_cbus_message(omsg)
 
     async def handle_qnn(self, msg: canmessage.canmessage) -> None:
-        self.logger.log('QNN')
+        # self.logger.log('QNN')
 
         if self.config.node_number > 0:
             omsg = canmessage.canmessage(self.config.canid, 6)
