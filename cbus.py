@@ -182,14 +182,14 @@ class cbus:
         self.has_ui and self.config.mode == MODE_FLIM and self.led_grn.pulse()
         self.num_messages_sent += 1
 
+        if self.sent_message_handler is not None:
+            self.sent_message_handler(msg)
+
         if self.consume_own_messages:
             if msg.matches(self.consume_query_type, self.consume_query):
                 msg.canid = 0
                 await self.can.rx_queue.enqueue(msg)
                 self.callback_flag.set()
-
-        if self.sent_message_handler is not None:
-            self.sent_message_handler(msg)
 
     async def process(self, max_msgs: int = 10) -> None:
         while True:

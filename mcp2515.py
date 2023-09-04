@@ -453,7 +453,7 @@ class mcp2515(canio.canio):
 
         # enable message transmit and receive interrupts
         # self.set_register(REGISTER.MCP_CANINTE,
-        #                   CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF | CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF)
+        #                  CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF | CANINTF.CANINTF_TX0IF | CANINTF.CANINTF_TX1IF | CANINTF.CANINTF_TX2IF)
 
         # enable message receive interrupts
         self.set_register(REGISTER.MCP_CANINTE, CANINTF.CANINTF_RX0IF | CANINTF.CANINTF_RX1IF)
@@ -510,6 +510,14 @@ class mcp2515(canio.canio):
         while True:
             await self.tsf.wait()
             self.num_interrupts += 1
+            i = self.get_interrupts()
+            # if i & CANINTF.CANINTF_RX0IF:
+            #     await self.poll_for_messages(0)
+            # elif i & CANINTF.CANINTF_RX1IF:
+            #     await self.poll_for_messages(1)
+            # else:
+            #     self.logger.log('** some other interrupt')
+
             await self.poll_for_messages()
 
     # def process_interrupts(self):

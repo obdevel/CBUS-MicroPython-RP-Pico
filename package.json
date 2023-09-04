@@ -1,6 +1,7 @@
 {
   "urls": [
     ["aiorepl.py", "github:obdevel/CBUS-MicroPython-RP-Pico/aiorepl.py"],
+    ["boards.py", "github:obdevel/CBUS-MicroPython-RP-Pico/boards.py"],
     ["canio.py", "github:obdevel/CBUS-MicroPython-RP-Pico/canio.py"],
     ["canmessage.py", "github:obdevel/CBUS-MicroPython-RP-Pico/canmessage.py"],
     ["cbus.py", "github:obdevel/CBUS-MicroPython-RP-Pico/cbus.py"],
