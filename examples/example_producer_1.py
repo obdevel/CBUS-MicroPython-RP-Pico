@@ -27,16 +27,16 @@ class mymodule(cbusmodule.cbusmodule):
         # *** module init
         # ***
 
-        # ** change these pin numbers to suit your CAN interface hardware
-        # ** also the switch and LED pins further down
-        # ** you can also change the module name and ID if desired
+        # ** import a board definition from boards.py, or create a new one subclassed from boards.cbus_board
+        # ** you should change the module ID to something unique on your layout
+        # ** you can also change the module name if desired
         # ** and the number of events, EVs and NVs
 
-        from machine import SPI
-        bus = SPI(0, baudrate=10_000_000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=Pin(2), mosi=Pin(3), miso=Pin(4))
-        can = mcp2515.mcp2515(osc=16_000_000, cs_pin=5, interrupt_pin=1, bus=bus)
+        from boards import dgboard
+
+        board = dgboard()
         config = cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4)
-        self.cbus = cbus.cbus(can, config)
+        self.cbus = cbus.cbus(board.can, config)
 
         self.module_id = 108
         self.module_name = bytes('PYPROD ', 'ascii')
@@ -64,9 +64,8 @@ class mymodule(cbusmodule.cbusmodule):
             0,
         ]
 
-        # ** change these pins if desired to suit your hardware
-        self.cbus.set_leds(21, 20)
-        self.cbus.set_switch(22)
+        self.cbus.set_leds(board.green_led_pin_number, board.yellow_led_pin_number)
+        self.cbus.set_switch(board.switch_pin_number)
 
         self.cbus.set_name(self.module_name)
         self.cbus.set_params(self.module_params)
@@ -96,6 +95,8 @@ class mymodule(cbusmodule.cbusmodule):
             self.switches[n].open_func(self.switch_handler, (n, False))
             self.switches[n].close_func(self.switch_handler, (n, True))
 
+        self.prod_event = canmessage.cbusevent(mod.cbus, canmessage.POLARITY_UNKNOWN, self.cbus.config.node_number, 0)
+
         # ***
         # *** module initialisation complete
 
@@ -111,8 +112,8 @@ class mymodule(cbusmodule.cbusmodule):
 
     async def switch_handler(self, switch: int, switch_state: bool) -> None:
         self.logger.log(f'** switch_handler: switch = {switch}, state = {"ON" if switch_state else "OFF"}')
-        ev = canmessage.cbusevent(mod.cbus, canmessage.POLARITY_UNKNOWN, self.cbus.config.node_number, switch)
-        await ev.send_on() if switch_state else await ev.send_off()
+        self.prod_event.en = switch
+        await self.prod_event.send_on() if switch_state else await self.prod_event.send_off()
 
     # ***
     # *** coroutines that run in parallel

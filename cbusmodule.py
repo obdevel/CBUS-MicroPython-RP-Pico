@@ -18,18 +18,18 @@ class cbusmodule:
     def run(self):
         pass
 
-    def event_handler(self, msg: canmessage, idx: int) -> None:
+    def event_handler(self, msg: canmessage.canmessage, idx: int) -> None:
         self.logger.log(f'-- event handler: idx = {idx}: {msg}')
 
-    def received_message_handler(self, msg: canmessage) -> None:
+    def received_message_handler(self, msg: canmessage.canmessage) -> None:
         self.logger.log(f'-- received message handler: {msg}')
 
-    def sent_message_handler(self, msg: canmessage) -> None:
+    def sent_message_handler(self, msg: canmessage.canmessage) -> None:
         self.logger.log(f'-- sent message handler: {msg}')
 
-    def long_message_handler(self, message: bytearray, streamid: int, status: int) -> None:
+    def long_message_handler(self, data: bytearray, streamid: int, status: int) -> None:
         self.logger.log('-- user long message handler:')
-        self.logger.log(f'status = {status}, streamid = {streamid}, msg = <{message.decode()}>')
+        self.logger.log(f'status = {status}, streamid = {streamid}, msg = <{data.decode()}>')
 
     @staticmethod
     async def gc_coro():

@@ -8,7 +8,7 @@ import uasyncio as asyncio
 from machine import Pin
 
 import aiorepl
-import boards
+import canmessage
 import cbus
 import cbusconfig
 import cbusdefs
@@ -16,7 +16,6 @@ import cbusmodule
 import logger
 import mcp2515
 
-from boards import dgboard
 
 class mymodule(cbusmodule.cbusmodule):
     def __init__(self):
@@ -29,17 +28,16 @@ class mymodule(cbusmodule.cbusmodule):
         # *** module init
         # ***
 
-        # ** select a board definition from boads.py, or create a new one
-        # ** subclassed from boards.cbus_board
+        # ** import a board definition from boards.py, or create a new one subclassed from boards.cbus_board
         # ** you should change the module ID to something unique on your layout
         # ** you can also change the module name if desired
         # ** and the number of events, EVs and NVs
 
-        from machine import SPI
-        board = boards.dgboard()
-        can = board.can
+        from boards import dgboard
+
+        board = dgboard()
         config = cbusconfig.cbusconfig(storage_type=cbusconfig.CONFIG_TYPE_FILES, num_nvs=20, num_events=64, num_evs=4)
-        self.cbus = cbus.cbus(can, config)
+        self.cbus = cbus.cbus(board.can, config)
 
         self.module_id = 107
         self.module_name = bytes('PYCONS ', 'ascii')
@@ -66,7 +64,6 @@ class mymodule(cbusmodule.cbusmodule):
             0,
             0,
         ]
-
 
         self.cbus.set_leds(board.green_led_pin_number, board.yellow_led_pin_number)
         self.cbus.set_switch(board.switch_pin_number)
@@ -106,11 +103,11 @@ class mymodule(cbusmodule.cbusmodule):
         # *** end of initialise method
 
     # ***
-    # *** CBUS event handler -- called whenever a previously taught event has been received
-    # *** when teaching, set the value of EV1 to select the LED pin to control
+    # *** CBUS event handler -- called whenever a previously taught event is received
+    # *** when teaching, set the value of EV1 to select the LED to control (0-7)
     # ***
 
-    def event_handler(self, msg: canmessage, idx: int) -> None:
+    def event_handler(self, msg: canmessage.canmessage, idx: int) -> None:
         self.logger.log(f'-- event handler: idx = {idx}: {msg}')
 
         # lookup the value of the 1st EV
@@ -119,10 +116,10 @@ class mymodule(cbusmodule.cbusmodule):
 
         # switch the LED on or off according to the event opcode
         if ev1 < 8:
-            if msg.data[0] & 1:        # off event
+            if msg.data[0] & 1:        # off events are odd numbers
                 self.logger.log(f'** LED {ev1} off')
                 self.pins[ev1].off()
-            else:                      # on event
+            else:                      # on events are even numbers
                 self.logger.log(f'** LED {ev1} on')
                 self.pins[ev1].on()
 
@@ -131,6 +128,8 @@ class mymodule(cbusmodule.cbusmodule):
     # ***
 
     # *** task to blink the onboard LED
+    # *** useful as an indication that the module is still alive
+
     async def blink_led_coro(self) -> None:
         self.logger.log('blink_led_coro start')
         try:
@@ -145,6 +144,8 @@ class mymodule(cbusmodule.cbusmodule):
             await asyncio.sleep_ms(980)
 
     # *** user module application task - like Arduino loop()
+    # *** does nothing in this example
+
     async def module_main_loop_coro(self) -> None:
         self.logger.log('main loop coroutine start')
 
